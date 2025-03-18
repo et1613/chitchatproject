@@ -51,7 +51,7 @@ Node.js (for frontend): Install Node.js
 
 Docker: Install Docker
 
-MySQL: Install MySQL
+Firebase Firestore: Set up Firebase Firestore for real-time data storage and retrieval.
 
 Firebase account: For user authentication and real-time messaging.
 
