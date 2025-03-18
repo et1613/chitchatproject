@@ -10,7 +10,7 @@ Real-Time Messaging: Instant communication between users via WebSocket (SignalR)
 
 User Management: Secure registration and login with email and password, managed via Firebase Authentication.
 
-Message History: Messages are stored in the MySQL database, allowing users to view past conversations.
+Message History: Messages are stored in Firebase Firestore, allowing users to view past conversations in real time.
 
 Group and Direct Messaging: Users can send direct messages or create groups for multiple participants.
 
