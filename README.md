@@ -2,7 +2,7 @@
 
 Overview
 
-This project is a real-time messaging platform that allows users to communicate with each other instantly. The system supports user registration, login, real-time chat using WebSockets, and message history management. It utilizes modern technologies like React.js, .NET, Firebase, MySQL, and Docker to ensure security, scalability, and a great user experience.
+This project is a real-time messaging platform that allows users to communicate with each other instantly. The system supports user registration, login, real-time chat using WebSockets, and message history management. It utilizes modern technologies like React.js, .NET, Firebase, and Docker to ensure security, scalability, and a great user experience.
 
 Key Features
 
