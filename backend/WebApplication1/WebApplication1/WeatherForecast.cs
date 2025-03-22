@@ -9,9 +9,9 @@ namespace WebApplication1
         public string Email { get; set; }
         public string PasswordHash { get; set; }
         public DateTime CreatedAt { get; set; }
-        public List<ChatRoom> ChatRooms { get; set; } // ChatRoom nesneleri ile iliþkili
-        public List<User> BlockedUsers { get; set; } // User nesneleri ile iliþkili
-        public List<User> Friends { get; set; } // User nesneleri ile iliþkili
+        public List<ChatRoom> ChatRooms { get; set; } 
+        public List<User> BlockedUsers { get; set; } 
+        public List<User> Friends { get; set; } 
 
         public void SendMessage(string receiverId, string content) { }
         public void JoinChatRoom(string chatRoomId) { }
@@ -63,8 +63,8 @@ namespace WebApplication1
         public string MessageId { get; set; }
         public string OldContent { get; set; }
         public DateTime EditedAt { get; set; }
-        public string EditedByUserId { get; set; } // Kim düzenledi?
-        public string ChangeDescription { get; set; } // Deðiþikliðin açýklamasý
+        public string EditedByUserId { get; set; } 
+        public string ChangeDescription { get; set; } 
 
         public void SaveOldVersion(string messageId, string oldContent) { }
     }
@@ -84,7 +84,7 @@ namespace WebApplication1
         public string Id { get; set; }
         public string Name { get; set; }
         public string AdminId { get; set; }
-        public List<User> Participants { get; set; } // User nesneleri ile iliþkili
+        public List<User> Participants { get; set; } 
         public List<Message> Messages { get; set; }
 
         public void AddParticipant(User user) { }
@@ -97,7 +97,7 @@ namespace WebApplication1
         public string Id { get; set; }
         public string UserId { get; set; }
         public string MessageId { get; set; }
-        public string Type { get; set; } // e.g., "Message", "FriendRequest"
+        public string Type { get; set; }
         public bool Status { get; set; }
         public DateTime CreatedAt { get; set; }
 
