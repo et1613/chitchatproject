@@ -5,6 +5,8 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models.Messages;
+using WebApplication1.Models.Users;
+using WebApplication1.Models.Notifications;
 
 namespace WebApplication1.Models.Chat
 {

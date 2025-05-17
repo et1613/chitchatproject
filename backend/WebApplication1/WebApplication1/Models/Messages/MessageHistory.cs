@@ -13,7 +13,7 @@ namespace WebApplication1.Models.Messages
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string MessageId { get; set; }
+        public string MessageId { get; set; } = string.Empty;
         public virtual Message Message { get; set; }
 
         [Required]
@@ -35,7 +35,9 @@ namespace WebApplication1.Models.Messages
 
         public string? ChangeDescription { get; set; }
 
-        public bool HasContentChanged => !string.Equals(OldContent, NewContent, StringComparison.Ordinal);
+        public bool HasContentChanged =>
+     !string.IsNullOrEmpty(NewContent) && !string.Equals(OldContent, NewContent, StringComparison.Ordinal);
+
 
         public string GetContentDiff()
         {

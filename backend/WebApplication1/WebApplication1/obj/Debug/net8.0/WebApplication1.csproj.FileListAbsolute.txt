@@ -6,3 +6,11 @@ C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.MvcApplicationPartsAssemblyInfo.cs
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.MvcApplicationPartsAssemblyInfo.cache
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.sourcelink.json
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.csproj.AssemblyReference.cache
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.AssemblyInfoInputs.cache
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.AssemblyInfo.cs
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.csproj.CoreCompileInputs.cache
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.MvcApplicationPartsAssemblyInfo.cs
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\Ömer Yasin Akis\OneDrive\Belgeler\GitHub\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.sourcelink.json

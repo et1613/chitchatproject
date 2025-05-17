@@ -5,6 +5,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models.Chat;
 using System.Linq;
+using WebApplication1.Models.Notifications;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Models.Messages
 {
@@ -104,6 +106,7 @@ namespace WebApplication1.Models.Messages
                 ChangeDescription = GetEditDescription(editType, editReason)
             };
             EditHistory.Add(history);
+            
 
             // Update message
             Content = newContent;

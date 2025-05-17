@@ -64,6 +64,8 @@ namespace WebApplication1.Models.Notifications
 
         public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTime.UtcNow;
 
+        public bool Status { get; internal set; }
+
         public string GetNotificationTitle()
         {
             return Title ?? Type switch

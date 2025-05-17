@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using WebApplication1.Models;
+using WebApplication1.Models.Chat;
+using WebApplication1.Models.Messages;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Data
 {
