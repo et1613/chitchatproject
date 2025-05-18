@@ -7,6 +7,7 @@ using WebApplication1.Models.Chat;
 using System.Linq;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Users;
+using WebApplication1.Models.DTOs;
 
 namespace WebApplication1.Models.Messages
 {
@@ -18,18 +19,18 @@ namespace WebApplication1.Models.Messages
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string SenderId { get; set; }
-        public virtual User Sender { get; set; }
+        public required string SenderId { get; set; }
+        public required virtual User Sender { get; set; }
 
         [Required]
-        public string ChatRoomId { get; set; }
-        public virtual ChatRoom ChatRoom { get; set; }
+        public required string ChatRoomId { get; set; }
+        public required virtual ChatRoom ChatRoom { get; set; }
 
         public string? ReplyToMessageId { get; set; }
         public virtual Message? ReplyToMessage { get; set; }
 
         [Required]
-        public string Content { get; set; }
+        public required string Content { get; set; }
 
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
         public bool IsRead { get; set; } = false;
@@ -64,7 +65,7 @@ namespace WebApplication1.Models.Messages
                 {
                     UserId = SenderId,
                     MessageId = Id,
-                    Type = "MessageRead",
+                    Type = NotificationType.MessageRead,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -82,7 +83,7 @@ namespace WebApplication1.Models.Messages
             Content = "Bu mesaj silindi";
         }
 
-        public void EditMessage(string newContent, string userId, EditType editType, string editReason = null)
+        public void EditMessage(string newContent, string userId, EditType editType, string? editReason = null)
         {
             if (IsDeleted)
                 throw new InvalidOperationException("Silinmiş mesaj düzenlenemez");
@@ -97,10 +98,12 @@ namespace WebApplication1.Models.Messages
             var history = new MessageHistory
             {
                 MessageId = Id,
+                Message = this,
                 OldContent = Content,
                 NewContent = newContent,
                 EditedAt = DateTime.UtcNow,
                 EditedByUserId = userId,
+                EditedByUser = new User { Id = userId },
                 EditType = editType,
                 EditReason = editReason,
                 ChangeDescription = GetEditDescription(editType, editReason)
@@ -123,7 +126,7 @@ namespace WebApplication1.Models.Messages
                     {
                         UserId = participant.Id,
                         MessageId = Id,
-                        Type = "MessageEdited",
+                        Type = NotificationType.MessageEdited,
                         Status = false,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -132,18 +135,9 @@ namespace WebApplication1.Models.Messages
             }
         }
 
-        private string GetEditDescription(EditType editType, string editReason)
+        private string GetEditDescription(EditType editType, string? editReason)
         {
-            var description = editType switch
-            {
-                EditType.ContentEdit => "Mesaj içeriği düzenlendi",
-                EditType.FormatEdit => "Mesaj formatı değiştirildi",
-                EditType.AttachmentEdit => "Dosya eklendi/kaldırıldı",
-                EditType.LinkEdit => "Link eklendi/kaldırıldı",
-                EditType.Correction => "Yazım hatası düzeltildi",
-                EditType.Translation => "Çeviri eklendi",
-                _ => "Düzenleme yapıldı"
-            };
+            var description = EditTypeDescriptions.GetDescription(editType);
 
             if (!string.IsNullOrEmpty(editReason))
             {
@@ -185,7 +179,7 @@ namespace WebApplication1.Models.Messages
                 {
                     UserId = SenderId,
                     MessageId = Id,
-                    Type = $"MessageStatusChanged_{newStatus}",
+                    Type = NotificationType.MessageEdited,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -209,7 +203,7 @@ namespace WebApplication1.Models.Messages
                     {
                         UserId = participant.Id,
                         MessageId = Id,
-                        Type = "MessageDeleted",
+                        Type = NotificationType.MessageDeleted,
                         Status = false,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -229,7 +223,7 @@ namespace WebApplication1.Models.Messages
                 {
                     UserId = userId,
                     MessageId = Id,
-                    Type = "MessageDeletedForYou",
+                    Type = NotificationType.MessageDeleted,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -252,7 +246,7 @@ namespace WebApplication1.Models.Messages
                 {
                     UserId = SenderId,
                     MessageId = reply.Id,
-                    Type = "MessageReplied",
+                    Type = NotificationType.Mention,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -271,31 +265,12 @@ namespace WebApplication1.Models.Messages
         }
     }
 
-    public class MessageHistory
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string MessageId { get; set; }
-        public string OldContent { get; set; }
-        public string NewContent { get; set; }
-        public DateTime EditedAt { get; set; } = DateTime.UtcNow;
-        public string EditedByUserId { get; set; }
-        public EditType EditType { get; set; }
-        public string EditReason { get; set; }
-        public string ChangeDescription { get; set; }
-
-        public void SaveOldVersion(string messageId, string oldContent)
-        {
-            MessageId = messageId;
-            OldContent = oldContent;
-            EditedAt = DateTime.UtcNow;
-        }
-    }
 
     public class DeletedMessage
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string MessageId { get; set; }
-        public string DeletedByUserId { get; set; }
+        public required string MessageId { get; set; }
+        public required string DeletedByUserId { get; set; }
         public DateTime DeletedAt { get; set; } = DateTime.UtcNow;
 
         public void RestoreMessage()

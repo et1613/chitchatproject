@@ -1,39 +1,40 @@
 using System;
 using WebApplication1.Models.Enums;
+using WebApplication1.Models.Messages;
 
 namespace WebApplication1.Models.DTOs
 {
     public class MessageHistoryDTO
     {
-        public string Id { get; set; }
-        public string MessageId { get; set; }
-        public string OldContent { get; set; }
-        public string NewContent { get; set; }
+        public required string Id { get; set; }
+        public required string MessageId { get; set; }
+        public required string OldContent { get; set; }
+        public required string NewContent { get; set; }
         public DateTime EditedAt { get; set; }
-        public string EditedByUserId { get; set; }
-        public string EditedByUserName { get; set; }
+        public required string EditedByUserId { get; set; }
+        public required string EditedByUserName { get; set; }
         public EditType EditType { get; set; }
-        public string EditReason { get; set; }
-        public string ChangeDescription { get; set; }
-        public string ContentDiff { get; set; }
+        public required string EditReason { get; set; }
+        public required string ChangeDescription { get; set; }
+        public required string ContentDiff { get; set; }
         public bool HasContentChanged { get; set; }
 
-        public static MessageHistoryDTO FromMessageHistory(MessageHistory history)
+        public static MessageHistoryDTO FromMessageHistory(MessageHistory historyEntity)
         {
             return new MessageHistoryDTO
             {
-                Id = history.Id,
-                MessageId = history.MessageId,
-                OldContent = history.OldContent,
-                NewContent = history.NewContent,
-                EditedAt = history.EditedAt,
-                EditedByUserId = history.EditedByUserId,
-                EditedByUserName = history.EditedByUser?.UserName ?? "Bilinmeyen Kullanıcı",
-                EditType = history.EditType,
-                EditReason = history.EditReason,
-                ChangeDescription = history.ChangeDescription,
-                ContentDiff = history.GetContentDiff(),
-                HasContentChanged = history.HasContentChanged
+                Id = historyEntity.Id,
+                MessageId = historyEntity.MessageId,
+                OldContent = historyEntity.OldContent,
+                NewContent = historyEntity.NewContent ?? string.Empty,
+                EditedAt = historyEntity.EditedAt,
+                EditedByUserId = historyEntity.EditedByUserId,
+                EditedByUserName = historyEntity.EditedByUser?.UserName ?? "Bilinmeyen Kullanıcı",
+                EditType = historyEntity.EditType,
+                EditReason = historyEntity.EditReason ?? string.Empty,
+                ChangeDescription = historyEntity.ChangeDescription ?? string.Empty,
+                ContentDiff = historyEntity.GetContentDiff(),
+                HasContentChanged = historyEntity.HasContentChanged
             };
         }
     }

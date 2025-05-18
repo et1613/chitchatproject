@@ -4,25 +4,35 @@ namespace WebApplication1.Models.Enums
 {
     public enum EditType
     {
-        [Description("İçerik Değişikliği")]
-        ContentChange,    // Mesaj içeriği değiştirildi
+        [Description("Mesaj içeriği düzenlendi")]
+        ContentChange,
 
-        [Description("Medya Ekleme")]
-        MediaAdded,       // Medya eklendi
+        [Description("Medya eklendi")]
+        MediaAdded,
 
-        [Description("Medya Silme")]
-        MediaRemoved,     // Medya silindi
+        [Description("Medya silindi")]
+        MediaRemoved,
 
-        [Description("Medya Değişikliği")]
-        MediaChanged,     // Medya değiştirildi
+        [Description("Medya değiştirildi")]
+        MediaChanged,
 
-        [Description("Format Değişikliği")]
-        FormatChange,     // Metin formatı değiştirildi
+        [Description("Mesaj formatı değiştirildi")]
+        FormatChange,
 
-        [Description("Link Değişikliği")]
-        LinkChange,       // Link değiştirildi
+        [Description("Link eklendi/kaldırıldı")]
+        LinkEdit,
 
-        [Description("Mention Değişikliği")]
-        MentionChange     // Mention değiştirildi
+        [Description("Mention değiştirildi")]
+        MentionChange,
+
+        [Description("Dosya eklendi/kaldırıldı")]
+        AttachmentEdit,
+
+        [Description("Yazım hatası düzeltildi")]
+        Correction,
+
+        [Description("Çeviri eklendi")]
+        Translation,
+        LinkChange
     }
-} 
+}

@@ -17,14 +17,15 @@ namespace WebApplication1.Models.Chat
 
         [Required]
         [StringLength(100)]
-        public string Name { get; set; }
+        public required string Name { get; set; }
 
         public string? Description { get; set; }
         public string? Picture { get; set; }
 
         [Required]
-        public string AdminId { get; set; }
-        public virtual User Admin { get; set; }
+        [ForeignKey("Admin")]
+        public required string AdminId { get; set; }
+        public required virtual User Admin { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsPrivate { get; set; }
@@ -42,7 +43,7 @@ namespace WebApplication1.Models.Chat
 
         public void AddParticipant(User user)
         {
-            if (user == null) 
+            if (user is null)
                 throw new ArgumentNullException(nameof(user), "Kullanıcı null olamaz");
 
             if (Participants.Count >= MaxParticipants)
@@ -60,7 +61,7 @@ namespace WebApplication1.Models.Chat
 
         public void RemoveParticipant(User user)
         {
-            if (user == null)
+            if (user is null)
                 throw new ArgumentNullException(nameof(user), "Kullanıcı null olamaz");
 
             if (!Participants.Any(p => p.Id == user.Id))
@@ -68,14 +69,14 @@ namespace WebApplication1.Models.Chat
 
             Participants.Remove(user);
             var userRole = UserRoles.FirstOrDefault(r => r.UserId == user.Id);
-            if (userRole != null)
+            if (userRole is not null)
                 UserRoles.Remove(userRole);
 
             // Diğer katılımcılara bildirim gönder
             NotifyParticipants(user.Id, "UserLeftChat");
 
             // Admin kontrolü
-            if (user.Id == AdminId && Participants.Any())
+            if (user.Id == AdminId && Participants.Count > 0)
             {
                 var newAdmin = Participants.First();
                 SetAdmin(newAdmin);
@@ -84,7 +85,7 @@ namespace WebApplication1.Models.Chat
 
         public void SetAdmin(User newAdmin)
         {
-            if (newAdmin == null)
+            if (newAdmin is null)
                 throw new ArgumentNullException(nameof(newAdmin), "Yeni admin null olamaz");
 
             if (!Participants.Any(p => p.Id == newAdmin.Id))
@@ -192,18 +193,21 @@ namespace WebApplication1.Models.Chat
 
         private bool IsUserInRoom(string userId)
         {
-            return Participants.Any(p => p.Id == userId);
+            return Participants.Count > 0 && Participants.Any(p => p.Id == userId);
         }
 
         private void NotifyParticipants(string? excludedUserId, string notificationType, string? messageId = null)
         {
+            if (!Enum.TryParse(notificationType, out NotificationType parsedNotificationType))
+                throw new ArgumentException($"Invalid notification type: {notificationType}", nameof(notificationType));
+
             foreach (var participant in Participants.Where(p => p.Id != excludedUserId))
             {
                 var notification = new Notification
                 {
                     UserId = participant.Id,
                     MessageId = messageId,
-                    Type = notificationType,
+                    Type = parsedNotificationType,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -241,7 +245,8 @@ namespace WebApplication1.Models.Chat
             {
                 MessageId = messageId,
                 PinnedByUserId = userId,
-                PinnedAt = DateTime.UtcNow
+                PinnedAt = DateTime.UtcNow,
+                Message = message
             });
 
             NotifyParticipants(null, "MessagePinned", messageId);
@@ -301,24 +306,27 @@ namespace WebApplication1.Models.Chat
     public class ChatRoomRole
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string UserId { get; set; }
-        public string Role { get; set; } // "Admin", "Moderator", "Member"
+        public required string UserId { get; set; }
+        public required string Role { get; set; } // "Admin", "Moderator", "Member"
         public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class MessageReadStatus
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string MessageId { get; set; }
-        public string UserId { get; set; }
+        public required string MessageId { get; set; }
+        public required string UserId { get; set; }
         public DateTime ReadAt { get; set; }
     }
 
     public class PinnedMessage
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string MessageId { get; set; }
-        public string PinnedByUserId { get; set; }
+        public required string MessageId { get; set; }
+        public required string PinnedByUserId { get; set; }
         public DateTime PinnedAt { get; set; }
+        
+        [ForeignKey("MessageId")]
+        public required Message Message { get; set; }
     }
 } 
