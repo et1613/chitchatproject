@@ -11,12 +11,12 @@ namespace WebApplication1.Models.Users
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string SenderId { get; set; }
-        public virtual User Sender { get; set; }
+        public required string SenderId { get; set; }
+        public required virtual User Sender { get; set; }
 
         [Required]
-        public string ReceiverId { get; set; }
-        public virtual User Receiver { get; set; }
+        public required string ReceiverId { get; set; }
+        public required virtual User Receiver { get; set; }
 
         public DateTime SentAt { get; set; } = DateTime.UtcNow;
         public DateTime? RespondedAt { get; set; }
@@ -36,7 +36,7 @@ namespace WebApplication1.Models.Users
             RespondedAt = DateTime.UtcNow;
         }
 
-        public void Reject(string reason = null)
+        public void Reject(string? reason = null)
         {
             if (RespondedAt.HasValue)
                 throw new InvalidOperationException("Bu arkadaşlık isteği zaten yanıtlanmış");

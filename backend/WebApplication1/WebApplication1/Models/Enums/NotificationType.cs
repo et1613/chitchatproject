@@ -35,6 +35,15 @@ namespace WebApplication1.Models.Enums
         GroupUpdate,           // Grup güncelleme bildirimi
 
         [Description("Mention")]
-        Mention                // Mention bildirimi
+        Mention,                // Mention bildirimi
+        MessageReceived,
+        MessageDeletedForYou,
+        MessageReplied,
+        MessageStatusChanged,
+        UserMentioned,
+        ChatRoomCreated,
+        ChatRoomJoined,
+        ChatRoomLeft,
+        SystemMessage
     }
 } 

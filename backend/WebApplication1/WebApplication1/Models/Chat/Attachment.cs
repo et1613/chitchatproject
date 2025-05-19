@@ -14,7 +14,7 @@ namespace WebApplication1.Models.Chat
 
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string MessageId { get; set; } = string.Empty;
-        public virtual Message Message { get; set; } = new Message();
+        public virtual Message? Message { get; set; }
         public string FileType { get; set; } = string.Empty;
         public string? FileUrl { get; set; } = string.Empty;
         public long FileSize { get; set; }

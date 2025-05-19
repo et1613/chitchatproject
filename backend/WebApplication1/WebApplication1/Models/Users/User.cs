@@ -16,15 +16,15 @@ namespace WebApplication1.Models.Users
 
         [Required]
         [StringLength(50)]
-        public string UserName { get; set; }
+        public required string UserName { get; set; }
 
         [Required]
         [EmailAddress]
         [StringLength(100)]
-        public string Email { get; set; }
+        public required string Email { get; set; }
 
         [Required]
-        public string PasswordHash { get; set; }
+        public required string PasswordHash { get; set; }
 
         [StringLength(100)]
         public string? FirstName { get; set; }
@@ -36,7 +36,7 @@ namespace WebApplication1.Models.Users
         public string? Bio { get; set; }
         public DateTime? LastSeen { get; set; }
         public UserStatus Status { get; set; } = UserStatus.Offline;
-        public UserRole Role { get; set; } = UserRole.User;
+        public UserRole Role { get; set; } = UserRole.Member;
         public bool IsActive { get; set; } = true;
         public bool IsVerified { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -58,15 +58,15 @@ namespace WebApplication1.Models.Users
         public DateTime? LockoutEnd { get; set; }
 
         // Navigation properties
+        public virtual ICollection<User> Friends { get; set; } = new List<User>();
         public virtual ICollection<ChatRoom> ChatRooms { get; set; } = new List<ChatRoom>();
         public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
         public virtual ICollection<FriendRequest> SentFriendRequests { get; set; } = new List<FriendRequest>();
         public virtual ICollection<FriendRequest> ReceivedFriendRequests { get; set; } = new List<FriendRequest>();
         public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
-        public virtual NotificationSettings NotificationSettings { get; set; }
-        public virtual ICollection<BlockedUser> BlockedUsers { get; set; } = new List<BlockedUser>();
-        public virtual ICollection<BlockedUser> BlockedByUsers { get; set; } = new List<BlockedUser>();
-        public virtual UserStatistics Statistics { get; set; }
+        public required virtual NotificationSettings NotificationSettings { get; set; }
+        public virtual ICollection<User> BlockedUsers { get; set; } = new List<User>();
+        public virtual ICollection<User> BlockedByUsers { get; set; } = new List<User>();
         public virtual ICollection<UserActivity> Activities { get; set; } = new List<UserActivity>();
 
         public string GetFullName()
@@ -94,35 +94,32 @@ namespace WebApplication1.Models.Users
 
         public bool IsBlockedBy(string userId)
         {
-            return BlockedByUsers.Any(b => b.BlockerId == userId);
+            return BlockedByUsers.Any(b => b.Id == userId);
         }
 
         public bool HasBlocked(string userId)
         {
-            return BlockedUsers.Any(b => b.BlockedId == userId);
+            return BlockedUsers.Any(b => b.Id == userId);
         }
 
-        public void BlockUser(string userId)
+        public void BlockUser(User targetUser)
         {
-            if (!HasBlocked(userId))
+            if (!BlockedUsers.Any(u => u.Id == targetUser.Id))
             {
-                BlockedUsers.Add(new BlockedUser
-                {
-                    BlockerId = Id,
-                    BlockedId = userId,
-                    BlockedAt = DateTime.UtcNow
-                });
+                BlockedUsers.Add(targetUser);
             }
         }
 
-        public void UnblockUser(string userId)
+
+        public void UnblockUser(User targetUser)
         {
-            var blockedUser = BlockedUsers.FirstOrDefault(b => b.BlockedId == userId);
-            if (blockedUser != null)
+            var userToRemove = BlockedUsers.FirstOrDefault(u => u.Id == targetUser.Id);
+            if (userToRemove != null)
             {
-                BlockedUsers.Remove(blockedUser);
+                BlockedUsers.Remove(userToRemove);
             }
         }
+
 
         public void EnableTwoFactor(string secret)
         {
@@ -179,29 +176,40 @@ namespace WebApplication1.Models.Users
             return $"{GetFullName()} ({UserName})";
         }
 
-        public void SendMessage(string receiverId, string content)
+        public void SendMessage(string content, ChatRoom chatRoom)
         {
             var message = new Message
             {
                 SenderId = this.Id,
-                ReceiverId = receiverId,
+                Sender = this,
                 Content = content,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                ChatRoomId = chatRoom.Id,
+                ChatRoom = chatRoom
             };
 
             Messages.Add(message);
-            Statistics?.IncrementMessages();
 
-            var notification = new Notification
+            var receiverIds = chatRoom.Participants
+                .Where(u => u.Id != this.Id)
+                .Select(u => u.Id)
+                .ToList();
+
+            foreach (var receiverId in receiverIds)
             {
-                UserId = receiverId,
-                MessageId = message.Id,
-                Type = "NewMessage",
-                Status = false,
-                CreatedAt = DateTime.UtcNow
-            };
-            Notifications.Add(notification);
+                var notification = new Notification
+                {
+                    UserId = receiverId,
+                    User = this, // Fix: Set the required 'User' property  
+                    Message = message,
+                    Type = NotificationType.NewMessage,
+                    Status = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+                Notifications.Add(notification);
+            }
         }
+
 
         public void JoinChatRoom(string chatRoomId)
         {
@@ -210,7 +218,6 @@ namespace WebApplication1.Models.Users
             {
                 ChatRooms.Add(chatRoom);
                 chatRoom.AddParticipant(this);
-                Statistics?.IncrementChatRooms();
             }
         }
 
@@ -228,10 +235,28 @@ namespace WebApplication1.Models.Users
         {
             if (!SentFriendRequests.Any(fr => fr.ReceiverId == userId))
             {
+                var receiver = ReceivedFriendRequests.FirstOrDefault(r => r.SenderId == userId)?.Sender;
+                if (receiver == null)
+                {
+                    throw new InvalidOperationException("Receiver user not found.");
+                }
+
+                var friendRequest = new FriendRequest
+                {
+                    SenderId = this.Id,
+                    Sender = this, // Fix: Set the required 'Sender' property  
+                    ReceiverId = userId,
+                    Receiver = receiver, // Fix: Set the required 'Receiver' property  
+                    SentAt = DateTime.UtcNow,
+                    Accepted = false
+                };
+                SentFriendRequests.Add(friendRequest);
+
                 var notification = new Notification
                 {
                     UserId = userId,
-                    Type = "FriendRequest",
+                    User = this, // Fix: Set the required 'User' property  
+                    Type = NotificationType.FriendRequest,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -239,33 +264,43 @@ namespace WebApplication1.Models.Users
             }
         }
 
+
         public void ResponseFriendRequest(string userId, bool accept)
         {
             if (accept)
             {
+                var receiver = ReceivedFriendRequests.FirstOrDefault(r => r.SenderId == userId)?.Sender;
+                if (receiver == null)
+                {
+                    throw new InvalidOperationException("Receiver user not found.");
+                }
+
                 SentFriendRequests.Add(new FriendRequest
                 {
                     SenderId = this.Id,
+                    Sender = this, // Fix: Set the required 'Sender' property  
                     ReceiverId = userId,
+                    Receiver = receiver, // Fix: Set the required 'Receiver' property  
                     Accepted = true,
                     SentAt = DateTime.UtcNow
                 });
-                Statistics?.IncrementFriends();
             }
 
             var notification = new Notification
             {
                 UserId = userId,
-                Type = accept ? "FriendRequestAccepted" : "FriendRequestRejected",
+                User = this, // Fix: Set the required 'User' property  
+                Type = accept ? NotificationType.FriendRequestAccepted : NotificationType.FriendRequestRejected,
                 Status = false,
                 CreatedAt = DateTime.UtcNow
             };
             Notifications.Add(notification);
         }
 
-        public void RecordActivity(string activityType, string description, string? ipAddress = null, 
-            string? userAgent = null, string? location = null, bool isSuccessful = true, 
-            string? errorMessage = null, string? relatedEntityId = null, string? relatedEntityType = null)
+
+        public void RecordActivity(string activityType, string description, string? ipAddress = null,
+           string? userAgent = null, string? location = null, bool isSuccessful = true,
+           string? errorMessage = null, string? relatedEntityId = null, string? relatedEntityType = null)
         {
             Activities.Add(new UserActivity
             {
@@ -278,7 +313,8 @@ namespace WebApplication1.Models.Users
                 IsSuccessful = isSuccessful,
                 ErrorMessage = errorMessage,
                 RelatedEntityId = relatedEntityId,
-                RelatedEntityType = relatedEntityType
+                RelatedEntityType = relatedEntityType,
+                User = this 
             });
         }
 

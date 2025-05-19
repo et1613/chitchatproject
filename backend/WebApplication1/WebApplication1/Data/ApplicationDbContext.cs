@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using WebApplication1.Models;
 using WebApplication1.Models.Chat;
 using WebApplication1.Models.Messages;
+using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Users;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace WebApplication1.Data
 {
@@ -26,31 +27,31 @@ namespace WebApplication1.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // User configurations
+            // User configurations  
             modelBuilder.Entity<User>()
                 .HasMany(u => u.Friends)
                 .WithMany()
-                .UsingEntity(j => j.ToTable("UserFriends"));
+                .UsingEntity<Dictionary<string, object>>(
+                    "UserFriends",
+                    j => j.HasOne<User>().WithMany().HasForeignKey("FriendId"),
+                    j => j.HasOne<User>().WithMany().HasForeignKey("UserId"));
 
             modelBuilder.Entity<User>()
                 .HasMany(u => u.BlockedUsers)
                 .WithMany()
-                .UsingEntity(j => j.ToTable("UserBlockedUsers"));
+                .UsingEntity<Dictionary<string, object>>(
+                    "UserBlockedUsers",
+                    j => j.HasOne<User>().WithMany().HasForeignKey("BlockedUserId"),
+                    j => j.HasOne<User>().WithMany().HasForeignKey("UserId"));
 
-            // Message configurations
+            // Message configurations  
             modelBuilder.Entity<Message>()
                 .HasOne<User>()
                 .WithMany()
                 .HasForeignKey(m => m.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Message>()
-                .HasOne<User>()
-                .WithMany()
-                .HasForeignKey(m => m.ReceiverId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // ChatRoom configurations
+            // ChatRoom configurations  
             modelBuilder.Entity<ChatRoom>()
                 .HasOne<User>()
                 .WithMany()
@@ -60,7 +61,10 @@ namespace WebApplication1.Data
             modelBuilder.Entity<ChatRoom>()
                 .HasMany(c => c.Participants)
                 .WithMany(u => u.ChatRooms)
-                .UsingEntity(j => j.ToTable("ChatRoomParticipants"));
+                .UsingEntity<Dictionary<string, object>>(
+                    "ChatRoomParticipants",
+                    j => j.HasOne<User>().WithMany().HasForeignKey("UserId"),
+                    j => j.HasOne<ChatRoom>().WithMany().HasForeignKey("ChatRoomId"));
         }
     }
 } 

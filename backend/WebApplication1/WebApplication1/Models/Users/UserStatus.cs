@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using WebApplication1.Models.Enums;
 
 namespace WebApplication1.Models.Users
 {
@@ -29,8 +30,12 @@ namespace WebApplication1.Models.Users
         public static string GetDescription(this UserStatus status)
         {
             var field = status.GetType().GetField(status.ToString());
-            var attribute = (DescriptionAttribute)Attribute.GetCustomAttribute(field, typeof(DescriptionAttribute));
+            if (field == null)
+                return status.ToString();
+
+            var attribute = Attribute.GetCustomAttribute(field, typeof(DescriptionAttribute)) as DescriptionAttribute;
             return attribute?.Description ?? status.ToString();
+
         }
 
         public static string GetStatusMessage(this UserStatus status)

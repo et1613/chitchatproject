@@ -113,7 +113,9 @@ namespace WebApplication1.Models.Chat
             var message = new Message
             {
                 SenderId = senderId,
+                Sender = sender,
                 ChatRoomId = Id,
+                ChatRoom = this,
                 Content = content,
                 Timestamp = DateTime.UtcNow,
                 IsEdited = false
@@ -206,6 +208,7 @@ namespace WebApplication1.Models.Chat
                 var notification = new Notification
                 {
                     UserId = participant.Id,
+                    User = participant, // Set the required 'User' property
                     MessageId = messageId,
                     Type = parsedNotificationType,
                     Status = false,
@@ -214,6 +217,7 @@ namespace WebApplication1.Models.Chat
                 participant.Notifications.Add(notification);
             }
         }
+
 
         public List<Message> GetVisibleMessagesForUser(string userId)
         {

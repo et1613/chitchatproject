@@ -58,12 +58,13 @@ namespace WebApplication1.Models.Messages
             Status = MessageStatus.Read;
             Timestamp = DateTime.UtcNow;
 
-            // Notify sender that message was read
+            // Notify sender that message was read  
             if (Sender != null)
             {
                 var notification = new Notification
                 {
                     UserId = SenderId,
+                    User = Sender, 
                     MessageId = Id,
                     Type = NotificationType.MessageRead,
                     Status = false,
@@ -94,7 +95,7 @@ namespace WebApplication1.Models.Messages
             if (SenderId != userId)
                 throw new InvalidOperationException("Bu mesajı düzenleme yetkiniz yok");
 
-            // Save old version to history
+            // Save old version to history  
             var history = new MessageHistory
             {
                 MessageId = Id,
@@ -103,21 +104,20 @@ namespace WebApplication1.Models.Messages
                 NewContent = newContent,
                 EditedAt = DateTime.UtcNow,
                 EditedByUserId = userId,
-                EditedByUser = new User { Id = userId },
+                EditedByUser = new User { Id = userId },//Burası güncel bir kullanıcıdan çekilecek service'ler ayarlandıktan sonra düzelticem
                 EditType = editType,
                 EditReason = editReason,
                 ChangeDescription = GetEditDescription(editType, editReason)
             };
             EditHistory.Add(history);
-            
 
-            // Update message
+            // Update message  
             Content = newContent;
             IsEdited = true;
             EditedAt = DateTime.UtcNow;
             Timestamp = DateTime.UtcNow;
 
-            // Notify participants about edit
+            // Notify participants about edit  
             if (ChatRoom != null)
             {
                 foreach (var participant in ChatRoom.Participants.Where(p => p.Id != userId))
@@ -125,6 +125,7 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
+                        User = participant, // Fix: Set the required 'User' property  
                         MessageId = Id,
                         Type = NotificationType.MessageEdited,
                         Status = false,
@@ -178,6 +179,7 @@ namespace WebApplication1.Models.Messages
                 var notification = new Notification
                 {
                     UserId = SenderId,
+                    User = Sender,
                     MessageId = Id,
                     Type = NotificationType.MessageEdited,
                     Status = false,
@@ -193,8 +195,8 @@ namespace WebApplication1.Models.Messages
                 throw new InvalidOperationException("Bu mesajı herkes için silme yetkiniz yok");
 
             DeleteMessage();
-            
-            // Notify all participants in chat room
+
+            // Notify all participants in chat room  
             if (ChatRoom != null)
             {
                 foreach (var participant in ChatRoom.Participants.Where(p => p.Id != userId))
@@ -202,6 +204,7 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
+                        User = participant, // Fix: Set the required 'User' property  
                         MessageId = Id,
                         Type = NotificationType.MessageDeleted,
                         Status = false,
@@ -217,11 +220,12 @@ namespace WebApplication1.Models.Messages
             if (!HiddenForUsers.Contains(userId))
             {
                 HiddenForUsers.Add(userId);
-                
-                // Notify the user
+
+                // Notify the user  
                 var notification = new Notification
                 {
                     UserId = userId,
+                    User = new User { Id = userId }, //Burası güncel bir kullanıcıdan çekilecek service'ler ayarlandıktan sonra düzelticem
                     MessageId = Id,
                     Type = NotificationType.MessageDeleted,
                     Status = false,
@@ -239,12 +243,13 @@ namespace WebApplication1.Models.Messages
             reply.ReplyToMessageId = Id;
             Replies.Add(reply);
 
-            // Notify original message sender about reply
+            // Notify original message sender about reply  
             if (Sender != null && SenderId != reply.SenderId)
             {
                 var notification = new Notification
                 {
                     UserId = SenderId,
+                    User = Sender, // Fix: Set the required 'User' property  
                     MessageId = reply.Id,
                     Type = NotificationType.Mention,
                     Status = false,

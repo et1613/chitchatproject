@@ -1,7 +1,10 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using WebApplication1.Models.Chat;
 using WebApplication1.Models.Enums;
+using WebApplication1.Models.Messages;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Models.Notifications
 {
@@ -11,8 +14,8 @@ namespace WebApplication1.Models.Notifications
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string UserId { get; set; }
-        public virtual User User { get; set; }
+        public required string UserId { get; set; }
+        public required virtual User User { get; set; }
 
         public string? MessageId { get; set; }
         public virtual Message? Message { get; set; }

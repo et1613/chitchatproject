@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using WebApplication1.Models;
+using WebApplication1.Models.Chat;
+using WebApplication1.Models.Messages;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Services
 {
@@ -24,7 +27,7 @@ namespace WebApplication1.Services
             };
 
             // Not storing, notifying only (in-memory example)
-            NotificationService.NotifyUser(receiverId, $"New message from {sender.Name}: {content}");
+            NotificationService.NotifyUser(receiverId, $"New message from {sender.UserName}: {content}");
         }
     }
 } 

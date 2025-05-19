@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using WebApplication1.Models.Enums;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Models.Notifications
 {
@@ -13,10 +14,10 @@ namespace WebApplication1.Models.Notifications
         public NotificationType Type { get; set; }
 
         [Required]
-        public string TitleTemplate { get; set; }
+        public required string TitleTemplate { get; set; }
 
         [Required]
-        public string ContentTemplate { get; set; }
+        public required string ContentTemplate { get; set; }
 
         public string? Icon { get; set; }
         public string? Color { get; set; }
@@ -50,15 +51,16 @@ namespace WebApplication1.Models.Notifications
             }
         }
 
-        public Notification CreateNotification(string userId, params object[] args)
+        public Notification CreateNotification(string userId, User user, params object[] args)
         {
             return new Notification
             {
                 UserId = userId,
+                User = user,
                 Type = Type,
                 Title = FormatTitle(args),
                 Content = FormatContent(args),
-                Priority = (int)DefaultPriority,
+                Priority = DefaultPriority,
                 ExpiresAt = DefaultExpiration.HasValue ? DateTime.UtcNow.Add(DefaultExpiration.Value) : null
             };
         }
