@@ -1,0 +1,155 @@
+/* css/style.css */
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #e9ecf3;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar {
+  border-radius: 0 0 10px 10px;
+}
+
+.card {
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border: none;
+}
+
+.list-group-item {
+  border: none;
+  border-radius: 8px !important;
+  margin-bottom: 5px;
+}
+
+.list-group-item.active {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+#messageArea {
+  background-color: #f5f5f5;
+  padding: 15px;
+  border-radius: 0 0 15px 15px;
+}
+
+.bg-primary {
+  background-color: #0d6efd !important;
+}
+
+.bg-secondary {
+  background-color: #6c757d !important;
+}
+
+.input-group input {
+  border-radius: 10px 0 0 10px !important;
+}
+
+.input-group .btn {
+  border-radius: 0 10px 10px 0 !important;
+}
+
+.text-start .bg-light {
+  background-color: #dbe9ff !important;
+}
+
+.text-end .bg-primary {
+  background-color: #007bff !important;
+}
+/* Kullanıcı listesi hover ve aktif renkleri */
+.user-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.user-item:hover {
+  background-color: #f0f8ff;
+}
+
+.user-item.active-user {
+  background-color: #d0e7ff;
+  font-weight: bold;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.alert {
+  animation: fadeIn 0.4s ease-in-out;
+}
+input, button, select {
+  transition: all 0.2s ease-in-out;
+}
+@media (max-width: 576px) {
+  .card {
+    padding: 1rem;
+  }
+}
+.alert-success {
+  background-color: #d1e7dd;
+  color: #0f5132;
+}
+.alert-danger {
+  background-color: #f8d7da;
+  color: #842029;
+}
+.form-control {
+  padding: 12px;
+}
+#profileSection .card {
+  background-color: #f8f9fa;
+}
+
+#chatSection .card {
+  background-color: #ffffff;
+}
+
+.card-header {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  #messageArea {
+    height: 200px;
+  }
+}
+.btn-outline-primary.active-tab {
+  background-color: #0d6efd;
+  color: white;
+  border-color: #0d6efd;
+}
+/* Aktif sekme için butonlar */
+#btnChat.active,
+#btnProfile.active {
+  background-color: #0d6efd;
+  color: white;
+  border-color: #0d6efd;
+}
+
+/* Diğer butonlar (pasif) */
+#btnChat:not(.active),
+#btnProfile:not(.active) {
+  background-color: white;
+  color: #0d6efd;
+  border: 1px solid #0d6efd;
+  transition: all 0.3s ease;
+}
+#chatSection,
+#profileSection {
+  display: none;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+#chatSection.active,
+#profileSection.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
