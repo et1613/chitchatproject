@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.Services.Users;
+using WebApplication1.Models.Users;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -46,7 +46,6 @@ namespace WebApplication1.Models.Users
             };
         }
 
-
         public static UserActivity CreateLogout(User user, string ipAddress)
         {
             return new UserActivity
@@ -93,6 +92,5 @@ namespace WebApplication1.Models.Users
                 User = user
             };
         }
-
     }
 } 

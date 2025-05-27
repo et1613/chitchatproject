@@ -51,9 +51,6 @@ namespace WebApplication1.Models.Users
         public bool ShowTypingStatus { get; set; } = true;
 
         // Güvenlik
-        public bool TwoFactorEnabled { get; set; } = false;
-        public string? TwoFactorSecret { get; set; }
-        public DateTime? TwoFactorEnabledAt { get; set; }
         public int FailedLoginAttempts { get; set; } = 0;
         public DateTime? LockoutEnd { get; set; }
 
@@ -64,9 +61,9 @@ namespace WebApplication1.Models.Users
         public virtual ICollection<FriendRequest> SentFriendRequests { get; set; } = new List<FriendRequest>();
         public virtual ICollection<FriendRequest> ReceivedFriendRequests { get; set; } = new List<FriendRequest>();
         public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
-        public required virtual NotificationSettings NotificationSettings { get; set; }
-        public virtual ICollection<User> BlockedUsers { get; set; } = new List<User>();
-        public virtual ICollection<User> BlockedByUsers { get; set; } = new List<User>();
+        public virtual NotificationSettings NotificationSettings { get; set; } = new NotificationSettings { UserId = Id, User = this };
+        public virtual ICollection<BlockedUser> BlockedUsers { get; set; } = new List<BlockedUser>();
+        public virtual ICollection<BlockedUser> BlockedByUsers { get; set; } = new List<BlockedUser>();
         public virtual ICollection<UserActivity> Activities { get; set; } = new List<UserActivity>();
 
         public string GetFullName()
@@ -94,45 +91,56 @@ namespace WebApplication1.Models.Users
 
         public bool IsBlockedBy(string userId)
         {
-            return BlockedByUsers.Any(b => b.Id == userId);
+            return BlockedByUsers.Any(b => b.BlockerUserId.ToString() == userId && b.IsCurrentlyBlocked);
         }
 
         public bool HasBlocked(string userId)
         {
-            return BlockedUsers.Any(b => b.Id == userId);
+            return BlockedUsers.Any(b => b.BlockedUserId.ToString() == userId && b.IsCurrentlyBlocked);
         }
 
-        public void BlockUser(User targetUser)
+        public void BlockUser(User targetUser, string? reason = null, TimeSpan? duration = null)
         {
-            if (!BlockedUsers.Any(u => u.Id == targetUser.Id))
+            var existingBlock = BlockedUsers.FirstOrDefault(b => b.BlockedUserId.ToString() == targetUser.Id);
+            
+            if (existingBlock != null)
             {
-                BlockedUsers.Add(targetUser);
+                if (!existingBlock.IsActive)
+                {
+                    // Yeniden engelleme
+                    existingBlock.IsActive = true;
+                    existingBlock.BlockedAt = DateTime.UtcNow;
+                    existingBlock.Reason = reason;
+                    existingBlock.BlockCount++;
+                    existingBlock.BlockExpiresAt = duration.HasValue ? DateTime.UtcNow.Add(duration.Value) : null;
+                    existingBlock.IsPermanent = !duration.HasValue;
+                }
+            }
+            else
+            {
+                // Yeni engelleme
+                var blockedUser = new BlockedUser
+                {
+                    BlockerUserId = int.Parse(this.Id),
+                    BlockedUserId = int.Parse(targetUser.Id),
+                    BlockedAt = DateTime.UtcNow,
+                    Reason = reason,
+                    BlockExpiresAt = duration.HasValue ? DateTime.UtcNow.Add(duration.Value) : null,
+                    IsPermanent = !duration.HasValue
+                };
+                BlockedUsers.Add(blockedUser);
             }
         }
 
-
-        public void UnblockUser(User targetUser)
+        public void UnblockUser(User targetUser, string? reason = null)
         {
-            var userToRemove = BlockedUsers.FirstOrDefault(u => u.Id == targetUser.Id);
-            if (userToRemove != null)
+            var blockedUser = BlockedUsers.FirstOrDefault(b => b.BlockedUserId.ToString() == targetUser.Id);
+            if (blockedUser != null && blockedUser.IsActive)
             {
-                BlockedUsers.Remove(userToRemove);
+                blockedUser.IsActive = false;
+                blockedUser.LastUnblockedAt = DateTime.UtcNow;
+                blockedUser.UnblockReason = reason;
             }
-        }
-
-
-        public void EnableTwoFactor(string secret)
-        {
-            TwoFactorEnabled = true;
-            TwoFactorSecret = secret;
-            TwoFactorEnabledAt = DateTime.UtcNow;
-        }
-
-        public void DisableTwoFactor()
-        {
-            TwoFactorEnabled = false;
-            TwoFactorSecret = null;
-            TwoFactorEnabledAt = null;
         }
 
         public void RecordFailedLogin()
@@ -337,6 +345,21 @@ namespace WebApplication1.Models.Users
             {
                 Role = newRole;
             }
+        }
+
+        public IEnumerable<BlockedUser> GetActiveBlocks()
+        {
+            return BlockedUsers.Where(b => b.IsCurrentlyBlocked);
+        }
+
+        public IEnumerable<BlockedUser> GetBlockHistory()
+        {
+            return BlockedUsers.OrderByDescending(b => b.BlockedAt);
+        }
+
+        public int GetTotalBlockCount()
+        {
+            return BlockedUsers.Sum(b => b.BlockCount);
         }
     }
 } 

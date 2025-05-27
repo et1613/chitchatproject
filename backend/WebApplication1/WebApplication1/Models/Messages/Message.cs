@@ -8,6 +8,7 @@ using System.Linq;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Users;
 using WebApplication1.Models.DTOs;
+using System.Threading.Tasks;
 
 namespace WebApplication1.Models.Messages
 {
@@ -40,8 +41,8 @@ namespace WebApplication1.Models.Messages
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
 
-        private HashSet<string> HiddenForUsers { get; set; } = new();
-        public IReadOnlyCollection<string> HiddenUsers => HiddenForUsers;
+        public List<int> HiddenForUsers { get; set; } = new();
+        public IReadOnlyCollection<string> HiddenUsers => HiddenForUsers.Select(i => i.ToString()).ToList();
 
         // Navigation properties
         public virtual ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
@@ -64,7 +65,7 @@ namespace WebApplication1.Models.Messages
                 var notification = new Notification
                 {
                     UserId = SenderId,
-                    User = Sender, 
+                    User = Sender,
                     MessageId = Id,
                     Type = NotificationType.MessageRead,
                     Status = false,
@@ -104,7 +105,14 @@ namespace WebApplication1.Models.Messages
                 NewContent = newContent,
                 EditedAt = DateTime.UtcNow,
                 EditedByUserId = userId,
-                EditedByUser = new User { Id = userId },//Burası güncel bir kullanıcıdan çekilecek service'ler ayarlandıktan sonra düzelticem
+                EditedByUser = new User
+                {
+                    Id = userId,
+                    UserName = "System",
+                    Email = "system@temp.com",
+                    PasswordHash = "temp",
+                    NotificationSettings = new NotificationSettings { UserId = userId }
+                },
                 EditType = editType,
                 EditReason = editReason,
                 ChangeDescription = GetEditDescription(editType, editReason)
@@ -125,7 +133,14 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
-                        User = participant, // Fix: Set the required 'User' property  
+                        User = new User
+                        {
+                            Id = participant.Id,
+                            UserName = "System",
+                            Email = "system@temp.com",
+                            PasswordHash = "temp",
+                            NotificationSettings = new NotificationSettings { UserId = participant.Id }
+                        },
                         MessageId = Id,
                         Type = NotificationType.MessageEdited,
                         Status = false,
@@ -136,13 +151,13 @@ namespace WebApplication1.Models.Messages
             }
         }
 
-        private string GetEditDescription(EditType editType, string? editReason)
+        public static string GetEditDescription(EditType type, string? additionalInfo = null)
         {
-            var description = EditTypeDescriptions.GetDescription(editType);
+            var description = EditTypeDescriptions.GetDescription(type);
 
-            if (!string.IsNullOrEmpty(editReason))
+            if (!string.IsNullOrEmpty(additionalInfo))
             {
-                description += $": {editReason}";
+                description += $": {additionalInfo}";
             }
 
             return description;
@@ -169,7 +184,7 @@ namespace WebApplication1.Models.Messages
 
             var oldStatus = Status;
             Status = newStatus;
-            
+
             if (newStatus == MessageStatus.Read)
                 IsRead = true;
 
@@ -204,7 +219,14 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
-                        User = participant, // Fix: Set the required 'User' property  
+                        User = new User
+                        {
+                            Id = participant.Id,
+                            UserName = "System",
+                            Email = "system@temp.com",
+                            PasswordHash = "temp",
+                            NotificationSettings = new NotificationSettings { UserId = participant.Id }
+                        },
                         MessageId = Id,
                         Type = NotificationType.MessageDeleted,
                         Status = false,
@@ -217,15 +239,22 @@ namespace WebApplication1.Models.Messages
 
         public void DeleteForUser(string userId)
         {
-            if (!HiddenForUsers.Contains(userId))
+            if (!HiddenForUsers.Contains(int.Parse(userId)))
             {
-                HiddenForUsers.Add(userId);
+                HiddenForUsers.Add(int.Parse(userId));
 
                 // Notify the user  
                 var notification = new Notification
                 {
                     UserId = userId,
-                    User = new User { Id = userId }, //Burası güncel bir kullanıcıdan çekilecek service'ler ayarlandıktan sonra düzelticem
+                    User = new User
+                    {
+                        Id = userId,
+                        UserName = "System",
+                        Email = "system@temp.com",
+                        PasswordHash = "temp",
+                        NotificationSettings = new NotificationSettings { UserId = userId }
+                    },
                     MessageId = Id,
                     Type = NotificationType.MessageDeleted,
                     Status = false,
@@ -261,7 +290,7 @@ namespace WebApplication1.Models.Messages
 
         public bool IsVisibleToUser(string userId)
         {
-            return !HiddenForUsers.Contains(userId) && !IsDeleted;
+            return !HiddenForUsers.Contains(int.Parse(userId)) && !IsDeleted;
         }
 
         public List<Message> GetReplies()
@@ -282,5 +311,40 @@ namespace WebApplication1.Models.Messages
         {
             // Not implemented
         }
-    }
-} 
+
+    public async Task<Dictionary<string, object>> AnalyzeFileAsync(string fileId)
+        {
+            // Implementation of AnalyzeFileAsync method
+            throw new NotImplementedException();
+        }
+
+        public async Task<bool> IsFileVirusFreeAsync(string fileId)
+        {
+            // Implementation of IsFileVirusFreeAsync method
+            throw new NotImplementedException();
+        }
+
+        public async Task<Attachment> ConvertFileFormatAsync(string fileId, string targetFormat)
+        {
+            // Implementation of ConvertFileFormatAsync method
+            throw new NotImplementedException();
+        }
+
+        public async Task<Attachment> ConvertVideoFormatAsync(string fileId, string targetFormat)
+        {
+            // Implementation of ConvertVideoFormatAsync method
+            throw new NotImplementedException();
+        }
+
+        public async Task<Attachment> CompressFileAsync(string fileId, int quality = 80)
+        {
+            // Implementation of CompressFileAsync method
+            throw new NotImplementedException();
+        }
+
+        public async Task<Attachment> OptimizeImageAsync(string fileId, int maxWidth = 1920, int maxHeight = 1080)
+        {
+            // Implementation of OptimizeImageAsync method
+            throw new NotImplementedException();
+        }
+    } }

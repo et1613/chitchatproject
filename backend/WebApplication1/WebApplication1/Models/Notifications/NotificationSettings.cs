@@ -10,14 +10,17 @@ namespace WebApplication1.Models.Notifications
     public class NotificationSettings
     {
         [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-
-        [Required]
         public required string UserId { get; set; }
-        public required virtual User User { get; set; }
+        
+        [ForeignKey("UserId")]
+        public required User User { get; set; }
+        
+        public bool EmailNotifications { get; set; } = true;
+        public bool PushNotifications { get; set; } = true;
+        public bool MessageNotifications { get; set; } = true;
+        public bool MentionNotifications { get; set; } = true;
+        public bool GroupNotifications { get; set; } = true;
 
-        public bool EnablePushNotifications { get; set; } = true;
-        public bool EnableEmailNotifications { get; set; } = true;
         public bool EnableSound { get; set; } = true;
         public bool EnableVibration { get; set; } = true;
 
@@ -53,7 +56,7 @@ namespace WebApplication1.Models.Notifications
 
         public bool IsNotificationEnabled(NotificationType type, NotificationPriority priority)
         {
-            if (!EnablePushNotifications)
+            if (!PushNotifications)
                 return false;
 
             if (IsInQuietHours())

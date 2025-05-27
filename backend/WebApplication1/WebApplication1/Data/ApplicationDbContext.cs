@@ -4,6 +4,7 @@ using WebApplication1.Models.Messages;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Users;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using WebApplication1.Services;
 
 namespace WebApplication1.Data
 {
@@ -19,15 +20,28 @@ namespace WebApplication1.Data
         public DbSet<ChatRoom> ChatRooms { get; set; }
         public DbSet<FriendRequest> FriendRequests { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<NotificationSettings> NotificationSettings { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
         public DbSet<MessageHistory> MessageHistories { get; set; }
         public DbSet<DeletedMessage> DeletedMessages { get; set; }
+        public DbSet<BlockedUser> BlockedUsers { get; set; }
+        public DbSet<UserActivity> UserActivities { get; set; }
+        public DbSet<StoredToken> StoredTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // User configurations  
+            // User configurations
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.UserName)
+                .IsUnique();
+
+            // UserFriends configurations
             modelBuilder.Entity<User>()
                 .HasMany(u => u.Friends)
                 .WithMany()
@@ -36,22 +50,27 @@ namespace WebApplication1.Data
                     j => j.HasOne<User>().WithMany().HasForeignKey("FriendId"),
                     j => j.HasOne<User>().WithMany().HasForeignKey("UserId"));
 
-            modelBuilder.Entity<User>()
-                .HasMany(u => u.BlockedUsers)
-                .WithMany()
-                .UsingEntity<Dictionary<string, object>>(
-                    "UserBlockedUsers",
-                    j => j.HasOne<User>().WithMany().HasForeignKey("BlockedUserId"),
-                    j => j.HasOne<User>().WithMany().HasForeignKey("UserId"));
+            // BlockedUser configurations
+            modelBuilder.Entity<BlockedUser>()
+                .HasOne(b => b.BlockerUser)
+                .WithMany(u => u.BlockedUsers)
+                .HasForeignKey(b => b.BlockerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // Message configurations  
+            modelBuilder.Entity<BlockedUser>()
+                .HasOne(b => b.BlockedUserEntity)
+                .WithMany(u => u.BlockedByUsers)
+                .HasForeignKey(b => b.BlockedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Message configurations
             modelBuilder.Entity<Message>()
-                .HasOne<User>()
-                .WithMany()
+                .HasOne(m => m.Sender)
+                .WithMany(u => u.Messages)
                 .HasForeignKey(m => m.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // ChatRoom configurations  
+            // ChatRoom configurations
             modelBuilder.Entity<ChatRoom>()
                 .HasOne<User>()
                 .WithMany()
@@ -65,6 +84,33 @@ namespace WebApplication1.Data
                     "ChatRoomParticipants",
                     j => j.HasOne<User>().WithMany().HasForeignKey("UserId"),
                     j => j.HasOne<ChatRoom>().WithMany().HasForeignKey("ChatRoomId"));
+
+            // FriendRequest configurations
+            modelBuilder.Entity<FriendRequest>()
+                .HasOne(f => f.Sender)
+                .WithMany()
+                .HasForeignKey(f => f.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FriendRequest>()
+                .HasOne(f => f.Receiver)
+                .WithMany()
+                .HasForeignKey(f => f.ReceiverId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Notification configurations
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.User)
+                .WithMany(u => u.Notifications)
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NotificationSettings configurations
+            modelBuilder.Entity<NotificationSettings>()
+                .HasOne(ns => ns.User)
+                .WithOne(u => u.NotificationSettings)
+                .HasForeignKey<NotificationSettings>(ns => ns.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 } 
