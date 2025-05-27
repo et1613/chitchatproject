@@ -27,6 +27,7 @@ namespace WebApplication1.Data
         public DbSet<BlockedUser> BlockedUsers { get; set; }
         public DbSet<UserActivity> UserActivities { get; set; }
         public DbSet<StoredToken> StoredTokens { get; set; }
+        public DbSet<TokenBlacklist> TokenBlacklist { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -111,6 +112,26 @@ namespace WebApplication1.Data
                 .WithOne(u => u.NotificationSettings)
                 .HasForeignKey<NotificationSettings>(ns => ns.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // StoredToken configurations
+            modelBuilder.Entity<StoredToken>()
+                .HasIndex(t => t.Token)
+                .IsUnique();
+
+            modelBuilder.Entity<StoredToken>()
+                .HasIndex(t => new { t.UserId, t.TokenType });
+
+            modelBuilder.Entity<StoredToken>()
+                .Property(t => t.Metadata)
+                .HasColumnType("nvarchar(max)");
+
+            // TokenBlacklist configurations
+            modelBuilder.Entity<TokenBlacklist>()
+                .HasIndex(t => t.Token)
+                .IsUnique();
+
+            modelBuilder.Entity<TokenBlacklist>()
+                .HasIndex(t => t.AddedAt);
         }
     }
 } 

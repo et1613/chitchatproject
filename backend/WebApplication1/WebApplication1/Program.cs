@@ -12,6 +12,7 @@ using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +45,11 @@ builder.Services.AddScoped<IStorageService, StorageService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<TokenStorageService>();
+builder.Services.AddScoped<IUserService, UserService>();
+
+// Configure Storage Options
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.AddMemoryCache();
 
 // Configure Security Options
 builder.Services.Configure<SecurityOptions>(options =>
