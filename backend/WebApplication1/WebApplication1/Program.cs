@@ -13,6 +13,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Caching.Memory;
+using WebApplication1.Hubs;
+using WebApplication1.Models.Users;
+using WebApplication1.Models.Chat;
+using WebApplication1.Models.Messages;
+using WebApplication1.Models.Notifications;
+using WebApplication1.Models.Enums;
+using WebApplication1.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,54 +32,29 @@ builder.Services.AddSwaggerGen();
 // Add User Secrets
 builder.Configuration.AddUserSecrets<Program>();
 
-// Add DbContext
+// Configure MySQL
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
-// Register repositories
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IChatRepository, ChatRepository>();
+// Configure SignalR
+builder.Services.AddSignalR();
 
-// Register our custom services
-builder.Services.AddScoped<IChatService, ChatService>();
-builder.Services.AddSingleton<ConnectionManager>();
-builder.Services.AddSingleton<AuthService>();
-builder.Services.AddSingleton<EncryptionService>();
-builder.Services.AddSingleton<HashingService>();
-builder.Services.AddSingleton<DigitalSignatureService>();
-builder.Services.AddSingleton<TokenStorage>();
-builder.Services.AddScoped<IStorageService, StorageService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<TokenStorageService>();
-builder.Services.AddScoped<IUserService, UserService>();
-
-// Configure Storage Options
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
-builder.Services.AddMemoryCache();
-
-// Configure Security Options
-builder.Services.Configure<SecurityOptions>(options =>
+// Configure CORS
+builder.Services.AddCors(options =>
 {
-    options.JwtSecret = builder.Configuration["Jwt:Key"];
-    options.JwtIssuer = builder.Configuration["Jwt:Issuer"];
-    options.JwtAudience = builder.Configuration["Jwt:Audience"];
-    options.JwtExpirationMinutes = 60;
-    options.RefreshTokenExpirationDays = 7;
-    options.MaxFailedLoginAttempts = 5;
-    options.AccountLockoutMinutes = 30;
-    options.RequireEmailVerification = true;
-    options.RequireTwoFactor = false;
-    options.PasswordMinLength = 8;
-    options.RequireSpecialCharacters = true;
-    options.RequireNumbers = true;
-    options.RequireUppercase = true;
-    options.RequireLowercase = true;
+    options.AddPolicy("AllowAll", builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
 });
 
-builder.Services.AddScoped<SecurityService>();
+// Add logging
+builder.Services.AddLogging();
 
-// Add JWT Authentication
+// Configure JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -86,24 +68,39 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
+
+        // Configure SignalR to use JWT
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chatHub"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
-// Add WebSocket support
-builder.Services.AddSignalR();
+// Add Repositories
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IChatRoomRepository, ChatRoomRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<IFriendRequestRepository, FriendRequestRepository>();
+builder.Services.AddScoped<IBlockedUserRepository, BlockedUserRepository>();
+builder.Services.AddScoped<IUserActivityRepository, UserActivityRepository>();
 
-// Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", builder =>
-    {
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
-    });
-});
-
-// Add logging
-builder.Services.AddLogging();
+// Add Services
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IFriendService, FriendService>();
+builder.Services.AddScoped<HashingService>();
+builder.Services.AddSingleton<ConnectionManager>();
 
 var app = builder.Build();
 
@@ -173,19 +170,30 @@ app.Map("/ws", async context =>
     }
 });
 
-// Ensure database is created
+// Seed initial data
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
+    var context = services.GetRequiredService<ApplicationDbContext>();
+    context.Database.EnsureCreated();
+
+    // Seed admin user if not exists
+    if (!context.Users.Any(u => u.UserName == "admin"))
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.EnsureCreated();
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while creating the database.");
+        var hashingService = services.GetRequiredService<HashingService>();
+        var adminUser = new User
+        {
+            UserName = "admin",
+            Email = "admin@chitchat.com",
+            PasswordHash = hashingService.GenerateHash("Admin123!"),
+            DisplayName = "System Admin",
+            Status = UserStatus.Online,
+            IsActive = true,
+            IsVerified = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Users.Add(adminUser);
+        context.SaveChanges();
     }
 }
 

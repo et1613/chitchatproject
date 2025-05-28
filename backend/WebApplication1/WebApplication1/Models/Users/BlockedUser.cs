@@ -7,16 +7,16 @@ namespace WebApplication1.Models.Users
     public class BlockedUser
     {
         [Key]
-        public required string Id { get; set; }
+        public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
         public required string BlockerUserId { get; set; }
 
         [Required]
-        public int BlockedUserId { get; set; }
+        public required string BlockedUserId { get; set; }
 
         [Required]
-        public DateTime BlockedAt { get; set; }
+        public DateTime BlockedAt { get; set; } = DateTime.UtcNow;
 
         public string? Reason { get; set; }
 

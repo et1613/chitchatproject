@@ -29,15 +29,13 @@ namespace WebApplication1.Services
         AccountLocked,
         EmailNotVerified,
         InvalidToken,
-        TwoFactorRequired,
-        TwoFactorInvalid,
         SessionExpired,
         RefreshTokenInvalid
     }
 
     public interface IAuthService
     {
-        Task<(string accessToken, string refreshToken, User user)> LoginAsync(string email, string password, string? twoFactorCode = null);
+        Task<(string accessToken, string refreshToken, User user)> LoginAsync(string email, string password);
         Task<(string accessToken, string refreshToken, User user)> RegisterAsync(string username, string email, string password);
         Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshToken);
         Task<bool> ValidateTokenAsync(string token);
@@ -45,9 +43,6 @@ namespace WebApplication1.Services
         Task<bool> ResetPasswordAsync(string email);
         Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword);
         Task<bool> VerifyEmailAsync(string userId, string token);
-        Task<bool> EnableTwoFactorAsync(string userId);
-        Task<bool> DisableTwoFactorAsync(string userId, string code);
-        Task<bool> VerifyTwoFactorAsync(string userId, string code);
         Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId);
         Task RevokeSessionAsync(string userId, string sessionId);
         Task<bool> ValidateUserAsync(string email, string password);
@@ -83,7 +78,7 @@ namespace WebApplication1.Services
         }
 
         public async Task<(string accessToken, string refreshToken, User user)> LoginAsync(
-            string email, string password, string? twoFactorCode = null)
+            string email, string password)
         {
             var user = await _userRepository.GetByEmailAsync(email);
             if (user == null)
@@ -100,15 +95,6 @@ namespace WebApplication1.Services
 
             if (!user.IsVerified)
                 throw new AuthException("Email adresiniz doğrulanmamış", AuthErrorType.EmailNotVerified);
-
-            if (user.TwoFactorEnabled)
-            {
-                if (string.IsNullOrEmpty(twoFactorCode))
-                    throw new AuthException("İki faktörlü doğrulama kodu gerekli", AuthErrorType.TwoFactorRequired);
-
-                if (!VerifyTwoFactorCode(user, twoFactorCode))
-                    throw new AuthException("Geçersiz iki faktörlü doğrulama kodu", AuthErrorType.TwoFactorInvalid);
-            }
 
             user.ResetFailedLoginAttempts();
             user.LastLoginAt = DateTime.UtcNow;
@@ -203,43 +189,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> EnableTwoFactorAsync(string userId)
-        {
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-                throw new AuthException("Kullanıcı bulunamadı", AuthErrorType.InvalidCredentials);
-
-            // TODO: Implement 2FA setup logic
-            user.TwoFactorEnabled = true;
-            await _userRepository.UpdateAsync(user);
-
-            return true;
-        }
-
-        public async Task<bool> DisableTwoFactorAsync(string userId, string code)
-        {
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-                throw new AuthException("Kullanıcı bulunamadı", AuthErrorType.InvalidCredentials);
-
-            if (!VerifyTwoFactorCode(user, code))
-                throw new AuthException("Geçersiz iki faktörlü doğrulama kodu", AuthErrorType.TwoFactorInvalid);
-
-            user.TwoFactorEnabled = false;
-            await _userRepository.UpdateAsync(user);
-
-            return true;
-        }
-
-        public async Task<bool> VerifyTwoFactorAsync(string userId, string code)
-        {
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-                throw new AuthException("Kullanıcı bulunamadı", AuthErrorType.InvalidCredentials);
-
-            return VerifyTwoFactorCode(user, code);
-        }
-
         public async Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId)
         {
             return _activeSessions.Values.Where(s => s.SessionId.StartsWith(userId));
@@ -308,12 +257,6 @@ namespace WebApplication1.Services
                 session.LastActivity = DateTime.UtcNow;
                 _activeSessions[newToken] = session;
             }
-        }
-
-        private bool VerifyTwoFactorCode(User user, string code)
-        {
-            // TODO: Implement actual 2FA verification logic
-            return true;
         }
 
         public async Task<bool> ResetPasswordAsync(string email)

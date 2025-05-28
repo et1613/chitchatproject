@@ -10,11 +10,11 @@ namespace WebApplication1.Models.Users
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
 
         public string Language { get; set; } = "tr";
 
-        public string TimeZone { get; set; }
+        public required string TimeZone { get; set; }
 
         public bool ShowOnlineStatus { get; set; } = true;
 
@@ -53,6 +53,6 @@ namespace WebApplication1.Models.Users
         public DateTime? LastModified { get; set; }
 
         [ForeignKey("UserId")]
-        public virtual User User { get; set; }
+        public required virtual User User { get; set; }
     }
 } 

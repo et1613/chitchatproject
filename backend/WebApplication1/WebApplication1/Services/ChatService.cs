@@ -23,6 +23,14 @@ namespace WebApplication1.Services
         Task<bool> EditMessageAsync(string messageId, string userId, string newContent);
         Task HandleWebSocketConnection(WebSocket webSocket, string userId);
         Task BroadcastMessageToRoom(string chatRoomId, string message, string senderId);
+        Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId);
+        Task<ChatRoom> GetChatRoomAsync(string chatRoomId);
+        Task<IEnumerable<ChatRoom>> GetUserChatRoomsAsync(string userId);
+        Task<bool> AddUserToChatRoomAsync(string userId, string chatRoomId);
+        Task<bool> RemoveUserFromChatRoomAsync(string userId, string chatRoomId);
+        Task<IEnumerable<Message>> GetChatRoomMessagesAsync(string chatRoomId, int skip = 0, int take = 50);
+        Task<bool> MarkMessageAsReadAsync(string messageId);
+        Task<bool> UpdateMessageAsync(string messageId, string content, string userId);
     }
 
     public class ChatService : IChatService
@@ -479,6 +487,153 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Hata mesajı gönderilirken hata oluştu: UserId={UserId}", userId);
+            }
+        }
+
+        public async Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId)
+        {
+            try
+            {
+                var chatRoom = new ChatRoom
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = name,
+                    Description = description,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.ChatRooms.Add(chatRoom);
+                await _context.SaveChangesAsync();
+
+                // Add creator as participant
+                await AddUserToChatRoomAsync(creatorId, chatRoom.Id);
+
+                return chatRoom;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating chat room");
+                throw;
+            }
+        }
+
+        public async Task<ChatRoom> GetChatRoomAsync(string chatRoomId)
+        {
+            return await _context.ChatRooms
+                .Include(c => c.Participants)
+                .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+        }
+
+        public async Task<IEnumerable<ChatRoom>> GetUserChatRoomsAsync(string userId)
+        {
+            return await _context.ChatRooms
+                .Include(c => c.Participants)
+                .Where(c => c.Participants.Any(p => p.Id == userId))
+                .ToListAsync();
+        }
+
+        public async Task<bool> AddUserToChatRoomAsync(string userId, string chatRoomId)
+        {
+            try
+            {
+                var user = await _context.Users.FindAsync(userId);
+                var chatRoom = await _context.ChatRooms
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+
+                if (user == null || chatRoom == null)
+                    return false;
+
+                if (!chatRoom.Participants.Contains(user))
+                {
+                    chatRoom.Participants.Add(user);
+                    await _context.SaveChangesAsync();
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding user to chat room");
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveUserFromChatRoomAsync(string userId, string chatRoomId)
+        {
+            try
+            {
+                var user = await _context.Users.FindAsync(userId);
+                var chatRoom = await _context.ChatRooms
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+
+                if (user == null || chatRoom == null)
+                    return false;
+
+                if (chatRoom.Participants.Contains(user))
+                {
+                    chatRoom.Participants.Remove(user);
+                    await _context.SaveChangesAsync();
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing user from chat room");
+                return false;
+            }
+        }
+
+        public async Task<IEnumerable<Message>> GetChatRoomMessagesAsync(string chatRoomId, int skip = 0, int take = 50)
+        {
+            return await _context.Messages
+                .Include(m => m.Sender)
+                .Where(m => m.ChatRoomId == chatRoomId)
+                .OrderByDescending(m => m.Timestamp)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task<bool> MarkMessageAsReadAsync(string messageId)
+        {
+            try
+            {
+                var message = await _context.Messages.FindAsync(messageId);
+                if (message == null)
+                    return false;
+
+                message.IsRead = true;
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking message as read");
+                return false;
+            }
+        }
+
+        public async Task<bool> UpdateMessageAsync(string messageId, string content, string userId)
+        {
+            try
+            {
+                var message = await _context.Messages.FindAsync(messageId);
+                if (message == null || message.SenderId != userId)
+                    return false;
+
+                message.Content = content;
+                message.IsEdited = true;
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating message");
+                return false;
             }
         }
     }

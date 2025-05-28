@@ -14,7 +14,10 @@ namespace WebApplication1.Models.Notifications
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
+        [ForeignKey("User")]
         public required string UserId { get; set; }
+
+        [Required]
         public required virtual User User { get; set; }
 
         public string? MessageId { get; set; }

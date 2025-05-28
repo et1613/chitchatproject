@@ -10,7 +10,7 @@ namespace WebApplication1.Models.Users
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
 
         public string MessageSound { get; set; } = "default";
 
@@ -57,6 +57,6 @@ namespace WebApplication1.Models.Users
         public DateTime? LastModified { get; set; }
 
         [ForeignKey("UserId")]
-        public virtual User User { get; set; }
+        public virtual required User User { get; set; }
     }
 } 

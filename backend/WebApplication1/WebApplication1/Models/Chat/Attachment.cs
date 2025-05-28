@@ -33,7 +33,6 @@ namespace WebApplication1.Models.Chat
             FileName = fileName;
             FileSize = fileStream.Length;
             FileUrl = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
-
         }
 
         public async Task DeleteAttachment()
@@ -42,13 +41,12 @@ namespace WebApplication1.Models.Chat
 
             if (!string.IsNullOrEmpty(FileUrl))
             {
-                await _storageService.DeleteFileAsync(FileUrl);
+                await _storageService.DeleteFileAsync(FileUrl, true);
             }
 
             IsDeleted = true;
             DeletedAt = DateTime.UtcNow;
             FileUrl = null;
-
         }
 
         public bool IsValidFileType()

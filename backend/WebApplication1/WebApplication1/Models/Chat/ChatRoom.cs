@@ -208,7 +208,7 @@ namespace WebApplication1.Models.Chat
                 var notification = new Notification
                 {
                     UserId = participant.Id,
-                    User = participant, // Set the required 'User' property
+                    User = participant,
                     MessageId = messageId,
                     Type = parsedNotificationType,
                     Status = false,

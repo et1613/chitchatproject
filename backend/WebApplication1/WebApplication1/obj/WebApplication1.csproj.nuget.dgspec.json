@@ -95,6 +95,10 @@
               "target": "Package",
               "version": "[8.5.2, )"
             },
+            "Pomelo.EntityFrameworkCore.MySql": {
+              "target": "Package",
+              "version": "[8.0.3, )"
+            },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
               "version": "[6.6.2, )"
@@ -115,10 +119,6 @@
             {
               "name": "Microsoft.AspNetCore.App.Ref",
               "version": "[8.0.14, 8.0.14]"
-            },
-            {
-              "name": "Microsoft.Net.Sdk.Compilers.Toolset",
-              "version": "[9.0.202, 9.0.202]"
             },
             {
               "name": "Microsoft.NETCore.App.Host.win-x64",

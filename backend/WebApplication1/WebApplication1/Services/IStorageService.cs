@@ -13,7 +13,7 @@ namespace WebApplication1.Services
         // Temel dosya işlemleri
         Task<string> UploadFileAsync(IFormFile file);
         Task<string> UploadFileAsync(Stream fileStream, string fileName);
-        Task<bool> DeleteFileAsync(string fileUrl);
+        Task<bool> DeleteFileAsync(string fileUrl, bool permanent = false);
         Task<bool> FileExistsAsync(string fileUrl);
         Task<long> GetFileSizeAsync(string fileUrl);
         Task<string> GetFileMimeTypeAsync(string fileUrl);

@@ -40,9 +40,13 @@ namespace WebApplication1.Models.Messages
         public MessageStatus Status { get; set; } = MessageStatus.Sent;
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
+        public string? DeletedByUserId { get; set; }
+        public virtual User? DeletedByUser { get; set; }
+        public string? DeleteReason { get; set; }
+        public int EditCount { get; set; }
 
-        public List<int> HiddenForUsers { get; set; } = new();
-        public IReadOnlyCollection<string> HiddenUsers => HiddenForUsers.Select(i => i.ToString()).ToList();
+        public List<string> HiddenForUsers { get; set; } = new();
+        public IReadOnlyCollection<string> HiddenUsers => HiddenForUsers;
 
         // Navigation properties
         public virtual ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
@@ -75,13 +79,15 @@ namespace WebApplication1.Models.Messages
             }
         }
 
-        public void DeleteMessage()
+        public void DeleteMessage(string userId, string? reason = null)
         {
             if (IsDeleted)
                 throw new InvalidOperationException("Bu mesaj zaten silinmiş");
 
             IsDeleted = true;
             DeletedAt = DateTime.UtcNow;
+            DeletedByUserId = userId;
+            DeleteReason = reason;
             Content = "Bu mesaj silindi";
         }
 
@@ -96,6 +102,11 @@ namespace WebApplication1.Models.Messages
             if (SenderId != userId)
                 throw new InvalidOperationException("Bu mesajı düzenleme yetkiniz yok");
 
+            // Get the user who is editing the message  
+            var editingUser = ChatRoom?.Participants.FirstOrDefault(p => p.Id == userId);
+            if (editingUser == null)
+                throw new InvalidOperationException("Düzenleme yapan kullanıcı bulunamadı");
+
             // Save old version to history  
             var history = new MessageHistory
             {
@@ -105,14 +116,7 @@ namespace WebApplication1.Models.Messages
                 NewContent = newContent,
                 EditedAt = DateTime.UtcNow,
                 EditedByUserId = userId,
-                EditedByUser = new User
-                {
-                    Id = userId,
-                    UserName = "System",
-                    Email = "system@temp.com",
-                    PasswordHash = "temp",
-                    NotificationSettings = new NotificationSettings { UserId = userId }
-                },
+                EditedByUser = editingUser,
                 EditType = editType,
                 EditReason = editReason,
                 ChangeDescription = GetEditDescription(editType, editReason)
@@ -124,6 +128,7 @@ namespace WebApplication1.Models.Messages
             IsEdited = true;
             EditedAt = DateTime.UtcNow;
             Timestamp = DateTime.UtcNow;
+            EditCount++;
 
             // Notify participants about edit  
             if (ChatRoom != null)
@@ -133,14 +138,7 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
-                        User = new User
-                        {
-                            Id = participant.Id,
-                            UserName = "System",
-                            Email = "system@temp.com",
-                            PasswordHash = "temp",
-                            NotificationSettings = new NotificationSettings { UserId = participant.Id }
-                        },
+                        User = participant,
                         MessageId = Id,
                         Type = NotificationType.MessageEdited,
                         Status = false,
@@ -196,7 +194,7 @@ namespace WebApplication1.Models.Messages
                     UserId = SenderId,
                     User = Sender,
                     MessageId = Id,
-                    Type = NotificationType.MessageEdited,
+                    Type = NotificationType.MessageStatusChanged,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -209,7 +207,7 @@ namespace WebApplication1.Models.Messages
             if (SenderId != userId)
                 throw new InvalidOperationException("Bu mesajı herkes için silme yetkiniz yok");
 
-            DeleteMessage();
+            DeleteMessage(userId, "Herkes için silindi");
 
             // Notify all participants in chat room  
             if (ChatRoom != null)
@@ -219,14 +217,7 @@ namespace WebApplication1.Models.Messages
                     var notification = new Notification
                     {
                         UserId = participant.Id,
-                        User = new User
-                        {
-                            Id = participant.Id,
-                            UserName = "System",
-                            Email = "system@temp.com",
-                            PasswordHash = "temp",
-                            NotificationSettings = new NotificationSettings { UserId = participant.Id }
-                        },
+                        User = participant,
                         MessageId = Id,
                         Type = NotificationType.MessageDeleted,
                         Status = false,
@@ -239,24 +230,21 @@ namespace WebApplication1.Models.Messages
 
         public void DeleteForUser(string userId)
         {
-            if (!HiddenForUsers.Contains(int.Parse(userId)))
+            var user = ChatRoom?.Participants.FirstOrDefault(p => p.Id == userId);
+            if (user == null)
+                throw new InvalidOperationException("Kullanıcı bulunamadı");
+
+            if (!HiddenForUsers.Contains(userId))
             {
-                HiddenForUsers.Add(int.Parse(userId));
+                HiddenForUsers.Add(userId);
 
                 // Notify the user  
                 var notification = new Notification
                 {
                     UserId = userId,
-                    User = new User
-                    {
-                        Id = userId,
-                        UserName = "System",
-                        Email = "system@temp.com",
-                        PasswordHash = "temp",
-                        NotificationSettings = new NotificationSettings { UserId = userId }
-                    },
+                    User = user,
                     MessageId = Id,
-                    Type = NotificationType.MessageDeleted,
+                    Type = NotificationType.MessageDeletedForYou,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -278,9 +266,9 @@ namespace WebApplication1.Models.Messages
                 var notification = new Notification
                 {
                     UserId = SenderId,
-                    User = Sender, // Fix: Set the required 'User' property  
+                    User = Sender,
                     MessageId = reply.Id,
-                    Type = NotificationType.Mention,
+                    Type = NotificationType.MessageReplied,
                     Status = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -290,7 +278,7 @@ namespace WebApplication1.Models.Messages
 
         public bool IsVisibleToUser(string userId)
         {
-            return !HiddenForUsers.Contains(int.Parse(userId)) && !IsDeleted;
+            return !HiddenForUsers.Contains(userId) && !IsDeleted;
         }
 
         public List<Message> GetReplies()
@@ -299,52 +287,17 @@ namespace WebApplication1.Models.Messages
         }
     }
 
-
     public class DeletedMessage
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public required string MessageId { get; set; }
         public required string DeletedByUserId { get; set; }
         public DateTime DeletedAt { get; set; } = DateTime.UtcNow;
+        public string? DeleteReason { get; set; }
 
         public void RestoreMessage()
         {
-            // Not implemented
+            // Implementation will be added
         }
-
-    public async Task<Dictionary<string, object>> AnalyzeFileAsync(string fileId)
-        {
-            // Implementation of AnalyzeFileAsync method
-            throw new NotImplementedException();
-        }
-
-        public async Task<bool> IsFileVirusFreeAsync(string fileId)
-        {
-            // Implementation of IsFileVirusFreeAsync method
-            throw new NotImplementedException();
-        }
-
-        public async Task<Attachment> ConvertFileFormatAsync(string fileId, string targetFormat)
-        {
-            // Implementation of ConvertFileFormatAsync method
-            throw new NotImplementedException();
-        }
-
-        public async Task<Attachment> ConvertVideoFormatAsync(string fileId, string targetFormat)
-        {
-            // Implementation of ConvertVideoFormatAsync method
-            throw new NotImplementedException();
-        }
-
-        public async Task<Attachment> CompressFileAsync(string fileId, int quality = 80)
-        {
-            // Implementation of CompressFileAsync method
-            throw new NotImplementedException();
-        }
-
-        public async Task<Attachment> OptimizeImageAsync(string fileId, int maxWidth = 1920, int maxHeight = 1080)
-        {
-            // Implementation of OptimizeImageAsync method
-            throw new NotImplementedException();
-        }
-    } }
+    }
+}

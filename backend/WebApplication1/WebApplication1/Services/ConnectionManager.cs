@@ -27,6 +27,7 @@ namespace WebApplication1.Services
         private readonly ConcurrentDictionary<string, string> UserTokens = new();
         private readonly int MaxConnectionsPerUser = 1;
         private readonly ILogger<ConnectionManager> _logger;
+        private readonly ConcurrentDictionary<string, HashSet<string>> _userConnections = new();
 
         public event EventHandler<string> OnClientConnected;
         public event EventHandler<string> OnClientDisconnected;
@@ -239,6 +240,33 @@ namespace WebApplication1.Services
             _logger.LogInformation("Simulating connection for user {UserId}", userId);
             // Simülasyon mantığı burada uygulanabilir
             await Task.Delay(1000); // Simüle edilmiş işlem
+        }
+
+        public void AddClient(string userId, string connectionId)
+        {
+            _userConnections.AddOrUpdate(
+                userId,
+                new HashSet<string> { connectionId },
+                (_, connections) =>
+                {
+                    connections.Add(connectionId);
+                    return connections;
+                });
+        }
+
+        public HashSet<string> GetUserConnections(string userId)
+        {
+            return _userConnections.TryGetValue(userId, out var connections) ? connections : new HashSet<string>();
+        }
+
+        public bool IsUserOnline(string userId)
+        {
+            return _userConnections.ContainsKey(userId);
+        }
+
+        public IEnumerable<string> GetAllOnlineUsers()
+        {
+            return _userConnections.Keys;
         }
     }
 } 

@@ -29,19 +29,6 @@ namespace WebApplication1.Services
         public int CacheExpirationMinutes { get; set; } = 30;
     }
 
-    public interface IStorageService
-    {
-        Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType);
-        Task<string> UploadFileInChunksAsync(IFormFile file, string fileName, string contentType, CancellationToken cancellationToken = default);
-        Task DeleteFileAsync(string fileUrl);
-        Task<Stream> DownloadFileAsync(string fileUrl);
-        Task<bool> FileExistsAsync(string fileUrl);
-        Task<FileMetadata> GetFileMetadataAsync(string fileUrl);
-        Task<Stream> GetThumbnailAsync(string fileUrl);
-        Task<string> CompressFileAsync(string fileUrl);
-        Task<string> ConvertFileFormatAsync(string fileUrl, string targetFormat);
-    }
-
     public class FileMetadata
     {
         public string FileName { get; set; }
@@ -147,11 +134,11 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task DeleteFileAsync(string fileUrl)
+        public async Task<bool> DeleteFileAsync(string fileUrl, bool permanent = false)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl)) return;
+                if (string.IsNullOrEmpty(fileUrl)) return false;
 
                 var fileName = Path.GetFileName(fileUrl);
                 var filePath = Path.Combine(_uploadDirectory, fileName);
@@ -161,22 +148,42 @@ namespace WebApplication1.Services
                 await _semaphore.WaitAsync();
                 try
                 {
-                    if (File.Exists(filePath))
+                    if (permanent)
                     {
-                        await Task.Run(() => File.Delete(filePath));
-                    }
+                        // Kalıcı silme işlemi
+                        if (File.Exists(filePath))
+                        {
+                            await Task.Run(() => File.Delete(filePath));
+                        }
 
-                    if (File.Exists(thumbnailPath))
-                    {
-                        await Task.Run(() => File.Delete(thumbnailPath));
-                    }
+                        if (File.Exists(thumbnailPath))
+                        {
+                            await Task.Run(() => File.Delete(thumbnailPath));
+                        }
 
-                    if (File.Exists(metadataPath))
+                        if (File.Exists(metadataPath))
+                        {
+                            await Task.Run(() => File.Delete(metadataPath));
+                        }
+                    }
+                    else
                     {
-                        await Task.Run(() => File.Delete(metadataPath));
+                        // Geçici silme işlemi - dosyayı taşıma
+                        var trashDirectory = Path.Combine(_uploadDirectory, "trash");
+                        if (!Directory.Exists(trashDirectory))
+                        {
+                            Directory.CreateDirectory(trashDirectory);
+                        }
+
+                        var trashPath = Path.Combine(trashDirectory, fileName);
+                        if (File.Exists(filePath))
+                        {
+                            await Task.Run(() => File.Move(filePath, trashPath));
+                        }
                     }
 
                     _cache.Remove(fileUrl);
+                    return true;
                 }
                 finally
                 {
