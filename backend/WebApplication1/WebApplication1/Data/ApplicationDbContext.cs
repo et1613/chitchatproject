@@ -47,6 +47,7 @@ namespace WebApplication1.Data
                 entity.Property(e => e.Bio).HasMaxLength(500);
                 entity.Property(e => e.ProfilePictureUrl).HasMaxLength(500);
                 entity.Property(e => e.Status).HasDefaultValue(UserStatus.Offline);
+                entity.Property(e => e.Role).HasDefaultValue(UserRole.Member);
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
                 entity.Property(e => e.IsVerified).HasDefaultValue(false);

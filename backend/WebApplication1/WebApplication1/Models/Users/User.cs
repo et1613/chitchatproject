@@ -37,6 +37,8 @@ namespace WebApplication1.Models.Users
 
         public UserStatus Status { get; set; }
 
+        public UserRole Role { get; set; } = UserRole.Member;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? LastSeen { get; set; }

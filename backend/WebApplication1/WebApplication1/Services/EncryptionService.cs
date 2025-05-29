@@ -29,7 +29,7 @@ namespace WebApplication1.Services
         }
 
         // --- Key Management ---
-        public (string publicKey, string privateKey) GenerateRsaKeyPair(int keySize = 2048, string keyId = null)
+        public (string publicKey, string privateKey) GenerateRsaKeyPair(int keySize = 2048, string? keyId = null)
         {
             using var rsa = RSA.Create(keySize);
             var publicKey = Convert.ToBase64String(rsa.ExportRSAPublicKey());
@@ -39,7 +39,7 @@ namespace WebApplication1.Services
             return (publicKey, privateKey);
         }
 
-        public (string publicKey, string privateKey) GenerateEcdsaKeyPair(string keyId = null)
+        public (string publicKey, string privateKey) GenerateEcdsaKeyPair(string? keyId = null)
         {
             using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             var publicKey = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo());
@@ -49,7 +49,7 @@ namespace WebApplication1.Services
             return (publicKey, privateKey);
         }
 
-        public (string key, string iv) GenerateAesKey(int keySize = 256, string keyId = null)
+        public (string key, string iv) GenerateAesKey(int keySize = 256, string? keyId = null)
         {
             using var aes = Aes.Create();
             aes.KeySize = keySize;
@@ -211,10 +211,20 @@ namespace WebApplication1.Services
         {
             try
             {
+                if (string.IsNullOrEmpty(key))
+                {
+                    throw new ArgumentNullException(nameof(key), "Key cannot be null or empty");
+                }
+
                 var keyBytes = Convert.FromBase64String(key);
+                if (keyBytes == null || keyBytes.Length == 0)
+                {
+                    throw new EncryptionException("Invalid key format");
+                }
+
                 var nonce = new byte[12];
                 RandomNumberGenerator.Fill(nonce);
-                var aesGcm = new AesGcm(keyBytes);
+                var aesGcm = new AesGcm(keyBytes, 16); // 16 bytes (128 bits) tag size
                 var data = Encoding.UTF8.GetBytes(content);
                 var cipher = new byte[data.Length];
                 var tag = new byte[16];
@@ -231,11 +241,21 @@ namespace WebApplication1.Services
         {
             try
             {
+                if (string.IsNullOrEmpty(key))
+                {
+                    throw new ArgumentNullException(nameof(key), "Key cannot be null or empty");
+                }
+
                 var keyBytes = Convert.FromBase64String(key);
+                if (keyBytes == null || keyBytes.Length == 0)
+                {
+                    throw new EncryptionException("Invalid key format");
+                }
+
                 var nonceBytes = Convert.FromBase64String(nonce);
                 var tagBytes = Convert.FromBase64String(tag);
                 var cipherBytes = Convert.FromBase64String(cipherText);
-                var aesGcm = new AesGcm(keyBytes);
+                var aesGcm = new AesGcm(keyBytes, 16); // 16 bytes (128 bits) tag size
                 var plain = new byte[cipherBytes.Length];
                 aesGcm.Decrypt(nonceBytes, cipherBytes, tagBytes, plain);
                 return Encoding.UTF8.GetString(plain);

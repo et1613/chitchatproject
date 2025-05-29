@@ -28,10 +28,10 @@ namespace WebApplication1.Services
         public bool EnableCaching { get; set; } = true;
         public int CacheExpirationMinutes { get; set; } = 60;
         public bool EnableHsm { get; set; } = false;
-        public string HsmEndpoint { get; set; }
-        public string HsmApiKey { get; set; }
+        public required string HsmEndpoint { get; set; }
+        public required string HsmApiKey { get; set; }
         public bool EnableTimestampService { get; set; } = false;
-        public string TimestampServiceUrl { get; set; }
+        public required string TimestampServiceUrl { get; set; }
         public int BatchSize { get; set; } = 100;
         public int MaxRetryAttempts { get; set; } = 3;
         public int RetryDelayMilliseconds { get; set; } = 1000;
@@ -42,26 +42,26 @@ namespace WebApplication1.Services
 
     public class SignatureResult
     {
-        public string Signature { get; set; }
-        public string Algorithm { get; set; }
+        public string Signature { get; set; } = string.Empty;
+        public string Algorithm { get; set; } = string.Empty;
         public DateTime Timestamp { get; set; }
-        public string KeyId { get; set; }
-        public string ChainOfTrust { get; set; }
-        public Dictionary<string, string> Metadata { get; set; }
+        public string KeyId { get; set; } = string.Empty;
+        public string ChainOfTrust { get; set; } = string.Empty;
+        public Dictionary<string, string> Metadata { get; set; } = new();
     }
 
     public class BatchSignatureRequest
     {
-        public string Content { get; set; }
-        public string PrivateKey { get; set; }
-        public string Algorithm { get; set; }
-        public Dictionary<string, string> Metadata { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string PrivateKey { get; set; } = string.Empty;
+        public string? Algorithm { get; set; }
+        public Dictionary<string, string>? Metadata { get; set; }
     }
 
     public class BatchSignatureResult
     {
-        public List<SignatureResult> Signatures { get; set; }
-        public Dictionary<string, string> Errors { get; set; }
+        public List<SignatureResult> Signatures { get; set; } = new();
+        public Dictionary<string, string> Errors { get; set; } = new();
         public TimeSpan ProcessingTime { get; set; }
     }
 
@@ -71,8 +71,8 @@ namespace WebApplication1.Services
         public int SuccessfulSignatures { get; set; }
         public int FailedSignatures { get; set; }
         public double AverageProcessingTime { get; set; }
-        public Dictionary<string, int> AlgorithmUsage { get; set; }
-        public Dictionary<string, int> ErrorTypes { get; set; }
+        public Dictionary<string, int> AlgorithmUsage { get; set; } = new();
+        public Dictionary<string, int> ErrorTypes { get; set; } = new();
     }
 
     public class DigitalSignatureService
@@ -121,9 +121,9 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<SignatureResult> SignMessageAsync(string content, string privateKey, string algorithm = null, Dictionary<string, string> metadata = null)
+        public async Task<SignatureResult> SignMessageAsync(string content, string privateKey, string? algorithm = null, Dictionary<string, string>? metadata = null)
         {
-            return await _circuitBreaker.ExecuteAsync(async () =>
+            return await _circuitBreaker.ExecuteAsync<SignatureResult>(async () =>
             {
                 try
                 {
@@ -138,7 +138,8 @@ namespace WebApplication1.Services
                         if (!string.IsNullOrEmpty(cachedSignature))
                         {
                             _logger.LogInformation("Using cached signature for content");
-                            return JsonSerializer.Deserialize<SignatureResult>(cachedSignature);
+                            return JsonSerializer.Deserialize<SignatureResult>(cachedSignature) 
+                                ?? throw new DigitalSignatureException("Failed to deserialize cached signature");
                         }
                     }
 
@@ -156,13 +157,19 @@ namespace WebApplication1.Services
                         ? await GetTimestampAsync(signature)
                         : DateTime.UtcNow;
 
+                    var chainOfTrust = await GenerateChainOfTrustAsync(keyId);
+                    if (string.IsNullOrEmpty(chainOfTrust))
+                    {
+                        throw new DigitalSignatureException("Failed to generate chain of trust");
+                    }
+
                     var result = new SignatureResult
                     {
                         Signature = Convert.ToBase64String(signature),
                         Algorithm = algorithm,
                         Timestamp = timestamp,
                         KeyId = keyId,
-                        ChainOfTrust = await GenerateChainOfTrustAsync(keyId),
+                        ChainOfTrust = chainOfTrust,
                         Metadata = metadata ?? new Dictionary<string, string>()
                     };
 
@@ -203,7 +210,7 @@ namespace WebApplication1.Services
 
             foreach (var batch in batches)
             {
-                var tasks = batch.Select(async request =>
+                var tasks = batch.Select<BatchSignatureRequest, Task<(bool success, SignatureResult? signature, string? error)>>(async request =>
                 {
                     try
                     {
@@ -224,11 +231,11 @@ namespace WebApplication1.Services
                 var batchResults = await Task.WhenAll(tasks);
                 foreach (var (success, signature, error) in batchResults)
                 {
-                    if (success)
+                    if (success && signature != null)
                     {
                         result.Signatures.Add(signature);
                     }
-                    else
+                    else if (error != null)
                     {
                         result.Errors[signature?.KeyId ?? "unknown"] = error;
                     }
@@ -241,7 +248,7 @@ namespace WebApplication1.Services
 
         public async Task<bool> VerifySignatureAsync(string content, SignatureResult signatureResult, string publicKey)
         {
-            return await _circuitBreaker.ExecuteAsync(async () =>
+            return await _circuitBreaker.ExecuteAsync<bool>(async () =>
             {
                 try
                 {
@@ -280,7 +287,7 @@ namespace WebApplication1.Services
             });
         }
 
-        public async Task<SignatureMetrics> GetMetricsAsync()
+        public SignatureMetrics GetMetrics()
         {
             return new SignatureMetrics
             {
@@ -310,7 +317,14 @@ namespace WebApplication1.Services
             });
 
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<HsmSignResponse>();
+            var result = await response.Content.ReadFromJsonAsync<HsmSignResponse>() 
+                ?? throw new DigitalSignatureException("Failed to deserialize HSM response");
+
+            if (string.IsNullOrEmpty(result.Signature))
+            {
+                throw new DigitalSignatureException("HSM returned empty signature");
+            }
+
             return Convert.FromBase64String(result.Signature);
         }
 
@@ -342,6 +356,12 @@ namespace WebApplication1.Services
 
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<HsmVerifyResponse>();
+            
+            if (result == null)
+            {
+                throw new DigitalSignatureException("Failed to deserialize HSM verification response");
+            }
+
             return result.IsValid;
         }
 
@@ -370,6 +390,12 @@ namespace WebApplication1.Services
 
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<TimestampResponse>();
+            
+            if (result == null)
+            {
+                throw new DigitalSignatureException("Failed to deserialize timestamp response");
+            }
+
             return result.Timestamp;
         }
 
@@ -385,8 +411,9 @@ namespace WebApplication1.Services
             return await Task.FromResult(true);
         }
 
-        private void UpdateMetrics(string algorithm, bool success, TimeSpan processingTime, Exception ex = null)
+        private void UpdateMetrics(string? algorithm, bool success, TimeSpan processingTime, Exception? ex = null)
         {
+            algorithm ??= "unknown";
             var metrics = _metrics.GetOrAdd(algorithm, _ => new SignatureMetrics
             {
                 AlgorithmUsage = new Dictionary<string, int>(),
@@ -414,50 +441,69 @@ namespace WebApplication1.Services
 
         private async Task<byte[]> SignWithRSAAsync(string content, string privateKey)
         {
-            using var rsa = RSA.Create();
-            rsa.ImportRSAPrivateKey(Convert.FromBase64String(privateKey), out _);
-            var data = Encoding.UTF8.GetBytes(content);
-            return rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            return await Task.Run(() =>
+            {
+                using var rsa = RSA.Create();
+                rsa.ImportPkcs8PrivateKey(Convert.FromBase64String(privateKey), out _);
+                var data = Encoding.UTF8.GetBytes(content);
+                return rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            });
         }
 
         private async Task<byte[]> SignWithECDSAAsync(string content, string privateKey)
         {
-            using var ecdsa = ECDsa.Create();
-            ecdsa.ImportECPrivateKey(Convert.FromBase64String(privateKey), out _);
-            var data = Encoding.UTF8.GetBytes(content);
-            return ecdsa.SignData(data, HashAlgorithmName.SHA256);
+            return await Task.Run(() =>
+            {
+                using var ecdsa = ECDsa.Create();
+                ecdsa.ImportPkcs8PrivateKey(Convert.FromBase64String(privateKey), out _);
+                var data = Encoding.UTF8.GetBytes(content);
+                return ecdsa.SignData(data, HashAlgorithmName.SHA256);
+            });
         }
 
         private async Task<byte[]> SignWithEdDSAAsync(string content, string privateKey)
         {
-            using var eddsa = new Ed25519();
-            eddsa.ImportPrivateKey(Convert.FromBase64String(privateKey));
-            var data = Encoding.UTF8.GetBytes(content);
-            return eddsa.SignData(data);
+            return await Task.Run(() =>
+            {
+                var privateKeyBytes = Convert.FromBase64String(privateKey);
+                var publicKeyBytes = new byte[32]; // In a real implementation, this would be derived from private key
+                using var eddsa = new Ed25519(privateKeyBytes, publicKeyBytes);
+                var data = Encoding.UTF8.GetBytes(content);
+                return eddsa.SignData(data);
+            });
         }
 
         private async Task<bool> VerifyWithRSAAsync(string content, byte[] signature, string publicKey)
         {
-            using var rsa = RSA.Create();
-            rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKey), out _);
-            var data = Encoding.UTF8.GetBytes(content);
-            return rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            return await Task.Run(() =>
+            {
+                using var rsa = RSA.Create();
+                rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
+                var data = Encoding.UTF8.GetBytes(content);
+                return rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            });
         }
 
         private async Task<bool> VerifyWithECDSAAsync(string content, byte[] signature, string publicKey)
         {
-            using var ecdsa = ECDsa.Create();
-            ecdsa.ImportECPublicKey(Convert.FromBase64String(publicKey), out _);
-            var data = Encoding.UTF8.GetBytes(content);
-            return ecdsa.VerifyData(data, signature, HashAlgorithmName.SHA256);
+            return await Task.Run(() =>
+            {
+                using var ecdsa = ECDsa.Create();
+                ecdsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
+                var data = Encoding.UTF8.GetBytes(content);
+                return ecdsa.VerifyData(data, signature, HashAlgorithmName.SHA256);
+            });
         }
 
         private async Task<bool> VerifyWithEdDSAAsync(string content, byte[] signature, string publicKey)
         {
-            using var eddsa = new Ed25519();
-            eddsa.ImportPublicKey(Convert.FromBase64String(publicKey));
-            var data = Encoding.UTF8.GetBytes(content);
-            return eddsa.VerifyData(data, signature);
+            return await Task.Run(() =>
+            {
+                var publicKeyBytes = Convert.FromBase64String(publicKey);
+                using var eddsa = new Ed25519(Array.Empty<byte>(), publicKeyBytes);
+                var data = Encoding.UTF8.GetBytes(content);
+                return eddsa.VerifyData(data, signature);
+            });
         }
 
         private string GenerateKeyId(string key) => 
@@ -466,7 +512,7 @@ namespace WebApplication1.Services
 
     public class HsmSignResponse
     {
-        public string Signature { get; set; }
+        public required string Signature { get; set; }
     }
 
     public class HsmVerifyResponse
@@ -488,12 +534,53 @@ namespace WebApplication1.Services
     // Ed25519 implementation (simplified for example)
     public class Ed25519 : IDisposable
     {
-        public void ImportPrivateKey(string privateKey) { }
-        public void ImportPublicKey(string publicKey) { }
-        public byte[] ExportPrivateKey() => new byte[32];
-        public byte[] ExportPublicKey() => new byte[32];
-        public byte[] SignData(byte[] data) => new byte[64];
-        public bool VerifyData(byte[] data, byte[] signature) => true;
-        public void Dispose() { }
+        private byte[] _privateKey = Array.Empty<byte>();
+        private byte[] _publicKey = Array.Empty<byte>();
+
+        public Ed25519(byte[] privateKey, byte[] publicKey)
+        {
+            _privateKey = privateKey;
+            _publicKey = publicKey;
+        }
+
+        public void ImportPrivateKey(byte[] privateKey)
+        {
+            _privateKey = privateKey;
+            // In a real implementation, you would derive the public key from the private key
+            _publicKey = new byte[32];
+        }
+
+        public void ImportPublicKey(byte[] publicKey)
+        {
+            _publicKey = publicKey;
+        }
+
+        public byte[] ExportPrivateKey() => _privateKey;
+        public byte[] ExportPublicKey() => _publicKey;
+
+        public byte[] SignData(byte[] data)
+        {
+            // In a real implementation, you would use the private key to sign the data
+            return new byte[64];
+        }
+
+        public bool VerifyData(byte[] data, byte[] signature)
+        {
+            // In a real implementation, you would use the public key to verify the signature
+            return true;
+        }
+
+        public void Dispose()
+        {
+            // Clear sensitive data
+            if (_privateKey != null)
+            {
+                Array.Clear(_privateKey, 0, _privateKey.Length);
+            }
+            if (_publicKey != null)
+            {
+                Array.Clear(_publicKey, 0, _publicKey.Length);
+            }
+        }
     }
 } 

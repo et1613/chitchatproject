@@ -8,6 +8,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
 using System.Collections.Generic;
+using WebApplication1.Models.Chat;
+using WebApplication1.Data;
 
 namespace WebApplication1.Services
 {

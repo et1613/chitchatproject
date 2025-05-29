@@ -50,11 +50,11 @@ namespace WebApplication1.Services
 
     public class ActiveSession
     {
-        public string SessionId { get; set; }
-        public string DeviceInfo { get; set; }
-        public string IpAddress { get; set; }
-        public DateTime LastActivity { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public required string SessionId { get; set; }
+        public required string DeviceInfo { get; set; }
+        public required string IpAddress { get; set; }
+        public required DateTime LastActivity { get; set; }
+        public required DateTime CreatedAt { get; set; }
     }
 
     public class AuthService : IAuthService
@@ -115,7 +115,7 @@ namespace WebApplication1.Services
             if (await _userRepository.GetByEmailAsync(email) != null)
                 throw new AuthException("Bu email adresi zaten kullanılıyor", AuthErrorType.InvalidCredentials);
 
-            var hashedPassword = _hashingService.GenerateHash(password);
+            var hashedPassword = _hashingService.HashPassword(password);
             var user = new User
             {
                 UserName = username,
@@ -154,28 +154,33 @@ namespace WebApplication1.Services
             if (string.IsNullOrEmpty(token))
                 return false;
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]);
-
-            try
+            return await Task.Run(() =>
             {
-                tokenHandler.ValidateToken(token, new TokenValidationParameters
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var jwtKey = _configuration.GetValue<string>("Jwt:Key") 
+                    ?? throw new InvalidOperationException("JWT key is not configured");
+                var key = Encoding.ASCII.GetBytes(jwtKey);
+
+                try
                 {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidIssuer = _configuration["Jwt:Issuer"],
-                    ValidAudience = _configuration["Jwt:Audience"],
-                    ClockSkew = TimeSpan.Zero
-                }, out SecurityToken validatedToken);
+                    tokenHandler.ValidateToken(token, new TokenValidationParameters
+                    {
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new SymmetricSecurityKey(key),
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidIssuer = _configuration["Jwt:Issuer"],
+                        ValidAudience = _configuration["Jwt:Audience"],
+                        ClockSkew = TimeSpan.Zero
+                    }, out SecurityToken validatedToken);
 
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
         }
 
         public async Task LogoutAsync(string userId, string refreshToken)
@@ -191,7 +196,7 @@ namespace WebApplication1.Services
 
         public async Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId)
         {
-            return _activeSessions.Values.Where(s => s.SessionId.StartsWith(userId));
+            return await Task.FromResult(_activeSessions.Values.Where(s => s.SessionId.StartsWith(userId)));
         }
 
         public async Task RevokeSessionAsync(string userId, string sessionId)
@@ -200,6 +205,7 @@ namespace WebApplication1.Services
             {
                 _activeSessions.Remove(sessionId);
             }
+            await Task.CompletedTask;
         }
 
         private (string accessToken, string refreshToken) GenerateTokens(User user)
@@ -212,7 +218,9 @@ namespace WebApplication1.Services
         private string GenerateJwtToken(User user, TimeSpan expiration)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]);
+            var jwtKey = _configuration.GetValue<string>("Jwt:Key") 
+                ?? throw new InvalidOperationException("JWT key is not configured");
+            var key = Encoding.ASCII.GetBytes(jwtKey);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]
@@ -246,6 +254,7 @@ namespace WebApplication1.Services
             };
 
             _activeSessions[refreshToken] = session;
+            await Task.CompletedTask;
         }
 
         private async Task UpdateSessionAsync(string oldToken, string newToken)
@@ -257,6 +266,7 @@ namespace WebApplication1.Services
                 session.LastActivity = DateTime.UtcNow;
                 _activeSessions[newToken] = session;
             }
+            await Task.CompletedTask;
         }
 
         public async Task<bool> ResetPasswordAsync(string email)
@@ -284,7 +294,7 @@ namespace WebApplication1.Services
             if (!_hashingService.VerifyHash(currentPassword, user.PasswordHash))
                 throw new InvalidOperationException("Mevcut şifre yanlış");
 
-            user.PasswordHash = _hashingService.GenerateHash(newPassword);
+            user.PasswordHash = _hashingService.HashPassword(newPassword);
             await _userRepository.UpdateAsync(user);
 
             return true;

@@ -15,24 +15,6 @@ using System.Text.Json;
 
 namespace WebApplication1.Services
 {
-    public interface IChatService
-    {
-        Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content);
-        Task<List<Message>> GetChatHistoryAsync(string chatRoomId, string userId, int skip = 0, int take = 50);
-        Task<bool> DeleteMessageAsync(string messageId, string userId);
-        Task<bool> EditMessageAsync(string messageId, string userId, string newContent);
-        Task HandleWebSocketConnection(WebSocket webSocket, string userId);
-        Task BroadcastMessageToRoom(string chatRoomId, string message, string senderId);
-        Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId);
-        Task<ChatRoom> GetChatRoomAsync(string chatRoomId);
-        Task<IEnumerable<ChatRoom>> GetUserChatRoomsAsync(string userId);
-        Task<bool> AddUserToChatRoomAsync(string userId, string chatRoomId);
-        Task<bool> RemoveUserFromChatRoomAsync(string userId, string chatRoomId);
-        Task<IEnumerable<Message>> GetChatRoomMessagesAsync(string chatRoomId, int skip = 0, int take = 50);
-        Task<bool> MarkMessageAsReadAsync(string messageId);
-        Task<bool> UpdateMessageAsync(string messageId, string content, string userId);
-    }
-
     public class ChatService : IChatService
     {
         private readonly ApplicationDbContext _context;
@@ -40,110 +22,162 @@ namespace WebApplication1.Services
         private readonly ILogger<ChatService> _logger;
         private readonly IEmailService _emailService;
         private readonly ConnectionManager _connectionManager;
+        private readonly INotificationService _notificationService;
+        private static readonly List<ChatRoom> ChatRooms = new();
 
         public ChatService(
             ApplicationDbContext context,
             IUserRepository userRepository,
             ILogger<ChatService> logger,
             IEmailService emailService,
-            ConnectionManager connectionManager)
+            ConnectionManager connectionManager,
+            INotificationService notificationService)
         {
-            _context = context;
-            _userRepository = userRepository;
-            _logger = logger;
-            _emailService = emailService;
-            _connectionManager = connectionManager;
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
+            _connectionManager = connectionManager ?? throw new ArgumentNullException(nameof(connectionManager));
+            _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         }
 
-        public static List<ChatRoom> ChatRooms = new();
-
-        public static ChatRoom GetChatRoomById(string id) => ChatRooms.FirstOrDefault(c => c.Id == id);
-
-        public static void SendDirectMessage(User sender, string receiverId, string content)
+        public static ChatRoom? GetChatRoomById(string id)
         {
-            var receiver = UserService.GetUserById(receiverId);
-            if (receiver == null || sender.BlockedUsers.Any(b => b.BlockedUserId.ToString() == receiverId)) return;
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(id));
+            }
+            return ChatRooms.FirstOrDefault(c => c.Id == id);
+        }
+
+        public async Task SendDirectMessage(User sender, string receiverId, string content)
+        {
+            if (sender == null)
+            {
+                throw new ArgumentNullException(nameof(sender));
+            }
+            if (string.IsNullOrEmpty(receiverId))
+            {
+                throw new ArgumentException("Receiver ID cannot be null or empty", nameof(receiverId));
+            }
+            if (string.IsNullOrEmpty(content))
+            {
+                throw new ArgumentException("Message content cannot be null or empty", nameof(content));
+            }
+
+            var receiver = await _userRepository.GetByIdAsync(receiverId);
+            if (receiver == null)
+            {
+                throw new ArgumentException($"Receiver with ID {receiverId} not found");
+            }
+
+            if (sender.BlockedUsers.Any(b => b.BlockedUserId.ToString() == receiverId))
+            {
+                _logger.LogWarning("Message blocked: Sender {SenderId} has blocked receiver {ReceiverId}", sender.Id, receiverId);
+                return;
+            }
 
             var message = new Message
             {
+                Id = Guid.NewGuid().ToString(),
                 SenderId = sender.Id,
                 Sender = sender,
                 ChatRoomId = "direct",
-                ChatRoom = new ChatRoom { Id = "direct", Name = "Direct Message" },
+                ChatRoom = new ChatRoom 
+                { 
+                    Id = "direct", 
+                    Name = "Direct Message",
+                    AdminId = sender.Id,
+                    Admin = sender,
+                    CreatedAt = DateTime.UtcNow
+                },
                 Content = content,
-                Timestamp = System.DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                IsDeleted = false,
+                IsEdited = false,
+                IsRead = false
             };
 
-            // Not storing, notifying only (in-memory example)
-            NotificationService.NotifyUser(receiverId, $"New message from {sender.UserName}: {content}");
+            try
+            {
+                await _notificationService.NotifyUserAsync(receiverId, $"New message from {sender.UserName}: {content}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send notification to user {ReceiverId}", receiverId);
+            }
         }
 
         public async Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content)
         {
+            if (string.IsNullOrEmpty(senderId))
+            {
+                throw new ArgumentException("Sender ID cannot be null or empty", nameof(senderId));
+            }
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+            if (string.IsNullOrEmpty(content))
+            {
+                throw new ArgumentException("Message content cannot be null or empty", nameof(content));
+            }
+
             try
             {
-                _logger.LogInformation("Mesaj gönderiliyor: SenderId={SenderId}, ChatRoomId={ChatRoomId}", senderId, chatRoomId);
+                _logger.LogInformation("Sending message: SenderId={SenderId}, ChatRoomId={ChatRoomId}", senderId, chatRoomId);
 
-                // Gönderen kullanıcıyı kontrol et
                 var sender = await _userRepository.GetByIdAsync(senderId);
                 if (sender == null)
                 {
-                    _logger.LogWarning("Gönderen kullanıcı bulunamadı: {SenderId}", senderId);
-                    throw new ArgumentException("Gönderen kullanıcı bulunamadı");
+                    throw new ArgumentException($"Sender with ID {senderId} not found");
                 }
 
-                // Chat room'u kontrol et
-                var chatRoom = await _context.ChatRooms.FindAsync(chatRoomId);
+                var chatRoom = await _context.ChatRooms
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+
                 if (chatRoom == null)
                 {
-                    _logger.LogWarning("Chat room bulunamadı: {ChatRoomId}", chatRoomId);
-                    throw new ArgumentException("Chat room bulunamadı");
+                    throw new ArgumentException($"Chat room with ID {chatRoomId} not found");
                 }
 
-                // Kullanıcının chat room'a erişim yetkisi var mı kontrol et
                 if (!chatRoom.Participants.Any(p => p.Id == senderId))
                 {
-                    _logger.LogWarning("Kullanıcının chat room'a erişim yetkisi yok: UserId={UserId}, ChatRoomId={ChatRoomId}", 
-                        senderId, chatRoomId);
-                    throw new UnauthorizedAccessException("Bu chat room'a mesaj gönderme yetkiniz yok");
+                    throw new UnauthorizedAccessException($"User {senderId} is not a participant in chat room {chatRoomId}");
                 }
 
-                // Mesaj içeriğini doğrula
-                if (string.IsNullOrWhiteSpace(content))
-                {
-                    _logger.LogWarning("Boş mesaj içeriği: SenderId={SenderId}", senderId);
-                    throw new ArgumentException("Mesaj içeriği boş olamaz");
-                }
-
-                // Yeni mesaj oluştur
                 var message = new Message
                 {
+                    Id = Guid.NewGuid().ToString(),
                     SenderId = senderId,
+                    Sender = sender,
                     ChatRoomId = chatRoomId,
+                    ChatRoom = chatRoom,
                     Content = content,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
+                    Timestamp = DateTime.UtcNow,
+                    IsDeleted = false,
+                    IsEdited = false,
+                    IsRead = false
                 };
 
-                // Mesajı kaydet
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Mesaj başarıyla gönderildi: MessageId={MessageId}", message.Id);
+                _logger.LogInformation("Message sent successfully: MessageId={MessageId}", message.Id);
 
-                // Katılımcılara bildirim gönder
                 foreach (var participant in chatRoom.Participants.Where(p => p.Id != senderId))
                 {
                     try
                     {
                         await _emailService.SendEmailAsync(
                             participant.Email,
-                            "Yeni Mesaj",
-                            $"{sender.UserName} size yeni bir mesaj gönderdi: {content}");
+                            "New Message",
+                            $"{sender.UserName} sent a new message: {content}");
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Bildirim emaili gönderilemedi: UserId={UserId}", participant.Id);
+                        _logger.LogError(ex, "Failed to send email notification to user {UserId}", participant.Id);
                     }
                 }
 
@@ -151,157 +185,166 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Mesaj gönderilirken hata oluştu: SenderId={SenderId}, ChatRoomId={ChatRoomId}", 
-                    senderId, chatRoomId);
+                _logger.LogError(ex, "Error sending message: SenderId={SenderId}, ChatRoomId={ChatRoomId}", senderId, chatRoomId);
                 throw;
             }
         }
 
         public async Task<List<Message>> GetChatHistoryAsync(string chatRoomId, string userId, int skip = 0, int take = 50)
         {
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (skip < 0)
+            {
+                throw new ArgumentException("Skip count cannot be negative", nameof(skip));
+            }
+            if (take <= 0)
+            {
+                throw new ArgumentException("Take count must be positive", nameof(take));
+            }
+
             try
             {
-                _logger.LogInformation("Chat geçmişi alınıyor: ChatRoomId={ChatRoomId}, UserId={UserId}", 
-                    chatRoomId, userId);
-
-                // Kullanıcının chat room'a erişim yetkisi var mı kontrol et
                 var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
 
                 if (chatRoom == null)
                 {
-                    _logger.LogWarning("Chat room bulunamadı: {ChatRoomId}", chatRoomId);
-                    throw new ArgumentException("Chat room bulunamadı");
+                    throw new ArgumentException($"Chat room with ID {chatRoomId} not found");
                 }
 
                 if (!chatRoom.Participants.Any(p => p.Id == userId))
                 {
-                    _logger.LogWarning("Kullanıcının chat room'a erişim yetkisi yok: UserId={UserId}, ChatRoomId={ChatRoomId}", 
-                        userId, chatRoomId);
-                    throw new UnauthorizedAccessException("Bu chat room'un geçmişini görüntüleme yetkiniz yok");
+                    throw new UnauthorizedAccessException($"User {userId} is not a participant in chat room {chatRoomId}");
                 }
 
-                // Mesajları getir
                 var messages = await _context.Messages
                     .Include(m => m.Sender)
                     .Where(m => m.ChatRoomId == chatRoomId && !m.IsDeleted)
-                    .OrderByDescending(m => m.CreatedAt)
+                    .OrderByDescending(m => m.Timestamp)
                     .Skip(skip)
                     .Take(take)
                     .ToListAsync();
 
-                _logger.LogInformation("Chat geçmişi başarıyla alındı: {Count} mesaj", messages.Count);
                 return messages;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Chat geçmişi alınırken hata oluştu: ChatRoomId={ChatRoomId}, UserId={UserId}", 
-                    chatRoomId, userId);
+                _logger.LogError(ex, "Error getting chat history: ChatRoomId={ChatRoomId}, UserId={UserId}", chatRoomId, userId);
                 throw;
             }
         }
 
         public async Task<bool> DeleteMessageAsync(string messageId, string userId)
         {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                throw new ArgumentException("Message ID cannot be null or empty", nameof(messageId));
+            }
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+
             try
             {
-                _logger.LogInformation("Mesaj siliniyor: MessageId={MessageId}, UserId={UserId}", messageId, userId);
-
                 var message = await _context.Messages
                     .Include(m => m.Sender)
                     .FirstOrDefaultAsync(m => m.Id == messageId);
 
                 if (message == null)
                 {
-                    _logger.LogWarning("Silinecek mesaj bulunamadı: {MessageId}", messageId);
                     return false;
                 }
 
-                // Kullanıcının mesajı silme yetkisi var mı kontrol et
                 if (message.SenderId != userId)
                 {
-                    _logger.LogWarning("Kullanıcının mesajı silme yetkisi yok: UserId={UserId}, MessageId={MessageId}", 
-                        userId, messageId);
-                    throw new UnauthorizedAccessException("Bu mesajı silme yetkiniz yok");
+                    throw new UnauthorizedAccessException($"User {userId} is not authorized to delete message {messageId}");
                 }
 
                 message.IsDeleted = true;
                 message.DeletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Mesaj başarıyla silindi: {MessageId}", messageId);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Mesaj silinirken hata oluştu: MessageId={MessageId}, UserId={UserId}", 
-                    messageId, userId);
+                _logger.LogError(ex, "Error deleting message: MessageId={MessageId}, UserId={UserId}", messageId, userId);
                 throw;
             }
         }
 
         public async Task<bool> EditMessageAsync(string messageId, string userId, string newContent)
         {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                throw new ArgumentException("Message ID cannot be null or empty", nameof(messageId));
+            }
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (string.IsNullOrEmpty(newContent))
+            {
+                throw new ArgumentException("New content cannot be null or empty", nameof(newContent));
+            }
+
             try
             {
-                _logger.LogInformation("Mesaj düzenleniyor: MessageId={MessageId}, UserId={UserId}", messageId, userId);
-
                 var message = await _context.Messages
                     .Include(m => m.Sender)
                     .FirstOrDefaultAsync(m => m.Id == messageId);
 
                 if (message == null)
                 {
-                    _logger.LogWarning("Düzenlenecek mesaj bulunamadı: {MessageId}", messageId);
                     return false;
                 }
 
-                // Kullanıcının mesajı düzenleme yetkisi var mı kontrol et
                 if (message.SenderId != userId)
                 {
-                    _logger.LogWarning("Kullanıcının mesajı düzenleme yetkisi yok: UserId={UserId}, MessageId={MessageId}", 
-                        userId, messageId);
-                    throw new UnauthorizedAccessException("Bu mesajı düzenleme yetkiniz yok");
+                    throw new UnauthorizedAccessException($"User {userId} is not authorized to edit message {messageId}");
                 }
 
-                // Mesajın düzenlenebilir olup olmadığını kontrol et (örn: 24 saat içinde)
-                if (DateTime.UtcNow - message.CreatedAt > TimeSpan.FromHours(24))
+                if (DateTime.UtcNow - message.Timestamp > TimeSpan.FromHours(24))
                 {
-                    _logger.LogWarning("Mesaj düzenleme süresi dolmuş: MessageId={MessageId}", messageId);
-                    throw new InvalidOperationException("Mesaj düzenleme süresi dolmuş");
+                    throw new InvalidOperationException("Message cannot be edited after 24 hours");
                 }
 
-                // Yeni içeriği doğrula
-                if (string.IsNullOrWhiteSpace(newContent))
-                {
-                    _logger.LogWarning("Boş mesaj içeriği: MessageId={MessageId}", messageId);
-                    throw new ArgumentException("Mesaj içeriği boş olamaz");
-                }
-
-                // Mesajı düzenle
                 message.Content = newContent;
                 message.EditedAt = DateTime.UtcNow;
+                message.IsEdited = true;
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Mesaj başarıyla düzenlendi: {MessageId}", messageId);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Mesaj düzenlenirken hata oluştu: MessageId={MessageId}, UserId={UserId}", 
-                    messageId, userId);
+                _logger.LogError(ex, "Error editing message: MessageId={MessageId}, UserId={UserId}", messageId, userId);
                 throw;
             }
         }
 
         public async Task HandleWebSocketConnection(WebSocket webSocket, string userId)
         {
+            if (webSocket == null)
+            {
+                throw new ArgumentNullException(nameof(webSocket));
+            }
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+
             try
             {
-                _logger.LogInformation("WebSocket bağlantısı başlatıldı: UserId={UserId}", userId);
-
-                // Kullanıcıyı bağlantı yöneticisine ekle
                 _connectionManager.AddClient(userId, webSocket);
 
                 var buffer = new byte[1024 * 4];
@@ -343,12 +386,12 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "WebSocket bağlantısı sırasında hata oluştu: UserId={UserId}", userId);
+                _logger.LogError(ex, "Error handling WebSocket connection for user {UserId}", userId);
+                throw;
             }
             finally
             {
                 _connectionManager.RemoveClient(userId);
-                _logger.LogInformation("WebSocket bağlantısı sonlandırıldı: UserId={UserId}", userId);
             }
         }
 
@@ -361,23 +404,42 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Gelen mesaj işlenirken hata oluştu: UserId={UserId}", userId);
-                await SendErrorMessage(userId, "Mesaj gönderilemedi. Lütfen tekrar deneyin.");
+                _logger.LogError(ex, "Error handling incoming message from user {UserId}", userId);
+                await SendErrorMessage(userId, "Failed to send message. Please try again.");
             }
         }
 
         public async Task BroadcastMessageToRoom(string chatRoomId, string message, string senderId)
         {
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+            if (string.IsNullOrEmpty(message))
+            {
+                throw new ArgumentException("Message cannot be null or empty", nameof(message));
+            }
+            if (string.IsNullOrEmpty(senderId))
+            {
+                throw new ArgumentException("Sender ID cannot be null or empty", nameof(senderId));
+            }
+
             try
             {
                 var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
 
-                if (chatRoom == null) return;
+                if (chatRoom == null)
+                {
+                    return;
+                }
 
                 var sender = await _userRepository.GetByIdAsync(senderId);
-                if (sender == null) return;
+                if (sender == null)
+                {
+                    return;
+                }
 
                 var messageData = new
                 {
@@ -410,22 +472,38 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Mesaj yayınlanırken hata oluştu: ChatRoomId={ChatRoomId}", chatRoomId);
+                _logger.LogError(ex, "Error broadcasting message to room {ChatRoomId}", chatRoomId);
+                throw;
             }
         }
 
         private async Task BroadcastTypingStatus(string userId, string chatRoomId, bool isTyping)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+
             try
             {
                 var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
 
-                if (chatRoom == null) return;
+                if (chatRoom == null)
+                {
+                    return;
+                }
 
                 var user = await _userRepository.GetByIdAsync(userId);
-                if (user == null) return;
+                if (user == null)
+                {
+                    return;
+                }
 
                 var statusData = new
                 {
@@ -456,13 +534,22 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Yazma durumu yayınlanırken hata oluştu: UserId={UserId}, ChatRoomId={ChatRoomId}", 
-                    userId, chatRoomId);
+                _logger.LogError(ex, "Error broadcasting typing status: UserId={UserId}, ChatRoomId={ChatRoomId}", userId, chatRoomId);
+                throw;
             }
         }
 
         private async Task SendErrorMessage(string userId, string errorMessage)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                throw new ArgumentException("Error message cannot be null or empty", nameof(errorMessage));
+            }
+
             try
             {
                 var errorData = new
@@ -486,55 +573,105 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Hata mesajı gönderilirken hata oluştu: UserId={UserId}", userId);
+                _logger.LogError(ex, "Error sending error message to user {UserId}", userId);
+                throw;
             }
         }
 
         public async Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId)
         {
+            if (string.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException("Name cannot be null or empty", nameof(name));
+            }
+            if (string.IsNullOrEmpty(creatorId))
+            {
+                throw new ArgumentException("Creator ID cannot be null or empty", nameof(creatorId));
+            }
+
             try
             {
+                var creator = await _userRepository.GetByIdAsync(creatorId);
+                if (creator == null)
+                {
+                    throw new ArgumentException($"Creator with ID {creatorId} not found");
+                }
+
                 var chatRoom = new ChatRoom
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = name,
                     Description = description,
                     CreatedAt = DateTime.UtcNow,
-                    IsActive = true
+                    AdminId = creatorId,
+                    Admin = creator,
+                    Participants = new List<User> { creator }
                 };
 
                 _context.ChatRooms.Add(chatRoom);
                 await _context.SaveChangesAsync();
 
-                // Add creator as participant
-                await AddUserToChatRoomAsync(creatorId, chatRoom.Id);
-
                 return chatRoom;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating chat room");
+                _logger.LogError(ex, "Error creating chat room: Name={Name}, CreatorId={CreatorId}", name, creatorId);
                 throw;
             }
         }
 
-        public async Task<ChatRoom> GetChatRoomAsync(string chatRoomId)
+        public async Task<ChatRoom?> GetChatRoomAsync(string chatRoomId)
         {
-            return await _context.ChatRooms
-                .Include(c => c.Participants)
-                .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+
+            try
+            {
+                return await _context.ChatRooms
+                    .Include(c => c.Participants)
+                    .FirstOrDefaultAsync(c => c.Id == chatRoomId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting chat room: ChatRoomId={ChatRoomId}", chatRoomId);
+                throw;
+            }
         }
 
         public async Task<IEnumerable<ChatRoom>> GetUserChatRoomsAsync(string userId)
         {
-            return await _context.ChatRooms
-                .Include(c => c.Participants)
-                .Where(c => c.Participants.Any(p => p.Id == userId))
-                .ToListAsync();
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+
+            try
+            {
+                return await _context.ChatRooms
+                    .Include(c => c.Participants)
+                    .Where(c => c.Participants.Any(p => p.Id == userId))
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user chat rooms: UserId={UserId}", userId);
+                throw;
+            }
         }
 
         public async Task<bool> AddUserToChatRoomAsync(string userId, string chatRoomId)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+
             try
             {
                 var user = await _context.Users.FindAsync(userId);
@@ -543,7 +680,9 @@ namespace WebApplication1.Services
                     .FirstOrDefaultAsync(c => c.Id == chatRoomId);
 
                 if (user == null || chatRoom == null)
+                {
                     return false;
+                }
 
                 if (!chatRoom.Participants.Contains(user))
                 {
@@ -555,13 +694,22 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding user to chat room");
-                return false;
+                _logger.LogError(ex, "Error adding user to chat room: UserId={UserId}, ChatRoomId={ChatRoomId}", userId, chatRoomId);
+                throw;
             }
         }
 
         public async Task<bool> RemoveUserFromChatRoomAsync(string userId, string chatRoomId)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+
             try
             {
                 var user = await _context.Users.FindAsync(userId);
@@ -570,7 +718,9 @@ namespace WebApplication1.Services
                     .FirstOrDefaultAsync(c => c.Id == chatRoomId);
 
                 if (user == null || chatRoom == null)
+                {
                     return false;
+                }
 
                 if (chatRoom.Participants.Contains(user))
                 {
@@ -582,29 +732,57 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing user from chat room");
-                return false;
+                _logger.LogError(ex, "Error removing user from chat room: UserId={UserId}, ChatRoomId={ChatRoomId}", userId, chatRoomId);
+                throw;
             }
         }
 
         public async Task<IEnumerable<Message>> GetChatRoomMessagesAsync(string chatRoomId, int skip = 0, int take = 50)
         {
-            return await _context.Messages
-                .Include(m => m.Sender)
-                .Where(m => m.ChatRoomId == chatRoomId)
-                .OrderByDescending(m => m.Timestamp)
-                .Skip(skip)
-                .Take(take)
-                .ToListAsync();
+            if (string.IsNullOrEmpty(chatRoomId))
+            {
+                throw new ArgumentException("Chat room ID cannot be null or empty", nameof(chatRoomId));
+            }
+            if (skip < 0)
+            {
+                throw new ArgumentException("Skip count cannot be negative", nameof(skip));
+            }
+            if (take <= 0)
+            {
+                throw new ArgumentException("Take count must be positive", nameof(take));
+            }
+
+            try
+            {
+                return await _context.Messages
+                    .Include(m => m.Sender)
+                    .Where(m => m.ChatRoomId == chatRoomId)
+                    .OrderByDescending(m => m.Timestamp)
+                    .Skip(skip)
+                    .Take(take)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting chat room messages: ChatRoomId={ChatRoomId}", chatRoomId);
+                throw;
+            }
         }
 
         public async Task<bool> MarkMessageAsReadAsync(string messageId)
         {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                throw new ArgumentException("Message ID cannot be null or empty", nameof(messageId));
+            }
+
             try
             {
                 var message = await _context.Messages.FindAsync(messageId);
                 if (message == null)
+                {
                     return false;
+                }
 
                 message.IsRead = true;
                 await _context.SaveChangesAsync();
@@ -612,18 +790,33 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error marking message as read");
-                return false;
+                _logger.LogError(ex, "Error marking message as read: MessageId={MessageId}", messageId);
+                throw;
             }
         }
 
         public async Task<bool> UpdateMessageAsync(string messageId, string content, string userId)
         {
+            if (string.IsNullOrEmpty(messageId))
+            {
+                throw new ArgumentException("Message ID cannot be null or empty", nameof(messageId));
+            }
+            if (string.IsNullOrEmpty(content))
+            {
+                throw new ArgumentException("Content cannot be null or empty", nameof(content));
+            }
+            if (string.IsNullOrEmpty(userId))
+            {
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            }
+
             try
             {
                 var message = await _context.Messages.FindAsync(messageId);
                 if (message == null || message.SenderId != userId)
+                {
                     return false;
+                }
 
                 message.Content = content;
                 message.IsEdited = true;
@@ -632,16 +825,16 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating message");
-                return false;
+                _logger.LogError(ex, "Error updating message: MessageId={MessageId}, UserId={UserId}", messageId, userId);
+                throw;
             }
         }
     }
 
     public class WebSocketMessage
     {
-        public string Type { get; set; }
-        public string ChatRoomId { get; set; }
-        public string Content { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string ChatRoomId { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
     }
 } 

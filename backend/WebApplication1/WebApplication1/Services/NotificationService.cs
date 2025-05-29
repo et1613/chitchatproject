@@ -70,6 +70,8 @@ namespace WebApplication1.Services
         Task<NotificationReport> GenerateUserReportAsync(string userId, DateTime startDate, DateTime endDate);
         Task<NotificationReport> GenerateSystemReportAsync(DateTime startDate, DateTime endDate);
         Task<byte[]> ExportNotificationReportAsync(NotificationReport report, string format);
+
+        Task NotifyUserAsync(string userId, string message);
     }
 
     public enum NotificationType
@@ -1186,6 +1188,36 @@ namespace WebApplication1.Services
             {
                 _logger.LogError(ex, "Error sending notification to channels for notification {NotificationId}", notification.Id);
                 throw;
+            }
+        }
+
+        public async Task NotifyUserAsync(string userId, string message)
+        {
+            try
+            {
+                var socket = _connectionManager.GetClient(userId);
+                if (socket != null && socket.State == System.Net.WebSockets.WebSocketState.Open)
+                {
+                    var notification = new
+                    {
+                        type = "notification",
+                        message = message,
+                        timestamp = DateTime.UtcNow
+                    };
+
+                    var notificationJson = System.Text.Json.JsonSerializer.Serialize(notification);
+                    var notificationBytes = System.Text.Encoding.UTF8.GetBytes(notificationJson);
+
+                    await socket.SendAsync(
+                        new System.ArraySegment<byte>(notificationBytes),
+                        System.Net.WebSockets.WebSocketMessageType.Text,
+                        true,
+                        System.Threading.CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending notification to user {UserId}", userId);
             }
         }
     }
