@@ -8,6 +8,14 @@ using System.Threading.Tasks;
 
 namespace WebApplication1.Services
 {
+    public class TokenData
+    {
+        public string UserId { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+    }
+
     public class HashingOptions
     {
         public int SaltSize { get; set; } = 16; // bytes
@@ -283,7 +291,11 @@ namespace WebApplication1.Services
                 }
 
                 sha256.TransformFinalBlock(buffer, 0, 0);
-                return Convert.ToBase64String(sha256.Hash);
+                var hash = sha256.Hash;
+                if (hash == null)
+                    throw new CryptographicException("Failed to compute hash");
+
+                return Convert.ToBase64String(hash);
             }
             catch (Exception ex)
             {
@@ -320,12 +332,13 @@ namespace WebApplication1.Services
 
         public bool ValidateTemporaryAccessToken(string token, out string userId)
         {
+            userId = string.Empty; // Default value, will be set if token is valid
+
             try
             {
                 var parts = token.Split('.');
                 if (parts.Length != 2)
                 {
-                    userId = null;
                     return false;
                 }
 
@@ -337,16 +350,19 @@ namespace WebApplication1.Services
 
                 if (!CryptographicOperations.FixedTimeEquals(signature, computedSignature))
                 {
-                    userId = null;
                     return false;
                 }
 
                 var tokenData = System.Text.Json.JsonSerializer.Deserialize<TokenData>(
                     Encoding.UTF8.GetString(tokenBytes));
 
+                if (tokenData == null)
+                {
+                    return false;
+                }
+
                 if (tokenData.ExpiresAt < DateTime.UtcNow)
                 {
-                    userId = null;
                     return false;
                 }
 
@@ -356,7 +372,6 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error validating temporary access token");
-                userId = null;
                 return false;
             }
         }
@@ -374,22 +389,22 @@ namespace WebApplication1.Services
                 var password = new StringBuilder(length);
 
                 // Ensure at least one character from each category
-                password.Append(lowercase[_rng.GetInt32(lowercase.Length)]);
-                password.Append(uppercase[_rng.GetInt32(uppercase.Length)]);
-                password.Append(numbers[_rng.GetInt32(numbers.Length)]);
-                password.Append(special[_rng.GetInt32(special.Length)]);
+                password.Append(lowercase[RandomNumberGenerator.GetInt32(lowercase.Length)]);
+                password.Append(uppercase[RandomNumberGenerator.GetInt32(uppercase.Length)]);
+                password.Append(numbers[RandomNumberGenerator.GetInt32(numbers.Length)]);
+                password.Append(special[RandomNumberGenerator.GetInt32(special.Length)]);
 
                 // Fill the rest with random characters
                 for (int i = 4; i < length; i++)
                 {
-                    password.Append(allChars[_rng.GetInt32(allChars.Length)]);
+                    password.Append(allChars[RandomNumberGenerator.GetInt32(allChars.Length)]);
                 }
 
                 // Shuffle the password
                 var passwordArray = password.ToString().ToCharArray();
                 for (int i = passwordArray.Length - 1; i > 0; i--)
                 {
-                    int j = _rng.GetInt32(i + 1);
+                    int j = RandomNumberGenerator.GetInt32(i + 1);
                     (passwordArray[i], passwordArray[j]) = (passwordArray[j], passwordArray[i]);
                 }
 
@@ -470,6 +485,9 @@ namespace WebApplication1.Services
                 var tokenData = System.Text.Json.JsonSerializer.Deserialize<TokenData>(
                     Encoding.UTF8.GetString(tokenBytes));
 
+                if (tokenData == null)
+                    return false;
+
                 if (tokenData.ExpiresAt < DateTime.UtcNow)
                     return false;
 
@@ -480,14 +498,6 @@ namespace WebApplication1.Services
                 _logger.LogError(ex, "Error validating secure URL token");
                 return false;
             }
-        }
-
-        private class TokenData
-        {
-            public string UserId { get; set; }
-            public string Url { get; set; }
-            public DateTime CreatedAt { get; set; }
-            public DateTime ExpiresAt { get; set; }
         }
     }
 } 

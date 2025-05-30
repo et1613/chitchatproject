@@ -378,6 +378,125 @@ namespace WebApplication1.Services
             }
         }
 
+        public async Task<bool> ScanFileForVirusesAsync(Stream fileStream)
+        {
+            try
+            {
+                // Save the file to a temporary location for scanning
+                var tempFilePath = Path.GetTempFileName();
+                using (var tempFileStream = File.Create(tempFilePath))
+                {
+                    await fileStream.CopyToAsync(tempFileStream);
+                }
+
+                // TODO: Implement actual virus scanning logic here
+                // This is a placeholder implementation
+                // In a real application, you would:
+                // 1. Use a virus scanning library or service
+                // 2. Configure scanning parameters
+                // 3. Handle different file types appropriately
+                // 4. Implement proper error handling for the scanning process
+
+                // For now, we'll just do a basic file check
+                var fileInfo = new FileInfo(tempFilePath);
+                if (fileInfo.Length == 0)
+                {
+                    return false;
+                }
+
+                // Clean up the temporary file
+                try
+                {
+                    File.Delete(tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete temporary file after virus scan");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error scanning file for viruses");
+                throw;
+            }
+        }
+
+        public async Task<string> CreateBackupAsync(Stream fileStream, string fileName)
+        {
+            try
+            {
+                var backupDirectory = Path.Combine(_uploadDirectory, "backups");
+                if (!Directory.Exists(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                var backupFileName = $"{Path.GetFileNameWithoutExtension(fileName)}_{timestamp}{Path.GetExtension(fileName)}";
+                var backupPath = Path.Combine(backupDirectory, backupFileName);
+
+                using (var backupStream = new FileStream(backupPath, FileMode.Create))
+                {
+                    await fileStream.CopyToAsync(backupStream);
+                }
+
+                // Create backup metadata
+                var backupMetadata = new FileMetadata
+                {
+                    FileName = fileName,
+                    ContentType = GetMimeType(fileName),
+                    FileSize = new FileInfo(backupPath).Length,
+                    CreatedAt = DateTime.UtcNow,
+                    LastModified = DateTime.UtcNow,
+                    Hash = await CalculateFileHashAsync(backupPath),
+                    CustomMetadata = new Dictionary<string, string>
+                    {
+                        { "BackupType", "Manual" },
+                        { "OriginalFileName", fileName },
+                        { "BackupTimestamp", timestamp }
+                    }
+                };
+
+                var metadataPath = GetMetadataPath(backupFileName);
+                await SaveMetadataAsync(backupFileName, backupMetadata);
+
+                return $"/uploads/backups/{backupFileName}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya yedekleme hatası: {FileName}", fileName);
+                throw new Exception($"Dosya yedekleme hatası: {ex.Message}", ex);
+            }
+        }
+
+        private string GetMimeType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            return extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".txt" => "text/plain",
+                _ => "application/octet-stream"
+            };
+        }
+
+        private async Task<string> CalculateFileHashAsync(string filePath)
+        {
+            using (var md5 = MD5.Create())
+            using (var stream = File.OpenRead(filePath))
+            {
+                var hash = await Task.Run(() => md5.ComputeHash(stream));
+                return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            }
+        }
+
         private async Task ValidateFileAsync(Stream fileStream, string fileName, string contentType)
         {
             var extension = Path.GetExtension(fileName).ToLowerInvariant();

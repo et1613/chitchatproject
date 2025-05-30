@@ -1416,6 +1416,22 @@
           }
         }
       },
+      "SixLabors.ImageSharp/3.1.8": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/SixLabors.ImageSharp.props": {}
+        }
+      },
       "Swashbuckle.AspNetCore/6.6.2": {
         "type": "package",
         "dependencies": {
@@ -5577,6 +5593,22 @@
         "runtimes/win-x86/native/sni.dll",
         "useSharedDesignerContext.txt",
         "version.txt"
+      ]
+    },
+    "SixLabors.ImageSharp/3.1.8": {
+      "sha512": "8eJkROLGh6DBQLR666q2aOpAaean2puZaZ6Ur9YxoyGzjaZhv8OJSxtnDou54+OXMkXtLUdyQC0so47sOsqZjg==",
+      "type": "package",
+      "path": "sixlabors.imagesharp/3.1.8",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "build/SixLabors.ImageSharp.props",
+        "lib/net6.0/SixLabors.ImageSharp.dll",
+        "lib/net6.0/SixLabors.ImageSharp.xml",
+        "sixlabors.imagesharp.128.png",
+        "sixlabors.imagesharp.3.1.8.nupkg.sha512",
+        "sixlabors.imagesharp.nuspec"
       ]
     },
     "Swashbuckle.AspNetCore/6.6.2": {
@@ -9848,6 +9880,7 @@
       "Microsoft.VisualStudio.Services.Client >= 19.225.1",
       "Polly >= 8.5.2",
       "Pomelo.EntityFrameworkCore.MySql >= 8.0.3",
+      "SixLabors.ImageSharp >= 3.1.8",
       "Swashbuckle.AspNetCore >= 6.6.2"
     ]
   },
@@ -9949,6 +9982,10 @@
           "Pomelo.EntityFrameworkCore.MySql": {
             "target": "Package",
             "version": "[8.0.3, )"
+          },
+          "SixLabors.ImageSharp": {
+            "target": "Package",
+            "version": "[3.1.8, )"
           },
           "Swashbuckle.AspNetCore": {
             "target": "Package",

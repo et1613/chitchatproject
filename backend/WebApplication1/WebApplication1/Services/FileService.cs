@@ -10,9 +10,23 @@ using System.Linq;
 using System.Collections.Generic;
 using WebApplication1.Models.Chat;
 using WebApplication1.Data;
+using SixLabors.ImageSharp;
+using Microsoft.EntityFrameworkCore;
 
 namespace WebApplication1.Services
 {
+    public interface IEncryptionService
+    {
+        void EncryptFileWithAes(Stream inputStream, Stream outputStream, string key, string iv);
+        void DecryptFileWithAes(Stream inputStream, Stream outputStream, string key, string iv);
+    }
+
+    public interface ISignatureService
+    {
+        Task<(string Signature, string Message)> SignMessageAsync(string message, string key, Dictionary<string, string>? metadata = null);
+        Task<bool> VerifySignatureAsync(string message, string signature, string key);
+    }
+
     public interface IFileService
     {
         Task<Attachment> UploadFileAsync(IFormFile file, string userId, string messageId);
@@ -37,7 +51,7 @@ namespace WebApplication1.Services
         Task<bool> DeleteMultipleFilesAsync(List<string> fileIds, string userId);
         Task<Dictionary<string, long>> GetStorageUsageAsync(string userId);
         Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string userId);
-        Task<List<Attachment>> SearchFilesAsync(string userId, string searchTerm, string fileType = null);
+        Task<List<Attachment>> SearchFilesAsync(string userId, string searchTerm, string? fileType = null);
         Task<List<Attachment>> GetRecentFilesAsync(string userId, int count = 10);
         Task<bool> AddFileTagAsync(string fileId, string tag);
         Task<bool> RemoveFileTagAsync(string fileId, string tag);
@@ -46,7 +60,7 @@ namespace WebApplication1.Services
         Task<bool> RestoreFileFromBackupAsync(string fileId);
         Task<bool> SetFilePermissionsAsync(string fileId, Dictionary<string, string> permissions);
         Task<bool> CheckFileAccessAsync(string fileId, string userId);
-        Task<string> GenerateFilePreviewAsync(string fileId);
+        Task<string?> GenerateFilePreviewAsync(string fileId);
         Task<Dictionary<string, string>> GetFilePreviewsAsync(List<string> fileIds);
         Task<Attachment> EncryptFileAsync(string fileId, string encryptionKey);
         Task<Attachment> DecryptFileAsync(string fileId, string encryptionKey);
@@ -92,7 +106,7 @@ namespace WebApplication1.Services
                 var fileUrl = await _storageService.UploadFileAsync(file);
 
                 // Thumbnail oluşturma (eğer görsel/video ise)
-                string thumbnailUrl = null;
+                string? thumbnailUrl = null;
                 if (file.ContentType.StartsWith("image/") || file.ContentType.StartsWith("video/"))
                 {
                     thumbnailUrl = await _storageService.GenerateThumbnailAsync(file);
@@ -172,7 +186,11 @@ namespace WebApplication1.Services
         {
             try
             {
-                return await _context.Attachments.FindAsync(fileId);
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException($"Dosya bulunamadı: {fileId}");
+
+                return attachment;
             }
             catch (Exception ex)
             {
@@ -527,7 +545,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> GenerateFilePreviewAsync(string fileId)
+        public async Task<string?> GenerateFilePreviewAsync(string fileId)
         {
             try
             {
@@ -565,7 +583,7 @@ namespace WebApplication1.Services
                 var previews = new Dictionary<string, string>();
                 foreach (var fileId in fileIds)
                 {
-                    previews[fileId] = await GenerateFilePreviewAsync(fileId);
+                    previews[fileId] = await GenerateFilePreviewAsync(fileId) ?? string.Empty;
                 }
                 return previews;
             }
@@ -734,7 +752,7 @@ namespace WebApplication1.Services
                     using var image = await Image.LoadAsync(fileStream);
                     analysis["Width"] = image.Width;
                     analysis["Height"] = image.Height;
-                    analysis["Format"] = image.Metadata.DecodedImageFormat?.Name;
+                    analysis["Format"] = image.Metadata.DecodedImageFormat?.Name ?? "Unknown";
                 }
 
                 return analysis;
@@ -795,6 +813,296 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Dosya erişim kontrolü hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<Attachment> ConvertFileFormatAsync(string fileId, string targetFormat)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                // Download the file to a temporary location
+                var tempFilePath = Path.GetTempFileName();
+                using (var fileStream = await _storageService.DownloadFileAsync(attachment.Url))
+                using (var tempFileStream = File.Create(tempFilePath))
+                {
+                    await fileStream.CopyToAsync(tempFileStream);
+                }
+
+                // Convert the file format
+                var convertedFilePath = await _storageService.ConvertFileFormatAsync(tempFilePath, targetFormat);
+                
+                // Create new attachment for the converted file
+                var convertedAttachment = new Attachment
+                {
+                    MessageId = attachment.MessageId,
+                    FileName = $"{Path.GetFileNameWithoutExtension(attachment.FileName)}.{targetFormat}",
+                    FileType = targetFormat,
+                    FileSize = new FileInfo(convertedFilePath).Length,
+                    UploadedBy = attachment.UploadedBy,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        { "OriginalFileId", fileId },
+                        { "ConvertedFrom", attachment.FileType },
+                        { "ConvertedAt", DateTime.UtcNow.ToString() }
+                    }
+                };
+
+                // Upload the converted file
+                using (var convertedFileStream = File.OpenRead(convertedFilePath))
+                {
+                    convertedAttachment.Url = await _storageService.UploadFileAsync(convertedFileStream, convertedAttachment.FileName);
+                }
+
+                // Clean up temporary files
+                try
+                {
+                    File.Delete(tempFilePath);
+                    File.Delete(convertedFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Temporary file cleanup failed");
+                }
+
+                _context.Attachments.Add(convertedAttachment);
+                await _context.SaveChangesAsync();
+
+                return convertedAttachment;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya formatı dönüştürme hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<bool> IsFileVirusFreeAsync(string fileId)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                var fileStream = await _storageService.DownloadFileAsync(attachment.Url);
+                return await _storageService.ScanFileForVirusesAsync(fileStream);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Virüs tarama hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<List<Attachment>> GetFileVersionsAsync(string fileId)
+        {
+            try
+            {
+                return await _context.Attachments
+                    .Where(a => a.Metadata.ContainsKey("VersionOf") && 
+                           a.Metadata["VersionOf"] == fileId)
+                    .OrderByDescending(a => DateTime.Parse(a.Metadata["VersionCreatedAt"]))
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya versiyonlarını getirme hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<Attachment> RestoreFileVersionAsync(string fileId, string versionId)
+        {
+            try
+            {
+                var version = await _context.Attachments.FindAsync(versionId);
+                if (version == null || !version.Metadata.ContainsKey("VersionOf") || 
+                    version.Metadata["VersionOf"] != fileId)
+                    throw new ArgumentException("Geçersiz versiyon");
+
+                var original = await _context.Attachments.FindAsync(fileId);
+                if (original == null)
+                    throw new ArgumentException("Orijinal dosya bulunamadı");
+
+                // Versiyonu yeni bir dosya olarak kopyala
+                var restoredAttachment = new Attachment
+                {
+                    MessageId = original.MessageId,
+                    FileName = $"restored_{original.FileName}",
+                    FileType = original.FileType,
+                    FileSize = version.FileSize,
+                    UploadedBy = original.UploadedBy,
+                    Metadata = new Dictionary<string, string>
+                    {
+                        { "RestoredFromVersion", versionId },
+                        { "RestoredAt", DateTime.UtcNow.ToString() }
+                    }
+                };
+
+                var fileStream = await _storageService.DownloadFileAsync(version.Url);
+                restoredAttachment.Url = await _storageService.UploadFileAsync(fileStream, restoredAttachment.FileName);
+
+                _context.Attachments.Add(restoredAttachment);
+                await _context.SaveChangesAsync();
+
+                return restoredAttachment;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya versiyonu geri yükleme hatası: {FileId}, {VersionId}", fileId, versionId);
+                throw;
+            }
+        }
+
+        public async Task<bool> RevokeShareableLinkAsync(string fileId)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                if (attachment.Metadata.ContainsKey("ShareToken"))
+                {
+                    attachment.Metadata.Remove("ShareToken");
+                    attachment.Metadata.Remove("ShareExpiresAt");
+                    await _context.SaveChangesAsync();
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Paylaşım linki iptal hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string userId)
+        {
+            try
+            {
+                var attachments = await _context.Attachments
+                    .Where(a => a.UploadedBy == userId && !a.IsDeleted)
+                    .ToListAsync();
+
+                return attachments
+                    .GroupBy(a => a.FileType)
+                    .ToDictionary(g => g.Key, g => g.Count());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya tipi dağılımı hesaplama hatası: {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<List<Attachment>> SearchFilesAsync(string userId, string searchTerm, string? fileType = null)
+        {
+            try
+            {
+                var query = _context.Attachments
+                    .Where(a => a.UploadedBy == userId && !a.IsDeleted);
+
+                if (!string.IsNullOrEmpty(fileType))
+                {
+                    query = query.Where(a => a.FileType == fileType);
+                }
+
+                if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    query = query.Where(a => 
+                        a.FileName.Contains(searchTerm) || 
+                        (a.Metadata.ContainsKey("Tags") && a.Metadata["Tags"].Contains(searchTerm)));
+                }
+
+                return await query.ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya arama hatası: {UserId}, {SearchTerm}", userId, searchTerm);
+                throw;
+            }
+        }
+
+        public async Task<bool> RemoveFileTagAsync(string fileId, string tag)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                if (attachment.Metadata.ContainsKey("Tags"))
+                {
+                    var tags = attachment.Metadata["Tags"].Split(',').ToList();
+                    if (tags.Remove(tag))
+                    {
+                        attachment.Metadata["Tags"] = string.Join(",", tags);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya etiketi kaldırma hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<bool> BackupFileAsync(string fileId)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                var fileStream = await _storageService.DownloadFileAsync(attachment.Url);
+                var backupUrl = await _storageService.CreateBackupAsync(fileStream, attachment.FileName);
+
+                attachment.Metadata["BackupUrl"] = backupUrl;
+                attachment.Metadata["BackupCreatedAt"] = DateTime.UtcNow.ToString();
+                
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya yedekleme hatası: {FileId}", fileId);
+                throw;
+            }
+        }
+
+        public async Task<bool> RestoreFileFromBackupAsync(string fileId)
+        {
+            try
+            {
+                var attachment = await _context.Attachments.FindAsync(fileId);
+                if (attachment == null)
+                    throw new ArgumentException("Dosya bulunamadı");
+
+                if (!attachment.Metadata.ContainsKey("BackupUrl"))
+                    throw new InvalidOperationException("Dosya için yedek bulunamadı");
+
+                var backupStream = await _storageService.DownloadFileAsync(attachment.Metadata["BackupUrl"]);
+                attachment.Url = await _storageService.UploadFileAsync(backupStream, attachment.FileName);
+                
+                attachment.Metadata["RestoredFromBackupAt"] = DateTime.UtcNow.ToString();
+                await _context.SaveChangesAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dosya yedekten geri yükleme hatası: {FileId}", fileId);
                 throw;
             }
         }

@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Linq.Expressions;
+using System.IO.Compression;
 
 namespace WebApplication1.Services
 {
@@ -64,7 +65,7 @@ namespace WebApplication1.Services
 
         // Dosya indirme ve ilerleme takibi
         Task<Stream> DownloadFileWithProgressAsync(string fileUrl, IProgress<long> progress, CancellationToken cancellationToken = default);
-        Task<string> DownloadFileToPathAsync(string fileUrl, string targetPath, IProgress<long> progress = null, CancellationToken cancellationToken = default);
+        Task<string> DownloadFileToPathAsync(string fileUrl, string targetPath, IProgress<long>? progress = null, CancellationToken cancellationToken = default);
         Task<long> GetDownloadedBytesAsync(string fileUrl);
         Task<bool> IsDownloadCompleteAsync(string fileUrl);
         Task CancelDownloadAsync(string fileUrl);
@@ -108,6 +109,7 @@ namespace WebApplication1.Services
         Task<Dictionary<string, object>> GetFileContentAnalysisAsync(string fileUrl);
 
         // Dosya yedekleme
+        Task<string> CreateBackupAsync(Stream fileStream, string fileName);
         Task<string> BackupFileAsync(string fileUrl);
         Task<bool> RestoreFileFromBackupAsync(string backupUrl, string targetUrl);
         Task<List<string>> GetFileBackupsAsync(string fileUrl);
@@ -142,27 +144,27 @@ namespace WebApplication1.Services
         Task<bool> CreateSearchIndexAsync(string directory);
         Task<bool> UpdateSearchIndexAsync(string directory);
         Task<bool> DeleteSearchIndexAsync(string directory);
-        Task<List<string>> SearchInIndexAsync(string searchTerm, string directory = null);
+        Task<List<string>> SearchInIndexAsync(string searchTerm, string? directory = null);
         Task<Dictionary<string, double>> GetSearchSuggestionsAsync(string partialTerm);
         Task<bool> IsIndexUpToDateAsync(string directory);
         Task<DateTime> GetLastIndexUpdateAsync(string directory);
         Task<Dictionary<string, int>> GetSearchStatisticsAsync(string directory);
 
         // Dosya istatistikleri ve raporlama
-        Task<Dictionary<string, long>> GetStorageStatisticsAsync(string directory = null);
-        Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string directory = null);
-        Task<Dictionary<string, long>> GetStorageUsageByUserAsync(string directory = null);
-        Task<Dictionary<string, int>> GetFileActivityStatsAsync(string directory = null, TimeSpan? period = null);
-        Task<Dictionary<string, object>> GenerateStorageReportAsync(string directory = null, DateTime? startDate = null, DateTime? endDate = null);
+        Task<Dictionary<string, long>> GetStorageStatisticsAsync(string? directory = null);
+        Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string? directory = null);
+        Task<Dictionary<string, long>> GetStorageUsageByUserAsync(string? directory = null);
+        Task<Dictionary<string, int>> GetFileActivityStatsAsync(string? directory = null, TimeSpan? period = null);
+        Task<Dictionary<string, object>> GenerateStorageReportAsync(string? directory = null, DateTime? startDate = null, DateTime? endDate = null);
         Task<Dictionary<string, object>> GetUserStorageQuotaAsync(string userId);
         Task<bool> IsStorageQuotaExceededAsync(string userId);
-        Task<Dictionary<string, object>> GetStorageTrendsAsync(string directory = null, TimeSpan period = default);
+        Task<Dictionary<string, object>> GetStorageTrendsAsync(string? directory = null, TimeSpan period = default);
 
         // Dosya dönüştürme ve format işlemleri
         Task<string> ConvertImageFormatAsync(string fileUrl, string targetFormat, int? quality = null);
-        Task<string> ConvertVideoFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null);
-        Task<string> ConvertAudioFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null);
-        Task<string> ConvertDocumentFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null);
+        Task<string> ConvertVideoFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null);
+        Task<string> ConvertAudioFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null);
+        Task<string> ConvertDocumentFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null);
         Task<bool> IsFormatConversionSupportedAsync(string sourceFormat, string targetFormat);
         Task<Dictionary<string, List<string>>> GetSupportedFormatsAsync();
         Task<Dictionary<string, object>> GetFormatConversionOptionsAsync(string sourceFormat, string targetFormat);
@@ -180,7 +182,6 @@ namespace WebApplication1.Services
         Task<bool> ValidateFileSignatureAsync(string fileUrl);
         Task<bool> ValidateFileChecksumAsync(string fileUrl);
         Task<bool> ValidateFilePermissionsAsync(string fileUrl);
-        Task<bool> ValidateFileIntegrityAsync(string fileUrl);
         Task<Dictionary<string, object>> GetFileSecurityInfoAsync(string fileUrl);
         Task<bool> IsFileSecureAsync(string fileUrl);
         Task<bool> IsFileCompliantAsync(string fileUrl, string complianceStandard);
@@ -205,7 +206,7 @@ namespace WebApplication1.Services
 
         // Dosya performans ve izleme
         Task<Dictionary<string, object>> GetFilePerformanceMetricsAsync(string fileUrl);
-        Task<Dictionary<string, object>> GetStoragePerformanceMetricsAsync(string directory = null);
+        Task<Dictionary<string, object>> GetStoragePerformanceMetricsAsync(string? directory = null);
         Task<bool> MonitorFileAccessAsync(string fileUrl);
         Task<Dictionary<string, object>> GetAccessMetricsAsync(string fileUrl);
         Task<bool> IsPerformanceOptimalAsync(string fileUrl);
@@ -217,7 +218,7 @@ namespace WebApplication1.Services
         Task<List<string>> GetFileTagsAsync(string fileUrl);
         Task<bool> CategorizeFileAsync(string fileUrl, string category);
         Task<string> GetFileCategoryAsync(string fileUrl);
-        Task<Dictionary<string, List<string>>> GetCategoryDistributionAsync(string directory = null);
+        Task<Dictionary<string, List<string>>> GetCategoryDistributionAsync(string? directory = null);
         Task<bool> AutoCategorizeFileAsync(string fileUrl);
 
         // Dosya işbirliği ve paylaşım
@@ -228,5 +229,8 @@ namespace WebApplication1.Services
         Task<bool> RevokeAllSharesAsync(string fileUrl);
         Task<Dictionary<string, string>> GetSharePermissionsAsync(string fileUrl);
         Task<bool> IsFileSharedAsync(string fileUrl);
+
+        // Yeni eklenen metod
+        Task<bool> ScanFileForVirusesAsync(Stream fileStream);
     }
 } 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.IO;
@@ -8,20 +9,58 @@ using WebApplication1.Services;
 
 namespace WebApplication1.Models.Chat
 {
-    public class Attachment(IStorageService storageService)
+    public class Attachment
     {
-        private readonly IStorageService _storageService = storageService ?? throw new ArgumentNullException(nameof(storageService));
-
+        [Key]
         public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string MessageId { get; set; } = string.Empty;
-        public virtual Message? Message { get; set; }
-        public string FileType { get; set; } = string.Empty;
-        public string? FileUrl { get; set; } = string.Empty;
+
+        [Required]
+        public string MessageId { get; set; }
+
+        [Required]
+        public string Url { get; set; }
+
+        [Required]
+        public string FileName { get; set; }
+
+        [Required]
+        public string FileType { get; set; }
+
         public long FileSize { get; set; }
-        public string FileName { get; set; } = string.Empty;
+
+        [Required]
+        public string UploadedBy { get; set; }
+
+        public string? ThumbnailUrl { get; set; }
+
+        [Required]
+        public string MimeType { get; set; }
+
+        public int? Width { get; set; }
+
+        public int? Height { get; set; }
+
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
-        public bool IsDeleted { get; set; }
+
         public DateTime? DeletedAt { get; set; }
+
+        public string DeletedBy { get; set; }
+
+        public bool IsDeleted => DeletedAt.HasValue;
+
+        [Column(TypeName = "jsonb")]
+        public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+
+        public bool IsImage() => MimeType.StartsWith("image/");
+        public bool IsVideo() => MimeType.StartsWith("video/");
+        public bool IsAudio() => MimeType.StartsWith("audio/");
+        public bool IsDocument() => MimeType.StartsWith("application/");
+
+        public void Delete(string userId)
+        {
+            DeletedAt = DateTime.UtcNow;
+            DeletedBy = userId;
+        }
 
         public async Task UploadAttachment(Stream fileStream, string fileName)
         {
@@ -32,21 +71,20 @@ namespace WebApplication1.Models.Chat
             FileType = Path.GetExtension(fileName).ToLower();
             FileName = fileName;
             FileSize = fileStream.Length;
-            FileUrl = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
+            Url = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
         }
 
         public async Task DeleteAttachment()
         {
             if (IsDeleted) return;
 
-            if (!string.IsNullOrEmpty(FileUrl))
+            if (!string.IsNullOrEmpty(Url))
             {
-                await _storageService.DeleteFileAsync(FileUrl, true);
+                await _storageService.DeleteFileAsync(Url, true);
             }
 
-            IsDeleted = true;
             DeletedAt = DateTime.UtcNow;
-            FileUrl = null;
+            Url = null;
         }
 
         public bool IsValidFileType()
