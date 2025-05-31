@@ -11,12 +11,13 @@ using System.Security.Claims;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Repositories;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace WebApplication1.Services
 {
     public interface IMessageService
     {
-        Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content, List<string> attachmentUrls = null);
+        Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content, List<string>? attachmentUrls = null);
         Task<Message> EditMessageAsync(string messageId, string content, string userId);
         Task<bool> DeleteMessageAsync(string messageId, string userId);
         Task<Message> GetMessageAsync(string messageId);
@@ -41,23 +42,11 @@ namespace WebApplication1.Services
         Task<IEnumerable<MessageBackup>> GetMessageBackupsAsync(string userId, string chatRoomId);
         Task<MessageBackup> GetBackupDetailsAsync(string backupId);
         Task<bool> DeleteMessageBackupAsync(string backupId, string userId);
-        Task<byte[]> ExportMessagesAsync(string userId, string chatRoomId, ExportFormat format);
+        Task<byte[]?> ExportMessagesAsync(string userId, string chatRoomId, ExportFormat format);
         Task<bool> ImportMessagesAsync(string userId, string chatRoomId, byte[] data, ImportFormat format);
         Task<bool> ValidateImportDataAsync(byte[] data, ImportFormat format);
         Task<ImportProgress> GetImportProgressAsync(string importId);
         Task<ExportProgress> GetExportProgressAsync(string exportId);
-    }
-
-    public enum MessageType
-    {
-        Text,
-        Image,
-        File,
-        Voice,
-        Video,
-        Location,
-        Contact,
-        System
     }
 
     public enum ExportFormat
@@ -75,33 +64,32 @@ namespace WebApplication1.Services
         Xml
     }
 
-    public class MessageBackup
-    {
-        public string Id { get; set; }
-        public string ChatRoomId { get; set; }
-        public string UserId { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public int MessageCount { get; set; }
-        public long BackupSize { get; set; }
-        public string BackupPath { get; set; }
-    }
-
     public class ImportProgress
     {
-        public string ImportId { get; set; }
+        public required string ImportId { get; set; }
         public int TotalMessages { get; set; }
         public int ProcessedMessages { get; set; }
-        public ImportStatus Status { get; set; }
-        public string ErrorMessage { get; set; }
+        public ImportStatus Status { get; set; } = ImportStatus.Pending;
+        public string? ErrorMessage { get; set; }
+
+        public ImportProgress(string importId)
+        {
+            ImportId = importId;
+        }
     }
 
     public class ExportProgress
     {
-        public string ExportId { get; set; }
+        public required string ExportId { get; set; }
         public int TotalMessages { get; set; }
         public int ProcessedMessages { get; set; }
-        public ExportStatus Status { get; set; }
-        public string ErrorMessage { get; set; }
+        public ExportStatus Status { get; set; } = ExportStatus.Pending;
+        public string? ErrorMessage { get; set; }
+
+        public ExportProgress(string exportId)
+        {
+            ExportId = exportId;
+        }
     }
 
     public enum ImportStatus
@@ -142,10 +130,15 @@ namespace WebApplication1.Services
             _userRepository = userRepository;
         }
 
-        public async Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content, List<string> attachmentUrls = null)
+        public async Task<Message> SendMessageAsync(string senderId, string chatRoomId, string content, List<string>? attachmentUrls = null)
         {
             try
             {
+                // Get sender
+                var sender = await _userRepository.GetByIdAsync(senderId);
+                if (sender == null)
+                    throw new ArgumentException($"Sender with ID {senderId} not found");
+
                 // Verify chat room exists and user is a participant
                 var chatRoom = await _context.ChatRooms
                     .Include(c => c.Participants)
@@ -162,12 +155,14 @@ namespace WebApplication1.Services
                 {
                     Id = Guid.NewGuid().ToString(),
                     SenderId = senderId,
+                    Sender = sender,
                     ChatRoomId = chatRoomId,
+                    ChatRoom = chatRoom,
                     Content = content,
                     Timestamp = DateTime.UtcNow,
                     IsEdited = false,
                     IsDeleted = false,
-                    Attachments = attachmentUrls?.Select(url => new Attachment
+                    Attachments = attachmentUrls == null ? new List<Attachment>() : attachmentUrls.Select(url => new Attachment
                     {
                         Id = Guid.NewGuid().ToString(),
                         MessageId = Guid.NewGuid().ToString(),
@@ -184,9 +179,13 @@ namespace WebApplication1.Services
                 {
                     Id = Guid.NewGuid().ToString(),
                     MessageId = message.Id,
-                    Content = content,
-                    Timestamp = DateTime.UtcNow,
-                    Action = "Created"
+                    Message = message,
+                    OldContent = content,
+                    EditedAt = DateTime.UtcNow,
+                    EditedByUserId = senderId,
+                    EditedByUser = sender,
+                    EditType = EditType.ContentChange,
+                    EditReason = "Message created"
                 };
 
                 _context.MessageHistories.Add(history);
@@ -217,17 +216,23 @@ namespace WebApplication1.Services
                 if (message.IsDeleted)
                     throw new InvalidOperationException("Cannot edit a deleted message");
 
-                // Store original content in history
-                var history = new MessageHistory
+                var editedByUser = await _userRepository.GetByIdAsync(userId);
+                if (editedByUser == null)
+                    throw new ArgumentException($"User with ID {userId} not found");
+
+                // Save old version to history
+                message.EditHistory.Add(new MessageHistory
                 {
                     Id = Guid.NewGuid().ToString(),
                     MessageId = message.Id,
-                    Content = message.Content,
-                    Timestamp = DateTime.UtcNow,
-                    Action = "Edited"
-                };
-
-                _context.MessageHistories.Add(history);
+                    Message = message,
+                    OldContent = message.Content,
+                    EditedAt = DateTime.UtcNow,
+                    EditedByUserId = userId,
+                    EditedByUser = editedByUser,
+                    EditType = EditType.ContentChange,
+                    EditReason = "Message edited"
+                });
 
                 // Update message
                 message.Content = content;
@@ -258,14 +263,22 @@ namespace WebApplication1.Services
                 if (message.SenderId != userId)
                     throw new UnauthorizedAccessException("User is not authorized to delete this message");
 
+                var editedByUser = await _userRepository.GetByIdAsync(userId);
+                if (editedByUser == null)
+                    throw new ArgumentException($"User with ID {userId} not found");
+
                 // Store message in history before deletion
                 var history = new MessageHistory
                 {
                     Id = Guid.NewGuid().ToString(),
                     MessageId = message.Id,
-                    Content = message.Content,
-                    Timestamp = DateTime.UtcNow,
-                    Action = "Deleted"
+                    Message = message,
+                    OldContent = message.Content,
+                    EditedAt = DateTime.UtcNow,
+                    EditedByUserId = userId,
+                    EditedByUser = editedByUser,
+                    EditType = EditType.ContentChange,
+                    EditReason = "Message deleted"
                 };
 
                 _context.MessageHistories.Add(history);
@@ -289,9 +302,14 @@ namespace WebApplication1.Services
         {
             try
             {
-                return await _context.Messages
+                var message = await _context.Messages
                     .Include(m => m.Attachments)
                     .FirstOrDefaultAsync(m => m.Id == messageId);
+
+                if (message == null)
+                    throw new ArgumentException($"Message with ID {messageId} not found");
+
+                return message;
             }
             catch (Exception ex)
             {
@@ -329,9 +347,27 @@ namespace WebApplication1.Services
                 if (message == null)
                     throw new ArgumentException("Message not found");
 
-                if (!message.ReadBy.Contains(userId))
+                if (!message.IsRead)
                 {
-                    message.ReadBy.Add(userId);
+                    message.IsRead = true;
+                    message.Status = WebApplication1.Models.Enums.MessageStatus.Read;
+                    message.Timestamp = DateTime.UtcNow;
+
+                    // Notify sender that message was read
+                    if (message.Sender != null)
+                    {
+                        var notification = new Notification
+                        {
+                            UserId = message.SenderId,
+                            User = message.Sender,
+                            MessageId = message.Id,
+                            Type = WebApplication1.Models.Enums.NotificationType.MessageRead,
+                            Status = false,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        message.Notifications.Add(notification);
+                    }
+
                     await _context.SaveChangesAsync();
                 }
 
@@ -354,9 +390,9 @@ namespace WebApplication1.Services
                 if (message == null)
                     throw new ArgumentException("Message not found");
 
-                if (!message.HiddenBy.Contains(userId))
+                if (!message.HiddenForUsers.Contains(userId))
                 {
-                    message.HiddenBy.Add(userId);
+                    message.HiddenForUsers.Add(userId);
                     await _context.SaveChangesAsync();
                 }
 
@@ -376,7 +412,7 @@ namespace WebApplication1.Services
                 return await _context.Messages
                     .Where(m => m.ChatRoomId == chatRoomId && 
                                !m.IsDeleted && 
-                               !m.ReadBy.Contains(userId))
+                               !m.IsRead)
                     .OrderByDescending(m => m.Timestamp)
                     .ToListAsync();
             }
@@ -400,6 +436,9 @@ namespace WebApplication1.Services
                 // Check if user has permission to pin messages
                 var chatRoom = await _context.ChatRooms
                     .FirstOrDefaultAsync(c => c.Id == message.ChatRoomId);
+
+                if (chatRoom == null)
+                    throw new ArgumentException($"Chat room with ID {message.ChatRoomId} not found");
 
                 if (chatRoom.AdminId != userId)
                     throw new UnauthorizedAccessException("User is not authorized to pin messages");
@@ -432,6 +471,9 @@ namespace WebApplication1.Services
                 // Check if user has permission to unpin messages
                 var chatRoom = await _context.ChatRooms
                     .FirstOrDefaultAsync(c => c.Id == message.ChatRoomId);
+
+                if (chatRoom == null)
+                    throw new ArgumentException($"Chat room with ID {message.ChatRoomId} not found");
 
                 if (chatRoom.AdminId != userId)
                     throw new UnauthorizedAccessException("User is not authorized to unpin messages");
@@ -492,16 +534,20 @@ namespace WebApplication1.Services
                     throw new UnauthorizedAccessException("User is not a participant in target chat room");
 
                 // Create forwarded message
+                var sender = await _userRepository.GetByIdAsync(userId);
+                if (sender == null)
+                    throw new ArgumentException("Sender not found");
+
                 var forwardedMessage = new Message
                 {
                     Id = Guid.NewGuid().ToString(),
                     SenderId = userId,
+                    Sender = sender,
                     ChatRoomId = targetChatRoomId,
-                    Content = $"Forwarded: {originalMessage.Content}",
+                    ChatRoom = targetChatRoom,
+                    Content = originalMessage.Content,
                     Timestamp = DateTime.UtcNow,
-                    IsForwarded = true,
-                    OriginalMessageId = messageId,
-                    Attachments = originalMessage.Attachments?.Select(a => new Attachment
+                    Attachments = originalMessage.Attachments == null ? new List<Attachment>() : originalMessage.Attachments.Select(a => new Attachment
                     {
                         Id = Guid.NewGuid().ToString(),
                         MessageId = Guid.NewGuid().ToString(),
@@ -596,78 +642,6 @@ namespace WebApplication1.Services
             {
                 _logger.LogError(ex, "Error getting reactions for message {MessageId}", messageId);
                 throw;
-            }
-        }
-
-        public async Task EditMessageAsync(Message message, string newContent, string userId, EditType editType, string? editReason = null)
-        {
-            if (message.IsDeleted)
-                throw new InvalidOperationException("Silinmiş mesaj düzenlenemez");
-
-            if (string.IsNullOrEmpty(newContent))
-                throw new ArgumentException("Mesaj içeriği boş olamaz");
-
-            if (message.SenderId != userId)
-                throw new InvalidOperationException("Bu mesajı düzenleme yetkiniz yok");
-
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-                throw new InvalidOperationException("Kullanıcı bulunamadı");
-
-            // Save old version to history
-            message.EditHistory.Add(new MessageEdit
-            {
-                EditType = editType,
-                EditReason = editReason,
-                EditedAt = DateTime.UtcNow,
-                Description = Message.GetEditDescription(editType, editReason)
-            });
-
-            // Update message
-            message.Content = newContent;
-            message.IsEdited = true;
-            message.EditedAt = DateTime.UtcNow;
-            message.Timestamp = DateTime.UtcNow;
-
-            // Notify participants about edit
-            if (message.ChatRoom != null)
-            {
-                foreach (var participant in message.ChatRoom.Participants.Where(p => p.Id != userId))
-                {
-                    var notification = new Notification
-                    {
-                        UserId = participant.Id,
-                        User = participant,
-                        MessageId = message.Id,
-                        Type = NotificationType.MessageEdited,
-                        Status = false,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    message.Notifications.Add(notification);
-                }
-            }
-        }
-
-        public async Task DeleteForUserAsync(Message message, string userId)
-        {
-            if (!message.HiddenForUsers.Contains(userId))
-            {
-                var user = await _userRepository.GetByIdAsync(userId);
-                if (user == null)
-                    throw new InvalidOperationException("Kullanıcı bulunamadı");
-
-                message.HiddenForUsers.Add(userId);
-
-                var notification = new Notification
-                {
-                    UserId = userId,
-                    User = user,
-                    MessageId = message.Id,
-                    Type = NotificationType.MessageDeleted,
-                    Status = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-                message.Notifications.Add(notification);
             }
         }
 
@@ -788,7 +762,7 @@ namespace WebApplication1.Services
                 if (messages.Count == 0)
                     return false;
 
-                var backup = new MessageBackup
+                var backup = new WebApplication1.Models.Messages.MessageBackup
                 {
                     Id = Guid.NewGuid().ToString(),
                     ChatRoomId = chatRoomId,
@@ -854,8 +828,13 @@ namespace WebApplication1.Services
         {
             try
             {
-                return await _context.MessageBackups
+                var backup = await _context.MessageBackups
                     .FirstOrDefaultAsync(b => b.Id == backupId);
+
+                if (backup == null)
+                    throw new ArgumentException($"Message backup with ID {backupId} not found");
+
+                return backup;
             }
             catch (Exception ex)
             {
@@ -888,7 +867,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<byte[]> ExportMessagesAsync(string userId, string chatRoomId, ExportFormat format)
+        public async Task<byte[]?> ExportMessagesAsync(string userId, string chatRoomId, ExportFormat format)
         {
             try
             {

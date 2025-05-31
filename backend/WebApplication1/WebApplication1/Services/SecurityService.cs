@@ -13,6 +13,7 @@ using WebApplication1.Data;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Identity;
 
 namespace WebApplication1.Services
 {
@@ -61,9 +62,9 @@ namespace WebApplication1.Services
 
     public class SecurityOptions
     {
-        public string JwtSecret { get; set; }
-        public string JwtIssuer { get; set; }
-        public string JwtAudience { get; set; }
+        public required string JwtSecret { get; set; }
+        public required string JwtIssuer { get; set; }
+        public required string JwtAudience { get; set; }
         public int JwtExpirationMinutes { get; set; } = 60;
         public int RefreshTokenExpirationDays { get; set; } = 7;
         public int MaxFailedLoginAttempts { get; set; } = 5;
@@ -114,9 +115,9 @@ namespace WebApplication1.Services
             try
             {
                 var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Username == username);
+                    .FirstOrDefaultAsync(u => u.UserName == username);
 
-                if (user == null)
+                if (user == null || string.IsNullOrEmpty(user.PasswordHash))
                     return false;
 
                 return await ValidatePasswordAsync(password, user.PasswordHash);
@@ -132,26 +133,34 @@ namespace WebApplication1.Services
         {
             try
             {
-                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-                var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-                var claims = new List<Claim>
+                if (string.IsNullOrEmpty(_options.JwtSecret))
                 {
-                    new Claim(ClaimTypes.NameIdentifier, userId),
-                    new Claim(ClaimTypes.Name, username)
-                };
+                    throw new InvalidOperationException("JWT secret key is not configured");
+                }
 
-                claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+                return await Task.Run(() =>
+                {
+                    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.JwtSecret));
+                    var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-                var token = new JwtSecurityToken(
-                    issuer: _configuration["Jwt:Issuer"],
-                    audience: _configuration["Jwt:Audience"],
-                    claims: claims,
-                    expires: DateTime.UtcNow.AddHours(1),
-                    signingCredentials: credentials
-                );
+                    var claims = new List<Claim>
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, userId),
+                        new Claim(ClaimTypes.Name, username)
+                    };
 
-                return new JwtSecurityTokenHandler().WriteToken(token);
+                    claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+                    var token = new JwtSecurityToken(
+                        issuer: _options.JwtIssuer,
+                        audience: _options.JwtAudience,
+                        claims: claims,
+                        expires: DateTime.UtcNow.AddMinutes(_options.JwtExpirationMinutes),
+                        signingCredentials: credentials
+                    );
+
+                    return new JwtSecurityTokenHandler().WriteToken(token);
+                });
             }
             catch (Exception ex)
             {
@@ -164,17 +173,22 @@ namespace WebApplication1.Services
         {
             try
             {
+                if (string.IsNullOrEmpty(_options.JwtSecret))
+                {
+                    throw new InvalidOperationException("JWT secret key is not configured");
+                }
+
                 var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]);
+                var key = Encoding.UTF8.GetBytes(_options.JwtSecret);
 
                 var tokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateIssuer = true,
-                    ValidIssuer = _configuration["Jwt:Issuer"],
+                    ValidIssuer = _options.JwtIssuer,
                     ValidateAudience = true,
-                    ValidAudience = _configuration["Jwt:Audience"],
+                    ValidAudience = _options.JwtAudience,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
@@ -211,10 +225,15 @@ namespace WebApplication1.Services
                 if (token == null || token.ExpiryDate < DateTime.UtcNow)
                     return false;
 
-                // Yeni token oluştur
                 var user = await _context.Users.FindAsync(token.UserId);
+                if (user == null || string.IsNullOrEmpty(user.UserName))
+                {
+                    _logger.LogWarning("User not found or has no username for refresh token {Token}", refreshToken);
+                    return false;
+                }
+
                 var roles = await GetUserRolesAsync(token.UserId);
-                var newToken = await GenerateJwtTokenAsync(user.Id, user.Username, roles);
+                var newToken = await GenerateJwtTokenAsync(user.Id, user.UserName, roles);
 
                 // Eski token'ı geçersiz kıl
                 token.IsValid = false;
@@ -255,10 +274,23 @@ namespace WebApplication1.Services
         {
             try
             {
-                return await _context.UserRoles
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                    return Enumerable.Empty<string>();
+
+                var userRoles = await _context.UserRoles
                     .Where(ur => ur.UserId == userId)
-                    .Select(ur => ur.Role.Name)
+                    .Select(ur => ur.RoleId)
                     .ToListAsync();
+
+                var roles = await _context.Roles
+                    .Where(r => userRoles.Contains(r.Id))
+                    .Select(r => r.Name)
+                    .Where(name => name != null)
+                    .Select(name => name!)
+                    .ToListAsync();
+
+                return roles;
             }
             catch (Exception ex)
             {
@@ -277,7 +309,7 @@ namespace WebApplication1.Services
                 if (roleEntity == null)
                     return false;
 
-                var userRole = new UserRole
+                var userRole = new Microsoft.AspNetCore.Identity.IdentityUserRole<string>
                 {
                     UserId = userId,
                     RoleId = roleEntity.Id
@@ -299,9 +331,14 @@ namespace WebApplication1.Services
         {
             try
             {
+                var roleEntity = await _context.Roles
+                    .FirstOrDefaultAsync(r => r.Name == role);
+
+                if (roleEntity == null)
+                    return false;
+
                 var userRole = await _context.UserRoles
-                    .Include(ur => ur.Role)
-                    .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.Role.Name == role);
+                    .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleId == roleEntity.Id);
 
                 if (userRole == null)
                     return false;
@@ -323,13 +360,15 @@ namespace WebApplication1.Services
         {
             try
             {
+                var ipAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "Unknown";
+
                 var securityEvent = new SecurityEvent
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = userId,
                     EventType = eventType,
                     Description = description,
-                    IpAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString(),
+                    IpAddress = ipAddress,
                     Timestamp = DateTime.UtcNow
                 };
 
@@ -486,15 +525,26 @@ namespace WebApplication1.Services
         {
             try
             {
-                using var aes = Aes.Create();
-                aes.Key = Encoding.UTF8.GetBytes(_configuration["Encryption:Key"]);
-                aes.IV = Encoding.UTF8.GetBytes(_configuration["Encryption:IV"]);
+                var encryptionKey = _configuration["Encryption:Key"];
+                var encryptionIV = _configuration["Encryption:IV"];
 
-                using var encryptor = aes.CreateEncryptor();
-                var plainBytes = Encoding.UTF8.GetBytes(data);
-                var cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+                if (string.IsNullOrEmpty(encryptionKey) || string.IsNullOrEmpty(encryptionIV))
+                {
+                    throw new InvalidOperationException("Encryption key or IV is not configured");
+                }
 
-                return Convert.ToBase64String(cipherBytes);
+                return await Task.Run(() =>
+                {
+                    using var aes = Aes.Create();
+                    aes.Key = Encoding.UTF8.GetBytes(encryptionKey);
+                    aes.IV = Encoding.UTF8.GetBytes(encryptionIV);
+
+                    using var encryptor = aes.CreateEncryptor();
+                    var plainBytes = Encoding.UTF8.GetBytes(data);
+                    var cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
+
+                    return Convert.ToBase64String(cipherBytes);
+                });
             }
             catch (Exception ex)
             {
@@ -507,15 +557,31 @@ namespace WebApplication1.Services
         {
             try
             {
-                using var aes = Aes.Create();
-                aes.Key = Encoding.UTF8.GetBytes(_configuration["Encryption:Key"]);
-                aes.IV = Encoding.UTF8.GetBytes(_configuration["Encryption:IV"]);
+                var encryptionKey = _configuration["Encryption:Key"];
+                var encryptionIV = _configuration["Encryption:IV"];
 
-                using var decryptor = aes.CreateDecryptor();
-                var cipherBytes = Convert.FromBase64String(encryptedData);
-                var plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+                if (string.IsNullOrEmpty(encryptionKey) || string.IsNullOrEmpty(encryptionIV))
+                {
+                    throw new InvalidOperationException("Encryption key or IV is not configured");
+                }
 
-                return Encoding.UTF8.GetString(plainBytes);
+                if (string.IsNullOrEmpty(encryptedData))
+                {
+                    throw new ArgumentException("Encrypted data cannot be null or empty", nameof(encryptedData));
+                }
+
+                return await Task.Run(() =>
+                {
+                    using var aes = Aes.Create();
+                    aes.Key = Encoding.UTF8.GetBytes(encryptionKey);
+                    aes.IV = Encoding.UTF8.GetBytes(encryptionIV);
+
+                    using var decryptor = aes.CreateDecryptor();
+                    var cipherBytes = Convert.FromBase64String(encryptedData);
+                    var plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
+
+                    return Encoding.UTF8.GetString(plainBytes);
+                });
             }
             catch (Exception ex)
             {
@@ -528,9 +594,12 @@ namespace WebApplication1.Services
         {
             try
             {
-                using var sha256 = SHA256.Create();
-                var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                return Convert.ToBase64String(hashedBytes);
+                return await Task.Run(() =>
+                {
+                    using var sha256 = SHA256.Create();
+                    var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+                    return Convert.ToBase64String(hashedBytes);
+                });
             }
             catch (Exception ex)
             {
@@ -557,10 +626,11 @@ namespace WebApplication1.Services
         {
             try
             {
-                using var rng = new RNGCryptoServiceProvider();
-                var keyBytes = new byte[32];
-                rng.GetBytes(keyBytes);
-                return Convert.ToBase64String(keyBytes);
+                return await Task.Run(() =>
+                {
+                    var keyBytes = RandomNumberGenerator.GetBytes(32);
+                    return Convert.ToBase64String(keyBytes);
+                });
             }
             catch (Exception ex)
             {
@@ -569,11 +639,11 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> MaskSensitiveDataAsync(string data, string dataType)
+        public Task<string> MaskSensitiveDataAsync(string data, string dataType)
         {
             try
             {
-                return dataType.ToLower() switch
+                var result = dataType.ToLower() switch
                 {
                     "email" => MaskEmail(data),
                     "phone" => MaskPhoneNumber(data),
@@ -581,6 +651,7 @@ namespace WebApplication1.Services
                     "ssn" => MaskSSN(data),
                     _ => data
                 };
+                return Task.FromResult(result);
             }
             catch (Exception ex)
             {
@@ -611,11 +682,11 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> ValidateInputAsync(string input, string inputType)
+        public Task<bool> ValidateInputAsync(string input, string inputType)
         {
             try
             {
-                return inputType.ToLower() switch
+                var result = inputType.ToLower() switch
                 {
                     "email" => IsValidEmail(input),
                     "phone" => IsValidPhoneNumber(input),
@@ -623,6 +694,7 @@ namespace WebApplication1.Services
                     "password" => IsValidPassword(input),
                     _ => true
                 };
+                return Task.FromResult(result);
             }
             catch (Exception ex)
             {
@@ -645,26 +717,26 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> IsRequestValidAsync(HttpContext context)
+        public Task<bool> IsRequestValidAsync(HttpContext context)
         {
             try
             {
                 // CSRF token kontrolü
                 var csrfToken = context.Request.Headers["X-CSRF-Token"].ToString();
                 if (string.IsNullOrEmpty(csrfToken))
-                    return false;
+                    return Task.FromResult(false);
 
                 // Origin kontrolü
                 var origin = context.Request.Headers["Origin"].ToString();
                 if (!IsValidOrigin(origin))
-                    return false;
+                    return Task.FromResult(false);
 
                 // Content-Type kontrolü
-                var contentType = context.Request.ContentType;
+                var contentType = context.Request.ContentType ?? string.Empty;
                 if (!IsValidContentType(contentType))
-                    return false;
+                    return Task.FromResult(false);
 
-                return true;
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
@@ -677,33 +749,36 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Dosya boyutu kontrolü
-                if (file.Length > 10 * 1024 * 1024) // 10MB
-                    return false;
-
-                // Dosya uzantısı kontrolü
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx" };
-                var extension = Path.GetExtension(file.FileName).ToLower();
-                if (!allowedExtensions.Contains(extension))
-                    return false;
-
-                // Dosya içeriği kontrolü
-                using var reader = new BinaryReader(file.OpenReadStream());
-                var signatures = new Dictionary<string, byte[]>
+                return await Task.Run(() =>
                 {
-                    { ".png", new byte[] { 0x89, 0x50, 0x4E, 0x47 } },
-                    { ".jpeg", new byte[] { 0xFF, 0xD8, 0xFF } },
-                    { ".pdf", new byte[] { 0x25, 0x50, 0x44, 0x46 } }
-                };
-
-                if (signatures.ContainsKey(extension))
-                {
-                    var headerBytes = reader.ReadBytes(signatures[extension].Length);
-                    if (!headerBytes.SequenceEqual(signatures[extension]))
+                    // Dosya boyutu kontrolü
+                    if (file.Length > 10 * 1024 * 1024) // 10MB
                         return false;
-                }
 
-                return true;
+                    // Dosya uzantısı kontrolü
+                    var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx" };
+                    var extension = Path.GetExtension(file.FileName).ToLower();
+                    if (!allowedExtensions.Contains(extension))
+                        return false;
+
+                    // Dosya içeriği kontrolü
+                    using var reader = new BinaryReader(file.OpenReadStream());
+                    var signatures = new Dictionary<string, byte[]>
+                    {
+                        { ".png", new byte[] { 0x89, 0x50, 0x4E, 0x47 } },
+                        { ".jpeg", new byte[] { 0xFF, 0xD8, 0xFF } },
+                        { ".pdf", new byte[] { 0x25, 0x50, 0x44, 0x46 } }
+                    };
+
+                    if (signatures.ContainsKey(extension))
+                    {
+                        var headerBytes = reader.ReadBytes(signatures[extension].Length);
+                        if (!headerBytes.SequenceEqual(signatures[extension]))
+                            return false;
+                    }
+
+                    return true;
+                });
             }
             catch (Exception ex)
             {
@@ -732,7 +807,10 @@ namespace WebApplication1.Services
                     SuspiciousActivities = events.Count(e => e.EventType == "SuspiciousActivity"),
                     FailedLogins = events.Count(e => e.EventType == "FailedLogin"),
                     SuccessfulLogins = events.Count(e => e.EventType == "SuccessfulLogin"),
-                    IpAddresses = events.Select(e => e.IpAddress).Distinct().ToList()
+                    IpAddresses = events.Where(e => e.IpAddress != null)
+                        .Select(e => e.IpAddress!)
+                        .Distinct()
+                        .ToList()
                 };
 
                 return report;
@@ -774,12 +852,12 @@ namespace WebApplication1.Services
 
                 // Şifre güvenliği kontrolü
                 var weakPasswords = await _context.Users
-                    .Where(u => u.PasswordHash.Length < 32)
+                    .Where(u => u.PasswordHash != null && u.PasswordHash.Length < 32)
                     .Select(u => new SecurityVulnerability
                     {
                         Type = "WeakPassword",
                         Severity = "High",
-                        Description = $"User {u.Username} has a weak password",
+                        Description = $"User {u.UserName} has a weak password",
                         AffectedResource = u.Id
                     })
                     .ToListAsync();
@@ -813,32 +891,35 @@ namespace WebApplication1.Services
         {
             try
             {
-                var report = new ComplianceReport
+                return await Task.Run(() =>
                 {
-                    GeneratedAt = DateTime.UtcNow,
-                    PasswordPolicy = new PasswordPolicyCompliance
+                    var report = new ComplianceReport
                     {
-                        MinLength = 8,
-                        RequiresUppercase = true,
-                        RequiresLowercase = true,
-                        RequiresNumbers = true,
-                        RequiresSpecialChars = true
-                    },
-                    SessionPolicy = new SessionPolicyCompliance
-                    {
-                        MaxSessionDuration = TimeSpan.FromHours(24),
-                        RequiresSecureCookies = true,
-                        RequiresHttps = true
-                    },
-                    DataProtection = new DataProtectionCompliance
-                    {
-                        EncryptionEnabled = true,
-                        MaskingEnabled = true,
-                        BackupEnabled = true
-                    }
-                };
+                        GeneratedAt = DateTime.UtcNow,
+                        PasswordPolicy = new PasswordPolicyCompliance
+                        {
+                            MinLength = 8,
+                            RequiresUppercase = true,
+                            RequiresLowercase = true,
+                            RequiresNumbers = true,
+                            RequiresSpecialChars = true
+                        },
+                        SessionPolicy = new SessionPolicyCompliance
+                        {
+                            MaxSessionDuration = TimeSpan.FromHours(24),
+                            RequiresSecureCookies = true,
+                            RequiresHttps = true
+                        },
+                        DataProtection = new DataProtectionCompliance
+                        {
+                            EncryptionEnabled = true,
+                            MaskingEnabled = true,
+                            BackupEnabled = true
+                        }
+                    };
 
-                return report;
+                    return report;
+                });
             }
             catch (Exception ex)
             {
@@ -922,6 +1003,12 @@ namespace WebApplication1.Services
         private bool IsValidOrigin(string origin)
         {
             var allowedOrigins = _configuration.GetSection("AllowedOrigins").Get<string[]>();
+            if (allowedOrigins == null)
+            {
+                _logger.LogWarning("AllowedOrigins configuration is missing or null.");
+                return false;
+            }
+
             return allowedOrigins.Contains(origin);
         }
 
@@ -934,42 +1021,42 @@ namespace WebApplication1.Services
 
     public class SecurityEvent
     {
-        public string Id { get; set; }
-        public string UserId { get; set; }
-        public string EventType { get; set; }
-        public string Description { get; set; }
-        public string IpAddress { get; set; }
-        public DateTime Timestamp { get; set; }
+        public required string Id { get; set; }
+        public required string UserId { get; set; }
+        public required string EventType { get; set; }
+        public required string Description { get; set; }
+        public string? IpAddress { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 
     public class SessionInfo
     {
-        public string SessionId { get; set; }
-        public string IpAddress { get; set; }
-        public string UserAgent { get; set; }
-        public DateTime LastActivity { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public required string SessionId { get; set; }
+        public required string IpAddress { get; set; }
+        public required string UserAgent { get; set; }
+        public DateTime LastActivity { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class BlockedIpAddress
     {
-        public string IpAddress { get; set; }
-        public string Reason { get; set; }
-        public DateTime BlockedAt { get; set; }
-        public DateTime ExpiresAt { get; set; }
+        public required string IpAddress { get; set; }
+        public required string Reason { get; set; }
+        public DateTime BlockedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddHours(24);
     }
 
     public class SecurityReport
     {
-        public string UserId { get; set; }
-        public DateTime StartDate { get; set; }
-        public DateTime EndDate { get; set; }
+        public required string UserId { get; set; }
+        public DateTime StartDate { get; set; } = DateTime.UtcNow.AddDays(-30);
+        public DateTime EndDate { get; set; } = DateTime.UtcNow;
         public int TotalEvents { get; set; }
-        public Dictionary<string, int> EventTypes { get; set; }
+        public required Dictionary<string, int> EventTypes { get; set; }
         public int SuspiciousActivities { get; set; }
         public int FailedLogins { get; set; }
         public int SuccessfulLogins { get; set; }
-        public List<string> IpAddresses { get; set; }
+        public required List<string> IpAddresses { get; set; }
     }
 
     public class SecurityMetrics
@@ -983,18 +1070,18 @@ namespace WebApplication1.Services
 
     public class SecurityVulnerability
     {
-        public string Type { get; set; }
-        public string Severity { get; set; }
-        public string Description { get; set; }
-        public string AffectedResource { get; set; }
+        public required string Type { get; set; }
+        public required string Severity { get; set; }
+        public required string Description { get; set; }
+        public required string AffectedResource { get; set; }
     }
 
     public class ComplianceReport
     {
-        public DateTime GeneratedAt { get; set; }
-        public PasswordPolicyCompliance PasswordPolicy { get; set; }
-        public SessionPolicyCompliance SessionPolicy { get; set; }
-        public DataProtectionCompliance DataProtection { get; set; }
+        public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+        public required PasswordPolicyCompliance PasswordPolicy { get; set; }
+        public required SessionPolicyCompliance SessionPolicy { get; set; }
+        public required DataProtectionCompliance DataProtection { get; set; }
     }
 
     public class PasswordPolicyCompliance

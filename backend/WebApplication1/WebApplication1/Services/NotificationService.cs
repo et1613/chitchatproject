@@ -8,6 +8,7 @@ using WebApplication1.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Text;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Services
 {
@@ -18,7 +19,7 @@ namespace WebApplication1.Services
         Task<bool> MarkAsReadAsync(string notificationId, string userId);
         Task<bool> MarkAllAsReadAsync(string userId);
         Task<bool> DeleteNotificationAsync(string notificationId, string userId);
-        Task<Notification> GetNotificationAsync(string notificationId);
+        Task<Notification?> GetNotificationAsync(string notificationId);
         Task<IEnumerable<Notification>> GetUserNotificationsAsync(string userId, int skip = 0, int take = 50);
         Task<int> GetUnreadNotificationCountAsync(string userId);
 
@@ -33,7 +34,7 @@ namespace WebApplication1.Services
         Task<NotificationTemplate> CreateTemplateAsync(string name, string content, NotificationType type);
         Task<bool> UpdateTemplateAsync(string templateId, string content);
         Task<bool> DeleteTemplateAsync(string templateId);
-        Task<NotificationTemplate> GetTemplateAsync(string templateId);
+        Task<NotificationTemplate?> GetTemplateAsync(string templateId);
         Task<IEnumerable<NotificationTemplate>> GetAllTemplatesAsync();
         Task<Notification> SendNotificationFromTemplateAsync(string userId, string templateId, Dictionary<string, string> parameters);
 
@@ -74,59 +75,17 @@ namespace WebApplication1.Services
         Task NotifyUserAsync(string userId, string message);
     }
 
-    public enum NotificationType
-    {
-        Message,
-        FriendRequest,
-        GroupInvite,
-        SystemAlert,
-        SecurityAlert,
-        ProfileUpdate,
-        ContentShare,
-        EventReminder,
-        Achievement,
-        Custom
-    }
-
-    public enum NotificationPriority
-    {
-        Low,
-        Normal,
-        High,
-        Urgent
-    }
-
-    public enum NotificationChannel
-    {
-        Email,
-        Push,
-        SMS,
-        InApp,
-        WebSocket
-    }
-
     public class NotificationPreferences
     {
-        public string UserId { get; set; }
-        public Dictionary<NotificationType, bool> EnabledTypes { get; set; }
-        public Dictionary<NotificationChannel, bool> EnabledChannels { get; set; }
+        public string UserId { get; set; } = null!;
+        public Dictionary<NotificationType, bool> EnabledTypes { get; set; } = new();
+        public Dictionary<NotificationChannel, bool> EnabledChannels { get; set; } = new();
         public bool EnableSound { get; set; }
         public bool EnableVibration { get; set; }
         public bool EnableDesktopNotifications { get; set; }
         public TimeSpan QuietHoursStart { get; set; }
         public TimeSpan QuietHoursEnd { get; set; }
-        public List<string> BlockedSenders { get; set; }
-    }
-
-    public class NotificationTemplate
-    {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string Content { get; set; }
-        public NotificationType Type { get; set; }
-        public Dictionary<string, string> Parameters { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
+        public List<string> BlockedSenders { get; set; } = new();
     }
 
     public class NotificationStats
@@ -135,46 +94,71 @@ namespace WebApplication1.Services
         public int UnreadNotifications { get; set; }
         public int ReadNotifications { get; set; }
         public int DeletedNotifications { get; set; }
-        public Dictionary<NotificationType, int> TypeDistribution { get; set; }
-        public Dictionary<NotificationPriority, int> PriorityDistribution { get; set; }
+        public required Dictionary<NotificationType, int> TypeDistribution { get; set; }
+        public required Dictionary<NotificationPriority, int> PriorityDistribution { get; set; }
         public DateTime LastNotificationDate { get; set; }
+
+        public NotificationStats(Dictionary<NotificationType, int> typeDistribution, Dictionary<NotificationPriority, int> priorityDistribution)
+        {
+            TypeDistribution = typeDistribution;
+            PriorityDistribution = priorityDistribution;
+        }
     }
 
     public class NotificationGroup
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public List<string> UserIds { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public required string Id { get; set; }
+        public required string Name { get; set; }
+        public required List<string> UserIds { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+
+        public NotificationGroup(string name, List<string> userIds)
+        {
+            Name = name;
+            UserIds = userIds;
+        }
     }
 
     public class ScheduledNotification
     {
-        public string Id { get; set; }
-        public string UserId { get; set; }
-        public string Content { get; set; }
-        public NotificationType Type { get; set; }
-        public DateTime ScheduledTime { get; set; }
+        public required string Id { get; set; }
+        public required string UserId { get; set; }
+        public required string Content { get; set; }
+        public required NotificationType Type { get; set; }
+        public required DateTime ScheduledTime { get; set; }
         public bool IsRecurring { get; set; }
-        public string RecurrencePattern { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public string? RecurrencePattern { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public ScheduledNotification(string userId, string content, NotificationType type, DateTime scheduledTime)
+        {
+            UserId = userId;
+            Content = content;
+            Type = type;
+            ScheduledTime = scheduledTime;
+        }
     }
 
     public class NotificationReport
     {
-        public string Id { get; set; }
-        public string UserId { get; set; }
-        public DateTime StartDate { get; set; }
-        public DateTime EndDate { get; set; }
+        public required string Id { get; set; }
+        public string? UserId { get; set; }
+        public required DateTime StartDate { get; set; }
+        public required DateTime EndDate { get; set; }
         public int TotalNotifications { get; set; }
-        public int DeliveredNotifications { get; set; }
         public int ReadNotifications { get; set; }
-        public Dictionary<NotificationType, int> TypeDistribution { get; set; }
-        public Dictionary<NotificationChannel, int> ChannelDistribution { get; set; }
-        public double AverageDeliveryTime { get; set; }
+        public required Dictionary<NotificationType, int> TypeDistribution { get; set; }
         public double AverageReadTime { get; set; }
-        public List<Notification> TopNotifications { get; set; }
+        public required List<Notification> TopNotifications { get; set; }
+
+        public NotificationReport(DateTime startDate, DateTime endDate, Dictionary<NotificationType, int> typeDistribution, List<Notification> topNotifications)
+        {
+            StartDate = startDate;
+            EndDate = endDate;
+            TypeDistribution = typeDistribution;
+            TopNotifications = topNotifications;
+        }
     }
 
     public class NotificationService : INotificationService
@@ -201,13 +185,18 @@ namespace WebApplication1.Services
         {
             try
             {
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                    throw new ArgumentException($"User with ID {userId} not found");
+
                 var notification = new Notification
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = userId,
+                    User = user,
                     Content = content,
-                    Type = type,
-                    Priority = priority,
+                    Type = (WebApplication1.Models.Enums.NotificationType)type,
+                    Priority = (WebApplication1.Models.Enums.NotificationPriority)priority,
                     IsRead = false,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -301,7 +290,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Notification> GetNotificationAsync(string notificationId)
+        public async Task<Notification?> GetNotificationAsync(string notificationId)
         {
             try
             {
@@ -357,17 +346,15 @@ namespace WebApplication1.Services
 
                 if (preferences == null)
                 {
-                    // Varsayılan tercihleri oluştur
                     preferences = new NotificationPreferences
                     {
                         UserId = userId,
                         EnabledTypes = new Dictionary<NotificationType, bool>
                         {
-                            { NotificationType.Message, true },
+                            { NotificationType.NewMessage, true },
                             { NotificationType.FriendRequest, true },
-                            { NotificationType.GroupInvite, true },
-                            { NotificationType.SystemAlert, true },
-                            { NotificationType.SecurityAlert, true }
+                            { NotificationType.GroupInvitation, true },
+                            { NotificationType.SystemNotification, true }
                         },
                         EnabledChannels = new Dictionary<NotificationChannel, bool>
                         {
@@ -410,7 +397,14 @@ namespace WebApplication1.Services
                 }
                 else
                 {
-                    _context.Entry(existingPreferences).CurrentValues.SetValues(preferences);
+                    existingPreferences.EnabledTypes = preferences.EnabledTypes;
+                    existingPreferences.EnabledChannels = preferences.EnabledChannels;
+                    existingPreferences.EnableSound = preferences.EnableSound;
+                    existingPreferences.EnableVibration = preferences.EnableVibration;
+                    existingPreferences.EnableDesktopNotifications = preferences.EnableDesktopNotifications;
+                    existingPreferences.QuietHoursStart = preferences.QuietHoursStart;
+                    existingPreferences.QuietHoursEnd = preferences.QuietHoursEnd;
+                    existingPreferences.BlockedSenders = preferences.BlockedSenders;
                 }
 
                 await _context.SaveChangesAsync();
@@ -488,7 +482,7 @@ namespace WebApplication1.Services
         {
             try
             {
-                var template = new NotificationTemplate
+                var template = new WebApplication1.Models.Notifications.NotificationTemplate
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = name,
@@ -555,7 +549,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<NotificationTemplate> GetTemplateAsync(string templateId)
+        public async Task<NotificationTemplate?> GetTemplateAsync(string templateId)
         {
             try
             {
@@ -616,17 +610,20 @@ namespace WebApplication1.Services
                     .Where(n => n.UserId == userId)
                     .ToListAsync();
 
-                var stats = new NotificationStats
+                var typeDistribution = notifications.GroupBy(n => n.Type)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var priorityDistribution = notifications.GroupBy(n => n.Priority)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                var stats = new NotificationStats(typeDistribution, priorityDistribution)
                 {
                     TotalNotifications = notifications.Count,
                     UnreadNotifications = notifications.Count(n => !n.IsRead),
                     ReadNotifications = notifications.Count(n => n.IsRead),
                     DeletedNotifications = notifications.Count(n => n.IsDeleted),
-                    TypeDistribution = notifications.GroupBy(n => n.Type)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    PriorityDistribution = notifications.GroupBy(n => n.Priority)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    LastNotificationDate = notifications.Max(n => n.CreatedAt)
+                    LastNotificationDate = notifications.Max(n => n.CreatedAt),
+                    TypeDistribution = typeDistribution,
+                    PriorityDistribution = priorityDistribution
                 };
 
                 return stats;
@@ -644,17 +641,20 @@ namespace WebApplication1.Services
             {
                 var notifications = await _context.Notifications.ToListAsync();
 
-                var stats = new NotificationStats
+                var typeDistribution = notifications.GroupBy(n => n.Type)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var priorityDistribution = notifications.GroupBy(n => n.Priority)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                var stats = new NotificationStats(typeDistribution, priorityDistribution)
                 {
                     TotalNotifications = notifications.Count,
                     UnreadNotifications = notifications.Count(n => !n.IsRead),
                     ReadNotifications = notifications.Count(n => n.IsRead),
                     DeletedNotifications = notifications.Count(n => n.IsDeleted),
-                    TypeDistribution = notifications.GroupBy(n => n.Type)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    PriorityDistribution = notifications.GroupBy(n => n.Priority)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    LastNotificationDate = notifications.Max(n => n.CreatedAt)
+                    LastNotificationDate = notifications.Max(n => n.CreatedAt),
+                    TypeDistribution = typeDistribution,
+                    PriorityDistribution = priorityDistribution
                 };
 
                 return stats;
@@ -708,7 +708,7 @@ namespace WebApplication1.Services
             try
             {
                 return await _context.Notifications
-                    .Where(n => n.UserId == userId && n.Content.Contains(query))
+                    .Where(n => n.UserId == userId && n.Content != null && n.Content.Contains(query))
                     .OrderByDescending(n => n.CreatedAt)
                     .ToListAsync();
             }
@@ -772,7 +772,7 @@ namespace WebApplication1.Services
         {
             try
             {
-                var group = new NotificationGroup
+                var group = new NotificationGroup(name, userIds)
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = name,
@@ -873,14 +873,13 @@ namespace WebApplication1.Services
         {
             try
             {
-                var scheduledNotification = new ScheduledNotification
+                var scheduledNotification = new ScheduledNotification(userId, content, type, scheduledTime)
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = userId,
                     Content = content,
                     Type = type,
                     ScheduledTime = scheduledTime,
-                    IsRecurring = false,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -961,18 +960,21 @@ namespace WebApplication1.Services
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(content))
-                    return false;
+                return await Task.Run(() =>
+                {
+                    if (string.IsNullOrWhiteSpace(content))
+                        return false;
 
-                if (content.Length > 500) // Maksimum içerik uzunluğu
-                    return false;
+                    if (content.Length > 500) // Maksimum içerik uzunluğu
+                        return false;
 
-                // Zararlı içerik kontrolü
-                var harmfulWords = new[] { "spam", "scam", "hack" }; // Örnek zararlı kelimeler
-                if (harmfulWords.Any(word => content.ToLower().Contains(word)))
-                    return false;
+                    // Zararlı içerik kontrolü
+                    var harmfulWords = new[] { "spam", "scam", "hack" }; // Örnek zararlı kelimeler
+                    if (harmfulWords.Any(word => content.ToLower().Contains(word)))
+                        return false;
 
-                return true;
+                    return true;
+                });
             }
             catch (Exception ex)
             {
@@ -1015,19 +1017,22 @@ namespace WebApplication1.Services
         {
             try
             {
-                if (preferences == null)
-                    return false;
+                return await Task.Run(() =>
+                {
+                    if (preferences == null)
+                        return false;
 
-                if (string.IsNullOrWhiteSpace(preferences.UserId))
-                    return false;
+                    if (string.IsNullOrWhiteSpace(preferences.UserId))
+                        return false;
 
-                if (preferences.EnabledTypes == null || !preferences.EnabledTypes.Any())
-                    return false;
+                    if (preferences.EnabledTypes == null || !preferences.EnabledTypes.Any())
+                        return false;
 
-                if (preferences.EnabledChannels == null || !preferences.EnabledChannels.Any())
-                    return false;
+                    if (preferences.EnabledChannels == null || !preferences.EnabledChannels.Any())
+                        return false;
 
-                return true;
+                    return true;
+                });
             }
             catch (Exception ex)
             {
@@ -1045,31 +1050,34 @@ namespace WebApplication1.Services
                     .Where(n => n.UserId == userId && n.CreatedAt >= startDate && n.CreatedAt <= endDate)
                     .ToListAsync();
 
-                var report = new NotificationReport
+                var typeDistribution = notifications.GroupBy(n => n.Type)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var topNotifications = notifications
+                    .OrderByDescending(n => n.Priority)
+                    .Take(10)
+                    .ToList();
+
+                var report = new NotificationReport(startDate, endDate, typeDistribution, topNotifications)
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserId = userId,
                     StartDate = startDate,
                     EndDate = endDate,
-                    TotalNotifications = notifications.Count,
-                    DeliveredNotifications = notifications.Count(n => n.DeliveredAt.HasValue),
-                    ReadNotifications = notifications.Count(n => n.IsRead),
-                    TypeDistribution = notifications.GroupBy(n => n.Type)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    ChannelDistribution = notifications.GroupBy(n => n.Channel)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    AverageDeliveryTime = notifications
-                        .Where(n => n.DeliveredAt.HasValue)
-                        .Average(n => (n.DeliveredAt.Value - n.CreatedAt).TotalSeconds),
+                    TypeDistribution = typeDistribution,
+                    TopNotifications = topNotifications,
+                    TotalNotifications = notifications
+                        .DefaultIfEmpty()
+                        .Count(),
+                    ReadNotifications = notifications
+                        .Where(n => n.IsRead)
+                        .DefaultIfEmpty()
+                        .Count(),
                     AverageReadTime = notifications
                         .Where(n => n.IsRead && n.ReadAt.HasValue)
-                        .Average(n => (n.ReadAt.Value - n.CreatedAt).TotalSeconds),
-                    TopNotifications = notifications
-                        .OrderByDescending(n => n.Priority)
-                        .Take(10)
-                        .ToList()
-                };
-
+                        .Select(n => (n.ReadAt.HasValue ? (n.ReadAt.Value - n.CreatedAt).TotalSeconds : 0))
+                        .DefaultIfEmpty(0)
+                        .Average()
+                };  
                 return report;
             }
             catch (Exception ex)
@@ -1087,28 +1095,32 @@ namespace WebApplication1.Services
                     .Where(n => n.CreatedAt >= startDate && n.CreatedAt <= endDate)
                     .ToListAsync();
 
-                var report = new NotificationReport
+                var typeDistribution = notifications.GroupBy(n => n.Type)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var topNotifications = notifications
+                    .OrderByDescending(n => n.Priority)
+                    .Take(10)
+                    .ToList();
+
+                var report = new NotificationReport(startDate, endDate, typeDistribution, topNotifications)
                 {
                     Id = Guid.NewGuid().ToString(),
                     StartDate = startDate,
                     EndDate = endDate,
-                    TotalNotifications = notifications.Count,
-                    DeliveredNotifications = notifications.Count(n => n.DeliveredAt.HasValue),
-                    ReadNotifications = notifications.Count(n => n.IsRead),
-                    TypeDistribution = notifications.GroupBy(n => n.Type)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    ChannelDistribution = notifications.GroupBy(n => n.Channel)
-                        .ToDictionary(g => g.Key, g => g.Count()),
-                    AverageDeliveryTime = notifications
-                        .Where(n => n.DeliveredAt.HasValue)
-                        .Average(n => (n.DeliveredAt.Value - n.CreatedAt).TotalSeconds),
+                    TypeDistribution = typeDistribution,
+                    TopNotifications = topNotifications,
+                    TotalNotifications = notifications
+                        .DefaultIfEmpty()
+                        .Count(),
+                    ReadNotifications = notifications
+                        .Where(n => n.IsRead)
+                        .DefaultIfEmpty()
+                        .Count(),
                     AverageReadTime = notifications
-                        .Where(n => n.IsRead && n.ReadAt.HasValue)
-                        .Average(n => (n.ReadAt.Value - n.CreatedAt).TotalSeconds),
-                    TopNotifications = notifications
-                        .OrderByDescending(n => n.Priority)
-                        .Take(10)
-                        .ToList()
+                           .Where(n => n.IsRead && n.ReadAt.HasValue)
+                           .Select(n => n.ReadAt.HasValue ? (n.ReadAt.Value - n.CreatedAt).TotalSeconds : 0)
+                           .DefaultIfEmpty(0)
+                           .Average()
                 };
 
                 return report;
@@ -1124,24 +1136,27 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Rapor formatına göre dışa aktarma işlemi
-                switch (format.ToLower())
+                return await Task.Run(() =>
                 {
-                    case "json":
-                        return System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(report));
-                    case "csv":
-                        // CSV formatında dışa aktarma
-                        var csv = new StringBuilder();
-                        csv.AppendLine("Id,UserId,StartDate,EndDate,TotalNotifications,DeliveredNotifications,ReadNotifications");
-                        csv.AppendLine($"{report.Id},{report.UserId},{report.StartDate},{report.EndDate},{report.TotalNotifications},{report.DeliveredNotifications},{report.ReadNotifications}");
-                        return System.Text.Encoding.UTF8.GetBytes(csv.ToString());
-                    case "pdf":
-                        // PDF formatında dışa aktarma
-                        // PDF oluşturma kodu buraya eklenecek
-                        throw new NotImplementedException("PDF export not implemented yet");
-                    default:
-                        throw new ArgumentException("Unsupported export format");
-                }
+                    // Rapor formatına göre dışa aktarma işlemi
+                    switch (format.ToLower())
+                    {
+                        case "json":
+                            return System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(report));
+                        case "csv":
+                            // CSV formatında dışa aktarma
+                            var csv = new StringBuilder();
+                            csv.AppendLine("Id,UserId,StartDate,EndDate,TotalNotifications,DeliveredNotifications,ReadNotifications");
+                            csv.AppendLine($"{report.Id},{report.UserId},{report.StartDate},{report.EndDate},{report.TotalNotifications},{report.ReadNotifications},{report.ReadNotifications}");
+                            return System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+                        case "pdf":
+                            // PDF formatında dışa aktarma
+                            // PDF oluşturma kodu buraya eklenecek
+                            throw new NotImplementedException("PDF export not implemented yet");
+                        default:
+                            throw new ArgumentException("Unsupported export format");
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -1163,7 +1178,7 @@ namespace WebApplication1.Services
                             await _emailService.SendEmailAsync(
                                 notification.UserId,
                                 $"New {notification.Type} Notification",
-                                notification.Content);
+                                notification.Content ?? "No content available");
                             break;
 
                         case NotificationChannel.Push:

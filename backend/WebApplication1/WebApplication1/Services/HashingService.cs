@@ -10,10 +10,17 @@ namespace WebApplication1.Services
 {
     public class TokenData
     {
-        public string UserId { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public DateTime CreatedAt { get; set; }
-        public DateTime ExpiresAt { get; set; }
+        public required string UserId { get; set; }
+        public required string Url { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public required DateTime ExpiresAt { get; set; }
+
+        public TokenData(string userId, string url, DateTime expiresAt)
+        {
+            UserId = userId;
+            Url = url;
+            ExpiresAt = expiresAt;
+        }
     }
 
     public class HashingOptions

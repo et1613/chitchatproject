@@ -6,22 +6,24 @@ using WebApplication1.Models.Users;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WebApplication1.Services;
 using WebApplication1.Models.Enums;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 namespace WebApplication1.Data
 {
-    public class ApplicationDbContext : DbContext
+    public class ApplicationDbContext : IdentityDbContext<User>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
             : base(options)
         {
         }
 
-        public DbSet<User> Users { get; set; }
+        public new DbSet<User> Users { get; set; }
         public DbSet<Message> Messages { get; set; }
         public DbSet<ChatRoom> ChatRooms { get; set; }
         public DbSet<FriendRequest> FriendRequests { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<NotificationSettings> NotificationSettings { get; set; }
+        public DbSet<NotificationPreferences> NotificationPreferences { get; set; }
         public DbSet<Attachment> Attachments { get; set; }
         public DbSet<MessageHistory> MessageHistories { get; set; }
         public DbSet<DeletedMessage> DeletedMessages { get; set; }
@@ -31,6 +33,14 @@ namespace WebApplication1.Data
         public DbSet<TokenBlacklist> TokenBlacklist { get; set; }
         public DbSet<UserSettings> UserSettings { get; set; }
         public DbSet<UserPreferences> UserPreferences { get; set; }
+        public DbSet<MessageBackup> MessageBackups { get; set; }
+        public DbSet<NotificationTemplate> NotificationTemplates { get; set; }
+        public DbSet<NotificationGroup> NotificationGroups { get; set; }
+        public DbSet<ScheduledNotification> ScheduledNotifications { get; set; }
+        public DbSet<SecurityEvent> SecurityEvents { get; set; }
+        public DbSet<Session> Sessions { get; set; }
+        public DbSet<BlockedIpAddress> BlockedIpAddresses { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -83,6 +93,11 @@ namespace WebApplication1.Data
                 entity.HasMany(c => c.Participants)
                     .WithMany(u => u.ChatRooms)
                     .UsingEntity(j => j.ToTable("ChatRoomParticipants"));
+
+                entity.HasOne(c => c.Admin)
+                    .WithMany()
+                    .HasForeignKey(c => c.AdminId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // Message configurations
@@ -104,6 +119,11 @@ namespace WebApplication1.Data
                     .WithMany(c => c.Messages)
                     .HasForeignKey(m => m.ChatRoomId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(m => m.ReplyToMessage)
+                    .WithMany(m => m.Replies)
+                    .HasForeignKey(m => m.ReplyToMessageId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // Notification configurations
@@ -118,6 +138,11 @@ namespace WebApplication1.Data
                 entity.HasOne(n => n.User)
                     .WithMany(u => u.Notifications)
                     .HasForeignKey(n => n.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(n => n.Message)
+                    .WithMany(m => m.Notifications)
+                    .HasForeignKey(n => n.MessageId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
@@ -183,6 +208,13 @@ namespace WebApplication1.Data
                 .HasForeignKey<NotificationSettings>(ns => ns.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // NotificationPreferences configurations
+            modelBuilder.Entity<NotificationPreferences>()
+                .HasOne(np => np.User)
+                .WithOne()
+                .HasForeignKey<NotificationPreferences>(np => np.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // StoredToken configurations
             modelBuilder.Entity<StoredToken>()
                 .HasIndex(t => t.Token)
@@ -202,6 +234,69 @@ namespace WebApplication1.Data
 
             modelBuilder.Entity<TokenBlacklist>()
                 .HasIndex(t => t.AddedAt);
+
+            // MessageHistory configurations
+            modelBuilder.Entity<MessageHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(h => h.Message)
+                    .WithMany(m => m.EditHistory)
+                    .HasForeignKey(h => h.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(h => h.EditedByUser)
+                    .WithMany()
+                    .HasForeignKey(h => h.EditedByUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // NotificationTemplate configurations
+            modelBuilder.Entity<NotificationTemplate>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.Type).IsRequired();
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.Parameters).HasColumnType("nvarchar(max)");
+            });
+
+            // MessageBackup configurations
+            modelBuilder.Entity<MessageBackup>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id)
+                    .ValueGeneratedOnAdd();
+            });
+
+            // Attachment configurations
+            modelBuilder.Entity<Attachment>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(a => a.Message)
+                    .WithMany(m => m.Attachments)
+                    .HasForeignKey(a => a.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure RefreshToken entity
+            modelBuilder.Entity<RefreshToken>(entity =>
+            {
+                entity.HasKey(e => e.Token);
+                entity.Property(e => e.Token).IsRequired();
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.ExpiryDate).IsRequired();
+                entity.Property(e => e.IsValid).IsRequired();
+            });
         }
+    }
+
+    public class RefreshToken
+    {
+        public string Token { get; set; }
+        public string UserId { get; set; }
+        public DateTime ExpiryDate { get; set; }
+        public bool IsValid { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 } 

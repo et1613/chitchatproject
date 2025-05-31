@@ -3,24 +3,8 @@
   "WorkspaceRootPath": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\fileservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\fileservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\connectionmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\connectionmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\digitalsignatureservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\digitalsignatureservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\encryptionservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\encryptionservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\storageservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\storageservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,76 +14,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 1,
           "Children": [
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "FileService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\FileService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\FileService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\FileService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\FileService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAFEBAAAUAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-05-29T15:59:27.856Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "EncryptionService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\EncryptionService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\EncryptionService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\EncryptionService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\EncryptionService.cs",
-              "ViewState": "AgIAANEAAAAAAAAAAAA6wOIAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-05-29T15:55:48.296Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "EmailService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\EmailService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\EmailService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\EmailService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\EmailService.cs",
-              "ViewState": "AgIAALoAAAAAAAAAAAAAALoAAAACAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-05-29T15:55:40.254Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "DigitalSignatureService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\DigitalSignatureService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\DigitalSignatureService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\DigitalSignatureService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\DigitalSignatureService.cs",
-              "ViewState": "AgIAAOYBAAAAAAAAAAAcwPYBAABTAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-05-29T15:40:54.891Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "ConnectionManager.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\ConnectionManager.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\ConnectionManager.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\ConnectionManager.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\ConnectionManager.cs",
-              "ViewState": "AgIAAGIBAAAAAAAAAAAcwHEBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-05-29T15:36:31.993Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "StorageService.cs",
+              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\StorageService.cs",
+              "RelativeDocumentMoniker": "WebApplication1\\Services\\StorageService.cs",
+              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\StorageService.cs",
+              "RelativeToolTip": "WebApplication1\\Services\\StorageService.cs",
+              "ViewState": "AgIAACAAAAAAAAAAAAAowCoAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-05-31T16:07:45.387Z",
+              "EditorCaption": ""
             }
           ]
         },

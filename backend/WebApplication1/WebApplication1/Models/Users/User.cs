@@ -7,25 +7,28 @@ using WebApplication1.Models.Messages;
 using WebApplication1.Models.Chat;
 using WebApplication1.Models.Notifications;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.AspNetCore.Identity;
 
 namespace WebApplication1.Models.Users
 {
-    public class User
+    public class User : IdentityUser
     {
-        [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-
-        [Required]
-        [StringLength(50)]
-        public required string UserName { get; set; }
-
-        [Required]
-        [EmailAddress]
-        [StringLength(100)]
-        public required string Email { get; set; }
-
-        [Required]
-        public required string PasswordHash { get; set; }
+        public new string Id { get; set; } = null!;
+        public string DisplayName { get; set; } = null!;
+        public string? ProfilePicture { get; set; }
+        public string? Bio { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+        public bool IsOnline { get; set; }
+        public string? Status { get; set; }
+        public new string UserName { get; set; } = null!;
+        public new string Email { get; set; } = null!;
+        public new string? PasswordHash { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool TwoFactorEnabled { get; set; }
+        public DateTime? LockoutEnd { get; set; }
+        public bool LockoutEnabled { get; set; }
+        public int AccessFailedCount { get; set; }
 
         [StringLength(100)]
         public string? DisplayName { get; set; }
@@ -47,7 +50,7 @@ namespace WebApplication1.Models.Users
 
         public bool IsVerified { get; set; } = false;
 
-        public DateTime? LastLoginAt { get; set; }
+        public NotificationSettings? NotificationSettings { get; set; }
 
         public virtual UserSettings? UserSettings { get; set; }
 

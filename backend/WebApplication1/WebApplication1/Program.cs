@@ -101,6 +101,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IFriendService, FriendService>();
 builder.Services.AddScoped<HashingService>();
+builder.Services.AddScoped<IEncryptionService, EncryptionService>();
 builder.Services.AddSingleton<ConnectionManager>();
 
 var app = builder.Build();

@@ -9,11 +9,10 @@ using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Users;
 using WebApplication1.Models.DTOs;
 using System.Threading.Tasks;
+using System.Text.Json;
 
 namespace WebApplication1.Models.Messages
 {
-    public enum MessageStatus { Sent, Delivered, Read }
-
     public class Message
     {
         [Key]
@@ -38,12 +37,27 @@ namespace WebApplication1.Models.Messages
         public bool IsEdited { get; set; } = false;
         public DateTime? EditedAt { get; set; }
         public MessageStatus Status { get; set; } = MessageStatus.Sent;
+        public MessageType Type { get; set; } = MessageType.Text;
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
         public string? DeletedByUserId { get; set; }
         public virtual User? DeletedByUser { get; set; }
         public string? DeleteReason { get; set; }
         public int EditCount { get; set; }
+
+        public bool IsPinned { get; set; } = false;
+        public DateTime? PinnedAt { get; set; }
+        public string? PinnedBy { get; set; }
+
+        [Column(TypeName = "nvarchar(max)")]
+        public string ReactionsJson { get; set; } = "{}";
+
+        [NotMapped]
+        public Dictionary<string, string> Reactions
+        {
+            get => JsonSerializer.Deserialize<Dictionary<string, string>>(ReactionsJson) ?? new Dictionary<string, string>();
+            set => ReactionsJson = JsonSerializer.Serialize(value);
+        }
 
         public List<string> HiddenForUsers { get; set; } = new();
         public IReadOnlyCollection<string> HiddenUsers => HiddenForUsers;
@@ -60,7 +74,7 @@ namespace WebApplication1.Models.Messages
                 throw new InvalidOperationException("Silinmiş mesaj okundu olarak işaretlenemez");
 
             IsRead = true;
-            Status = MessageStatus.Read;
+            Status = WebApplication1.Models.Enums.MessageStatus.Read;
             Timestamp = DateTime.UtcNow;
 
             // Notify sender that message was read  
@@ -175,7 +189,7 @@ namespace WebApplication1.Models.Messages
             return history.ToList();
         }
 
-        public void UpdateStatus(MessageStatus newStatus)
+        public void UpdateStatus(WebApplication1.Models.Enums.MessageStatus newStatus)
         {
             if (IsDeleted)
                 throw new InvalidOperationException("Silinmiş mesajın durumu güncellenemez");
@@ -183,7 +197,7 @@ namespace WebApplication1.Models.Messages
             var oldStatus = Status;
             Status = newStatus;
 
-            if (newStatus == MessageStatus.Read)
+            if (newStatus == WebApplication1.Models.Enums.MessageStatus.Read)
                 IsRead = true;
 
             // Notify sender about status change

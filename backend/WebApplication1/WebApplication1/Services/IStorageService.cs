@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Linq.Expressions;
 using System.IO.Compression;
+using WebApplication1.Models.Messages;
 
 namespace WebApplication1.Services
 {
@@ -232,5 +233,17 @@ namespace WebApplication1.Services
 
         // Yeni eklenen metod
         Task<bool> ScanFileForVirusesAsync(Stream fileStream);
+
+        Task<string> SaveFileAsync(byte[] fileData, string fileName, string contentType);
+        Task<byte[]> GetFileAsync(string filePath);
+        Task DeleteFileAsync(string filePath);
+        Task<string> SaveMessagesAsync(List<Message> messages);
+        Task<List<Message>> LoadMessagesAsync(string backupPath);
+        Task DeleteMessagesAsync(string backupPath);
+        Task<byte[]> ExportMessagesAsync(List<Message> messages, ExportFormat format);
+        Task<List<Message>> ImportMessagesAsync(byte[] data, ImportFormat format);
+        Task<bool> ValidateImportDataAsync(byte[] data, ImportFormat format);
+        Task<ImportProgress> GetImportProgressAsync(string importId);
+        Task<ExportProgress> GetExportProgressAsync(string exportId);
     }
 } 
