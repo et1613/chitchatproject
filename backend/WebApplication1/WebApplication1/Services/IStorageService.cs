@@ -81,7 +81,7 @@ namespace WebApplication1.Services
         Task<bool> DirectoryExistsAsync(string path);
 
         // Dosya metadata
-        Task<Dictionary<string, string>> GetFileMetadataAsync(string fileUrl);
+        Task<FileMetadata> GetFileMetadataAsync(string fileUrl);
         Task<bool> UpdateFileMetadataAsync(string fileUrl, Dictionary<string, string> metadata);
         Task<bool> RemoveFileMetadataAsync(string fileUrl, string key);
         Task<bool> ClearFileMetadataAsync(string fileUrl);

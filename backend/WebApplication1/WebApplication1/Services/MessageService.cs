@@ -64,20 +64,6 @@ namespace WebApplication1.Services
         Xml
     }
 
-    public class ImportProgress
-    {
-        public required string ImportId { get; set; }
-        public int TotalMessages { get; set; }
-        public int ProcessedMessages { get; set; }
-        public ImportStatus Status { get; set; } = ImportStatus.Pending;
-        public string? ErrorMessage { get; set; }
-
-        public ImportProgress(string importId)
-        {
-            ImportId = importId;
-        }
-    }
-
     public class ExportProgress
     {
         public required string ExportId { get; set; }
@@ -90,14 +76,6 @@ namespace WebApplication1.Services
         {
             ExportId = exportId;
         }
-    }
-
-    public enum ImportStatus
-    {
-        Pending,
-        Processing,
-        Completed,
-        Failed
     }
 
     public enum ExportStatus

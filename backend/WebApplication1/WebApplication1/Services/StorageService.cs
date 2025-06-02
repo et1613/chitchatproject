@@ -13,6 +13,12 @@ using System.Drawing.Imaging;
 using System.IO.Compression;
 using System.Threading;
 using Microsoft.Extensions.Caching.Memory;
+using WebApplication1.Models.Messages;
+using WebApplication1.Models.Enums;
+using WebApplication1.Models.Users;
+using WebApplication1.Models.Chat;
+using WebApplication1.Models.Notifications;
+using System.Text.Json;
 
 namespace WebApplication1.Services
 {
@@ -31,13 +37,13 @@ namespace WebApplication1.Services
 
     public class FileMetadata
     {
-        public string FileName { get; set; }
-        public string ContentType { get; set; }
+        public required string FileName { get; set; }
+        public required string ContentType { get; set; }
         public long FileSize { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime LastModified { get; set; }
-        public string Hash { get; set; }
-        public Dictionary<string, string> CustomMetadata { get; set; }
+        public required  string Hash { get; set; }
+        public required Dictionary<string, string> CustomMetadata { get; set; }
     }
 
     public class StorageService : IStorageService
@@ -67,6 +73,181 @@ namespace WebApplication1.Services
             }
         }
 
+        public async Task<Dictionary<string, long>> GetOptimizationSavingsAsync(string id)
+        {
+            // Gerçek bir hesaplama yerine örnek veri döndürüyoruz
+            var result = new Dictionary<string, long>
+        {
+            { "OriginalSize", 5000 },
+            { "OptimizedSize", 3200 },
+            { "Saved", 1800 }
+        };
+
+            return await Task.FromResult(result);
+        }
+
+        public async Task<FileMetadata> GetFileMetadataAsync(string fileUrl)
+        {
+            try
+            {
+                var fileName = Path.GetFileName(fileUrl);
+                var metadataPath = GetMetadataPath(fileName);
+
+                if (!File.Exists(metadataPath))
+                    throw new FileNotFoundException("Metadata file not found", metadataPath);
+
+                var json = await File.ReadAllTextAsync(metadataPath);
+                var metadata = JsonSerializer.Deserialize<FileMetadata>(json);
+
+                if (metadata == null)
+                    throw new InvalidOperationException("Failed to deserialize metadata");
+
+                // Validate required properties
+                if (string.IsNullOrEmpty(metadata.FileName))
+                    throw new InvalidOperationException("FileName is required");
+                if (string.IsNullOrEmpty(metadata.ContentType))
+                    throw new InvalidOperationException("ContentType is required");
+                if (string.IsNullOrEmpty(metadata.Hash))
+                    throw new InvalidOperationException("Hash is required");
+                if (metadata.CustomMetadata == null)
+                    throw new InvalidOperationException("CustomMetadata is required");
+
+                return metadata;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting file metadata: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<Dictionary<string, bool>> GetComplianceStatusAsync(string id)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(id);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", id);
+
+                var complianceStatus = new Dictionary<string, bool>
+                {
+                    { "GDPR", await CheckGDPRComplianceAsync(id) },
+                    { "HIPAA", await CheckHIPAAComplianceAsync(id) },
+                    { "DataRetention", true }, // Varsayılan olarak true
+                    { "DataEncryption", true } // Varsayılan olarak true
+                };
+
+                return complianceStatus;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting compliance status for file: {FileId}", id);
+                throw;
+            }
+        }
+
+
+        public async Task<List<Message>> LoadMessagesAsync(string id)
+        {
+            try
+            {
+                var backupPath = Path.Combine(_uploadDirectory, "messages", id);
+                if (!File.Exists(backupPath))
+                    throw new FileNotFoundException($"Message backup not found: {id}");
+
+                var json = await File.ReadAllTextAsync(backupPath);
+                var messages = System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
+                
+                if (messages == null)
+                    return new List<Message>();
+                    
+                _logger.LogInformation("Messages loaded successfully from: {BackupPath}", backupPath);
+                return messages;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading messages from: {BackupPath}", id);
+                throw;
+            }
+        }
+
+        public async Task<List<Message>> ImportMessagesAsync(byte[] data, ImportFormat format)
+        {
+            try
+            {
+                switch (format)
+                {
+                    case ImportFormat.Json:
+                        var json = System.Text.Encoding.UTF8.GetString(data);
+                        return System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
+                        
+                    case ImportFormat.Csv:
+                        var csv = System.Text.Encoding.UTF8.GetString(data);
+                        var lines = csv.Split('\n').Skip(1); // Skip header
+                        var messages = new List<Message>();
+                        
+                        foreach (var line in lines)
+                        {
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            
+                            var parts = line.Split(',');
+                            if (parts.Length >= 5)
+                            {
+                                // Create temporary User and ChatRoom objects for navigation properties
+                                var sender = new User
+                                {
+                                    Id = parts[3],
+                                    UserName = $"ImportedUser_{parts[3]}",
+                                    Email = $"imported_{parts[3]}@example.com",
+                                    CreatedAt = DateTime.UtcNow
+                                };
+
+                                var chatRoom = new ChatRoom
+                                {
+                                    Id = parts[4],
+                                    Name = $"ImportedChat_{parts[4]}",
+                                    CreatedAt = DateTime.UtcNow,
+                                    AdminId = parts[3],
+                                    Admin = sender
+                                };
+
+                                var message = new Message
+                                {
+                                    Id = parts[0],
+                                    Content = parts[1],
+                                    Timestamp = DateTime.Parse(parts[2]),
+                                    SenderId = parts[3],
+                                    Sender = sender,
+                                    ChatRoomId = parts[4],
+                                    ChatRoom = chatRoom,
+                                    IsRead = false,
+                                    IsEdited = false,
+                                    IsDeleted = false,
+                                    Status = MessageStatus.Sent,
+                                    Type = MessageType.Text,
+                                    EditCount = 0,
+                                    ReactionsJson = "{}",
+                                    HiddenForUsers = new List<string>(),
+                                    Attachments = new List<Attachment>(),
+                                    EditHistory = new List<MessageHistory>(),
+                                    Replies = new List<Message>(),
+                                    Notifications = new List<Notification>()
+                                };
+                                messages.Add(message);
+                            }
+                        }
+                        return messages;
+                        
+                    default:
+                        throw new ArgumentException($"Unsupported import format: {format}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error importing messages in format: {Format}", format);
+                throw;
+            }
+        }
         public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
         {
             try
@@ -258,28 +439,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<FileMetadata> GetFileMetadataAsync(string fileUrl)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(fileUrl))
-                    throw new ArgumentException("Dosya URL'i boş olamaz");
-
-                var fileName = Path.GetFileName(fileUrl);
-                var metadataPath = GetMetadataPath(fileName);
-
-                if (!File.Exists(metadataPath))
-                    throw new FileNotFoundException("Dosya metadata'sı bulunamadı", fileName);
-
-                var metadataJson = await File.ReadAllTextAsync(metadataPath);
-                return System.Text.Json.JsonSerializer.Deserialize<FileMetadata>(metadataJson);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Dosya metadata'sı alınırken hata oluştu: {FileUrl}", fileUrl);
-                throw new Exception($"Dosya metadata'sı alınırken hata oluştu: {ex.Message}", ex);
-            }
-        }
 
         public async Task<Stream> GetThumbnailAsync(string fileUrl)
         {
@@ -1087,7 +1246,7 @@ namespace WebApplication1.Services
             try
             {
                 var metadata = await GetFileMetadataAsync(fileUrl);
-                if (metadata == null || !metadata.CustomMetadata.ContainsKey("EncryptionKey"))
+                if (metadata == null || metadata.CustomMetadata == null || !metadata.CustomMetadata.ContainsKey("EncryptionKey"))
                     throw new InvalidOperationException("Encryption key not found in metadata");
 
                 return metadata.CustomMetadata["EncryptionKey"];
@@ -1337,7 +1496,7 @@ namespace WebApplication1.Services
                     using (var image = Image.FromFile(filePath))
                     {
                         var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, quality);
+                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
 
                         var codec = ImageCodecInfo.GetImageEncoders()
                             .FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
@@ -1423,14 +1582,16 @@ namespace WebApplication1.Services
         {
             try
             {
-                var fileName = Path.GetFileNameWithoutExtension(fileUrl);
-                var versionDirectory = Path.Combine(_uploadDirectory, "versions", fileName);
-                var versionPath = Path.Combine(versionDirectory, versionId);
+                var fileName = Path.GetFileName(fileUrl);
+                var versionPath = Path.Combine(_uploadDirectory, "versions", fileName, versionId);
 
                 if (!File.Exists(versionPath))
                     throw new FileNotFoundException("Version not found", versionId);
 
                 var metadata = await GetFileMetadataAsync($"/uploads/versions/{fileName}/{versionId}");
+                if (metadata == null)
+                    throw new InvalidOperationException("Version metadata not found");
+
                 return new Dictionary<string, object>
                 {
                     { "FileName", metadata.FileName },
@@ -1862,74 +2023,29 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, string>> GetFileMetadataAsync(string fileUrl)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var fileInfo = new FileInfo(filePath);
-                var metadata = new Dictionary<string, string>
-                {
-                    { "FileName", fileInfo.Name },
-                    { "ContentType", GetMimeType(filePath) },
-                    { "FileSize", fileInfo.Length.ToString() },
-                    { "CreatedAt", fileInfo.CreationTimeUtc.ToString("o") },
-                    { "LastModified", fileInfo.LastWriteTimeUtc.ToString("o") },
-                    { "Hash", await CalculateFileHashAsync(filePath) }
-                };
-
-                return metadata;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting file metadata: {FileUrl}", fileUrl);
-                throw;
-            }
-        }
-
         public async Task<bool> UpdateFileMetadataAsync(string fileUrl, Dictionary<string, string> metadata)
         {
             try
             {
                 var fileName = Path.GetFileName(fileUrl);
                 var metadataPath = GetMetadataPath(fileName);
+                var filePath = GetFilePathFromUrl(fileUrl);
 
-                if (!File.Exists(metadataPath))
+                if (!File.Exists(filePath))
+                    return false;
+
+                var fileMetadata = new FileMetadata
                 {
-                    // Create new metadata if it doesn't exist
-                    var filePath = GetFilePathFromUrl(fileUrl);
-                    if (!File.Exists(filePath))
-                        return false;
+                    FileName = fileName,
+                    ContentType = GetMimeType(filePath),
+                    FileSize = new FileInfo(filePath).Length,
+                    CreatedAt = DateTime.UtcNow,
+                    LastModified = DateTime.UtcNow,
+                    Hash = await CalculateFileHashAsync(filePath),
+                    CustomMetadata = metadata
+                };
 
-                    var newMetadata = new FileMetadata
-                    {
-                        FileName = fileName,
-                        ContentType = GetMimeType(filePath),
-                        FileSize = new FileInfo(filePath).Length,
-                        CreatedAt = DateTime.UtcNow,
-                        LastModified = DateTime.UtcNow,
-                        Hash = await CalculateFileHashAsync(filePath),
-                        CustomMetadata = metadata
-                    };
-
-                    await SaveMetadataAsync(fileName, newMetadata);
-                }
-                else
-                {
-                    // Update existing metadata
-                    var existingMetadata = await GetFileMetadataAsync(fileUrl);
-                    if (existingMetadata == null)
-                        return false;
-
-                    existingMetadata.CustomMetadata = metadata;
-                    existingMetadata.LastModified = DateTime.UtcNow;
-
-                    await SaveMetadataAsync(fileName, existingMetadata);
-                }
-
+                await SaveMetadataAsync(fileName, fileMetadata);
                 return true;
             }
             catch (Exception ex)
@@ -1944,19 +2060,28 @@ namespace WebApplication1.Services
             try
             {
                 var fileName = Path.GetFileName(fileUrl);
-                var metadataPath = GetMetadataPath(fileName);
+                var filePath = GetFilePathFromUrl(fileUrl);
 
-                if (!File.Exists(metadataPath))
+                if (!File.Exists(filePath))
                     return false;
 
-                var metadata = await GetFileMetadataAsync(fileUrl);
-                if (metadata == null || !metadata.CustomMetadata.ContainsKey(key))
+                var existingMetadata = await GetFileMetadataAsync(fileUrl);
+                if (existingMetadata == null || existingMetadata.CustomMetadata == null || !existingMetadata.CustomMetadata.ContainsKey(key))
                     return false;
 
-                metadata.CustomMetadata.Remove(key);
-                metadata.LastModified = DateTime.UtcNow;
+                var fileMetadata = new FileMetadata
+                {
+                    FileName = fileName,
+                    ContentType = GetMimeType(filePath),
+                    FileSize = new FileInfo(filePath).Length,
+                    CreatedAt = DateTime.UtcNow,
+                    LastModified = DateTime.UtcNow,
+                    Hash = await CalculateFileHashAsync(filePath),
+                    CustomMetadata = new Dictionary<string, string>(existingMetadata.CustomMetadata)
+                };
 
-                await SaveMetadataAsync(fileName, metadata);
+                fileMetadata.CustomMetadata.Remove(key);
+                await SaveMetadataAsync(fileName, fileMetadata);
                 return true;
             }
             catch (Exception ex)
@@ -1971,19 +2096,27 @@ namespace WebApplication1.Services
             try
             {
                 var fileName = Path.GetFileName(fileUrl);
-                var metadataPath = GetMetadataPath(fileName);
+                var filePath = GetFilePathFromUrl(fileUrl);
 
-                if (!File.Exists(metadataPath))
+                if (!File.Exists(filePath))
                     return false;
 
-                var metadata = await GetFileMetadataAsync(fileUrl);
-                if (metadata == null)
+                var existingMetadata = await GetFileMetadataAsync(fileUrl);
+                if (existingMetadata == null)
                     return false;
 
-                metadata.CustomMetadata.Clear();
-                metadata.LastModified = DateTime.UtcNow;
+                var fileMetadata = new FileMetadata
+                {
+                    FileName = fileName,
+                    ContentType = GetMimeType(filePath),
+                    FileSize = new FileInfo(filePath).Length,
+                    CreatedAt = DateTime.UtcNow,
+                    LastModified = DateTime.UtcNow,
+                    Hash = await CalculateFileHashAsync(filePath),
+                    CustomMetadata = new Dictionary<string, string>()
+                };
 
-                await SaveMetadataAsync(fileName, metadata);
+                await SaveMetadataAsync(fileName, fileMetadata);
                 return true;
             }
             catch (Exception ex)
@@ -2004,7 +2137,7 @@ namespace WebApplication1.Services
                     return false;
 
                 var metadata = await GetFileMetadataAsync(fileUrl);
-                return metadata != null && metadata.CustomMetadata.ContainsKey(key);
+                return metadata != null && metadata.CustomMetadata != null && metadata.CustomMetadata.ContainsKey(key);
             }
             catch (Exception ex)
             {
@@ -2613,36 +2746,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, object>> GetBackupMetadataAsync(string backupId)
-        {
-            try
-            {
-                var backupPath = Path.Combine(_uploadDirectory, "backups", backupId);
-                if (!File.Exists(backupPath))
-                    throw new FileNotFoundException("Backup not found", backupId);
-
-                var metadata = await GetFileMetadataAsync($"/uploads/backups/{backupId}");
-                if (metadata == null)
-                    throw new InvalidOperationException("Backup metadata not found");
-
-                return new Dictionary<string, object>
-                {
-                    { "FileName", metadata.FileName },
-                    { "ContentType", metadata.ContentType },
-                    { "FileSize", metadata.FileSize },
-                    { "CreatedAt", metadata.CreatedAt },
-                    { "LastModified", metadata.LastModified },
-                    { "Hash", metadata.Hash },
-                    { "CustomMetadata", metadata.CustomMetadata }
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting backup metadata: {BackupId}", backupId);
-                throw;
-            }
-        }
-
         public async Task<string> GenerateShareableLinkAsync(string fileUrl, TimeSpan? expiration = null)
         {
             try
@@ -3182,10 +3285,8 @@ namespace WebApplication1.Services
                 {
                     try
                     {
-                        if (!await DeleteFileAsync(fileUrl))
-                        {
-                            success = false;
-                        }
+                        await DeleteFileAsync(fileUrl);
+                        success = false;
                     }
                     catch (Exception ex)
                     {
@@ -3516,21 +3617,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<long> GetUserStorageQuotaAsync(string userId)
-        {
-            try
-            {
-                // TODO: Implement actual quota retrieval from configuration or database
-                // This is a placeholder implementation
-                return 1024 * 1024 * 1024; // 1GB default quota
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting user storage quota: {UserId}", userId);
-                throw;
-            }
-        }
-
         public async Task<bool> IsStorageQuotaExceededAsync(string userId)
         {
             try
@@ -3538,7 +3624,9 @@ namespace WebApplication1.Services
                 var quota = await GetUserStorageQuotaAsync(userId);
                 var usage = await GetStorageUsageByUserAsync();
                 
-                return usage.TryGetValue(userId, out var userUsage) && userUsage > quota;
+                if (quota.TryGetValue("TotalQuota", out var totalQuotaObj) && totalQuotaObj is long totalQuota)
+                    return usage.TryGetValue(userId, out var userUsage) && userUsage > totalQuota;
+                return false;
             }
             catch (Exception ex)
             {
@@ -3547,41 +3635,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, long>> GetStorageTrendsAsync(string directoryPath = null, TimeSpan timeRange)
-        {
-            try
-            {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, long>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var startDate = DateTime.UtcNow.Subtract(timeRange);
-                var trends = new Dictionary<string, long>();
-
-                foreach (var file in files)
-                {
-                    var fileInfo = new FileInfo(file);
-                    if (fileInfo.LastWriteTime >= startDate)
-                    {
-                        var dateKey = fileInfo.LastWriteTime.ToString("yyyy-MM-dd");
-                        if (!trends.ContainsKey(dateKey))
-                            trends[dateKey] = 0;
-                        trends[dateKey] += fileInfo.Length;
-                    }
-                }
-
-                return trends;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting storage trends: {DirectoryPath}", directoryPath);
-                throw;
-            }
-        }
 
         public async Task<string> ConvertImageFormatAsync(string fileUrl, string targetFormat, int? quality = null)
         {
@@ -3603,7 +3656,7 @@ namespace WebApplication1.Services
                     if (quality.HasValue)
                     {
                         var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, quality.Value);
+                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality.Value);
                         var codec = ImageCodecInfo.GetImageEncoders()
                             .FirstOrDefault(c => c.FormatID == format.Guid);
                         if (codec != null)
@@ -3817,7 +3870,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, object>> GetStorageTrendsAsync(string directoryPath = null, TimeSpan timeRange)
+        public async Task<Dictionary<string, object>> GetStorageTrendsAsync(string directoryPath = null, TimeSpan timeRange=default)
         {
             try
             {
@@ -3968,25 +4021,25 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, string>> GetFormatConversionOptionsAsync(string sourceFormat, string targetFormat)
+        public async Task<Dictionary<string, object>> GetFormatConversionOptionsAsync(string sourceFormat, string targetFormat)
         {
             try
             {
                 if (!await IsFormatConversionSupportedAsync(sourceFormat, targetFormat))
                     throw new ArgumentException($"Conversion from {sourceFormat} to {targetFormat} is not supported");
 
-                var options = new Dictionary<string, string>();
+                var options = new Dictionary<string, object>();
 
                 if (IsImageFile(sourceFormat) && IsImageFile(targetFormat))
                 {
                     options["Quality"] = "0-100";
-                    options["PreserveMetadata"] = "true/false";
-                    options["OptimizeForWeb"] = "true/false";
+                    options["PreserveMetadata"] = true;
+                    options["OptimizeForWeb"] = true;
                 }
                 else if (sourceFormat.StartsWith(".doc") || targetFormat.StartsWith(".doc"))
                 {
-                    options["PreserveFormatting"] = "true/false";
-                    options["IncludeImages"] = "true/false";
+                    options["PreserveFormatting"] = true;
+                    options["IncludeImages"] = true;
                     options["PageRange"] = "e.g., 1-5,7,9-12";
                 }
                 else if (sourceFormat.StartsWith(".mp") || targetFormat.StartsWith(".mp"))
@@ -4032,7 +4085,7 @@ namespace WebApplication1.Services
                     using (var resized = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
                     {
                         var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, quality);
+                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
 
                         var codec = ImageCodecInfo.GetImageEncoders()
                             .FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
@@ -4053,6 +4106,1353 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error optimizing image for web: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<string> OptimizeVideoForWebAsync(string fileUrl, int maxWidth, int maxHeight, int bitrate)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var contentType = GetMimeType(filePath);
+                if (!contentType.StartsWith("video/"))
+                    throw new ArgumentException("File is not a video");
+
+                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp4");
+
+                // TODO: Implement actual video optimization
+                // This is a placeholder implementation
+                // In a real application, you would:
+                // 1. Use a video processing library (e.g., FFmpeg)
+                // 2. Resize the video to maxWidth x maxHeight
+                // 3. Compress the video to the specified bitrate
+                // 4. Save the optimized video
+
+                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp4";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error optimizing video for web: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<string> OptimizeAudioForWebAsync(string fileUrl, int bitrate)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var contentType = GetMimeType(filePath);
+                if (!contentType.StartsWith("audio/"))
+                    throw new ArgumentException("File is not an audio file");
+
+                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp3");
+
+                // TODO: Implement actual audio optimization
+                // This is a placeholder implementation
+                // In a real application, you would:
+                // 1. Use an audio processing library
+                // 2. Compress the audio to the specified bitrate
+                // 3. Save the optimized audio
+
+                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp3";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error optimizing audio for web: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<string> OptimizeDocumentForWebAsync(string fileUrl, bool compressImages)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var contentType = GetMimeType(filePath);
+                if (!contentType.StartsWith("application/") && !contentType.StartsWith("text/"))
+                    throw new ArgumentException("File is not a document");
+
+                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}{Path.GetExtension(filePath)}");
+
+                // TODO: Implement actual document optimization
+                // This is a placeholder implementation
+                // In a real application, you would:
+                // 1. Use a document processing library
+                // 2. Compress images if requested
+                // 3. Optimize the document for web viewing
+                // 4. Save the optimized document
+
+                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}{Path.GetExtension(filePath)}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error optimizing document for web: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetOptimizationStatisticsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var originalSize = new FileInfo(filePath).Length;
+                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileName(filePath)}");
+                var optimizedSize = File.Exists(optimizedPath) ? new FileInfo(optimizedPath).Length : originalSize;
+
+                var stats = new Dictionary<string, object>
+                {
+                    { "OriginalSize", originalSize },
+                    { "OptimizedSize", optimizedSize },
+                    { "SavingsPercentage", originalSize > 0 ? (double)(originalSize - optimizedSize) / originalSize * 100 : 0 },
+                    { "LastOptimized", File.Exists(optimizedPath) ? new FileInfo(optimizedPath).LastWriteTime : null }
+                };
+
+                return stats;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting optimization statistics: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<bool> IsOptimizationNeededAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    return false;
+
+                var fileInfo = new FileInfo(filePath);
+                var contentType = GetMimeType(filePath);
+
+                // Check if file is too large
+                if (fileInfo.Length > 5 * 1024 * 1024) // 5MB
+                    return true;
+
+                // Check if file is an image and needs optimization
+                if (IsImageFile(Path.GetExtension(filePath)))
+                {
+                    using (var image = Image.FromFile(filePath))
+                    {
+                        if (image.Width > 1920 || image.Height > 1080)
+                            return true;
+                    }
+                }
+
+                // Check if file is a video and needs optimization
+                if (contentType.StartsWith("video/"))
+                {
+                    // TODO: Implement video size/quality check
+                    return true;
+                }
+
+                // Check if file is an audio file and needs optimization
+                if (contentType.StartsWith("audio/"))
+                {
+                    // TODO: Implement audio quality check
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking if optimization is needed: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<bool> ValidateFileSignatureAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    return false;
+
+                var extension = Path.GetExtension(filePath).ToLowerInvariant();
+                var contentType = GetMimeType(filePath);
+
+                // Read file signature (first few bytes)
+                using (var stream = new FileStream(filePath, FileMode.Open))
+                {
+                    var signature = new byte[8];
+                    var bytesRead = await stream.ReadAsync(signature, 0, signature.Length);
+
+                    // Check common file signatures
+                    switch (extension)
+                    {
+                        case ".jpg":
+                        case ".jpeg":
+                            return signature[0] == 0xFF && signature[1] == 0xD8;
+                        case ".png":
+                            return signature[0] == 0x89 && signature[1] == 0x50 && signature[2] == 0x4E && signature[3] == 0x47;
+                        case ".gif":
+                            return signature[0] == 0x47 && signature[1] == 0x49 && signature[2] == 0x46;
+                        case ".pdf":
+                            return signature[0] == 0x25 && signature[1] == 0x50 && signature[2] == 0x44 && signature[3] == 0x46;
+                        default:
+                            return true; // Unknown file type, assume valid
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating file signature: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<bool> ValidateFileChecksumAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    return false;
+
+                var metadata = await GetFileMetadataAsync(fileUrl);
+                if (metadata == null)
+                    return false;
+
+                var currentHash = await CalculateFileHashAsync(filePath);
+                return currentHash == metadata.Hash;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating file checksum: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<bool> ValidateFilePermissionsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    return false;
+
+                var fileInfo = new FileInfo(filePath);
+                var permissions = await GetFilePermissionsAsync(fileUrl);
+
+                // Check if file has basic read permissions
+                try
+                {
+                    using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                    {
+                        // File is readable
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+
+                // Check if file has required security permissions
+                if (!permissions.ContainsKey("security") || permissions["security"] != "granted")
+                    return false;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating file permissions: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetFileSecurityInfoAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var fileInfo = new FileInfo(filePath);
+                var permissions = await GetFilePermissionsAsync(fileUrl);
+                var metadata = await GetFileMetadataAsync(fileUrl);
+
+                var securityInfo = new Dictionary<string, object>
+                {
+                    { "FileName", fileInfo.Name },
+                    { "FileSize", fileInfo.Length },
+                    { "CreatedAt", fileInfo.CreationTimeUtc },
+                    { "LastModified", fileInfo.LastWriteTimeUtc },
+                    { "LastAccessed", fileInfo.LastAccessTimeUtc },
+                    { "IsReadOnly", fileInfo.IsReadOnly },
+                    { "Permissions", permissions },
+                    { "Metadata", metadata?.CustomMetadata },
+                    { "IsEncrypted", await IsFileEncryptedAsync(fileUrl) },
+                    { "IsCompressed", await IsFileCompressedAsync(fileUrl) },
+                    { "HasValidSignature", await ValidateFileSignatureAsync(fileUrl) },
+                    { "HasValidChecksum", await ValidateFileChecksumAsync(fileUrl) }
+                };
+
+                return securityInfo;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting file security info: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<bool> IsFileSecureAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // Check file permissions
+                var fileInfo = new FileInfo(filePath);
+                var permissions = fileInfo.GetAccessControl();
+                
+                // Check if file is encrypted
+                var isEncrypted = await IsFileEncryptedAsync(fileUrl);
+                
+                // Check if file has been scanned for viruses
+                var isVirusFree = await IsFileVirusFreeAsync(fileUrl);
+
+                return permissions != null && isEncrypted && isVirusFree;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking file security for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<bool> IsFileCompliantAsync(string fileUrl, string complianceStandard)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // Implement compliance checks based on the standard
+                switch (complianceStandard.ToLower())
+                {
+                    case "gdpr":
+                        return await CheckGDPRComplianceAsync(fileUrl);
+                    case "hipaa":
+                        return await CheckHIPAAComplianceAsync(fileUrl);
+                    default:
+                        throw new ArgumentException($"Unsupported compliance standard: {complianceStandard}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking file compliance for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<List<Dictionary<string, object>>> GetFileOperationHistoryAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would query a database
+                return new List<Dictionary<string, object>>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file operation history for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetFileAuditTrailAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would query an audit log database
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file audit trail for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> LogFileOperationAsync(string fileUrl, string operation, string userId)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would log to a database
+                _logger.LogInformation($"File operation logged: {operation} on {fileUrl} by {userId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error logging file operation for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<List<Dictionary<string, object>>> GetRecentOperationsAsync(string fileUrl, int count)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would query recent operations
+                return new List<Dictionary<string, object>>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting recent operations for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<DateTime?> GetLastSyncTimeAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get last sync time
+                return DateTime.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting last sync time for: {fileUrl}");
+                return null;
+            }
+        }
+
+        public async Task<bool> ScheduleBackupAsync(string fileUrl, TimeSpan interval)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would schedule a backup
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error scheduling backup for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<bool> CancelScheduledBackupAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would cancel scheduled backup
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error canceling scheduled backup for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetBackupScheduleAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get backup schedule
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting backup schedule for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> IsBackupScheduledAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would check if backup is scheduled
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking backup schedule for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetFilePerformanceMetricsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get performance metrics
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file performance metrics for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetStoragePerformanceMetricsAsync(string directoryPath = null)
+        {
+            try
+            {
+                // In a real implementation, this would get storage performance metrics
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting storage performance metrics");
+                throw;
+            }
+        }
+
+        public async Task<bool> MonitorFileAccessAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would start monitoring file access
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error monitoring file access for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetAccessMetricsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get access metrics
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting access metrics for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> IsPerformanceOptimalAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would check if performance is optimal
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking performance optimality for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetPerformanceRecommendationsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get performance recommendations
+                return new Dictionary<string, object>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting performance recommendations for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> AddFileTagAsync(string fileUrl, string tag)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would add a tag
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error adding file tag for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveFileTagAsync(string fileUrl, string tag)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would remove a tag
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error removing file tag for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<List<string>> GetFileTagsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get file tags
+                return new List<string>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file tags for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> CategorizeFileAsync(string fileUrl, string category)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would categorize the file
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error categorizing file: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<string> GetFileCategoryAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get file category
+                return string.Empty;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file category for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> ShareFileWithUserAsync(string fileUrl, string userId, string permission)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would share the file with a user
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error sharing file with user: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<bool> ShareFileWithGroupAsync(string fileUrl, string groupId, string permission)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would share the file with a group
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error sharing file with group: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<List<string>> GetSharedWithUsersAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get users the file is shared with
+                return new List<string>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting shared users for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<List<string>> GetSharedWithGroupsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get groups the file is shared with
+                return new List<string>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting shared groups for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> RevokeAllSharesAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would revoke all shares
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error revoking all shares for: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, string>> GetSharePermissionsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would get share permissions
+                return new Dictionary<string, string>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting share permissions for: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<bool> IsFileSharedAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                // In a real implementation, this would check if file is shared
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking if file is shared: {fileUrl}");
+                return false;
+            }
+        }
+
+        public async Task<byte[]> GetFileAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                {
+                    throw new FileNotFoundException($"File not found: {fileUrl}");
+                }
+
+                return await File.ReadAllBytesAsync(filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting file: {fileUrl}");
+                throw;
+            }
+        }
+
+        public async Task<byte[]> ExportMessagesAsync(List<Message> messages, ExportFormat format)
+        {
+            try
+            {
+                switch (format)
+                {
+                    case ExportFormat.Json:
+                        var json = System.Text.Json.JsonSerializer.Serialize(messages);
+                        return System.Text.Encoding.UTF8.GetBytes(json);
+                        
+                    case ExportFormat.Csv:
+                        var csv = new StringBuilder();
+                        csv.AppendLine("Id,Content,Timestamp,SenderId,ChatRoomId");
+                        foreach (var message in messages)
+                        {
+                            csv.AppendLine($"{message.Id},{message.Content},{message.Timestamp},{message.SenderId},{message.ChatRoomId}");
+                        }
+                        return System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+                        
+                    default:
+                        throw new ArgumentException($"Unsupported export format: {format}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error exporting messages in format: {format}");
+                throw;
+            }
+        }
+        public async Task<ImportProgress> GetImportProgressAsync(string importId)
+        {
+            try
+            {
+                var cacheKey = $"import_progress_{importId}";
+                if (!_cache.TryGetValue(cacheKey, out ImportProgress progress))
+                {
+                    progress = new ImportProgress(importId)
+                    {
+                        Status = ImportStatus.NotFound,
+                        TotalMessages = 0,
+                        ProcessedMessages = 0,
+                        SuccessfulImports = 0,
+                        FailedImports = 0,
+                        ErrorMessage = "Import not found or expired"
+                    };
+                }
+
+                // Calculate progress percentage
+                if (progress.TotalMessages > 0)
+                {
+                    progress.ProgressPercentage = (int)((double)progress.ProcessedMessages / progress.TotalMessages * 100);
+                }
+
+                // Calculate estimated time remaining
+                if (progress.ProcessedMessages > 0 && progress.Status == ImportStatus.InProgress)
+                {
+                    var elapsedTime = DateTime.UtcNow - progress.StartTime;
+                    var messagesPerSecond = progress.ProcessedMessages / elapsedTime.TotalSeconds;
+                    var remainingMessages = progress.TotalMessages - progress.ProcessedMessages;
+                    progress.EstimatedTimeRemaining = TimeSpan.FromSeconds(remainingMessages / messagesPerSecond);
+                }
+
+                // Update status if import is complete
+                if (progress.ProcessedMessages >= progress.TotalMessages && progress.Status == ImportStatus.InProgress)
+                {
+                    progress.Status = progress.FailedImports > 0 ? ImportStatus.CompletedWithErrors : ImportStatus.Completed;
+                    progress.EndTime = DateTime.UtcNow;
+                }
+
+                // Cache the updated progress
+                _cache.Set(cacheKey, progress, TimeSpan.FromMinutes(30));
+
+                return progress;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting import progress: {ImportId}", importId);
+                throw;
+            }
+        }
+
+        public async Task<ExportProgress> GetExportProgressAsync(string exportId)
+        {
+            try
+            {
+                var cacheKey = $"export_progress_{exportId}";
+                if (!_cache.TryGetValue(cacheKey, out ExportProgress progress))
+                {
+                    progress = new ExportProgress(exportId)
+                    {
+                        ExportId = exportId,
+                        TotalMessages = 0,
+                        ProcessedMessages = 0,
+                        Status = ExportStatus.Pending,
+                        ErrorMessage = "Export not found or expired"
+                    };
+                }
+
+                // Cache the updated progress
+                _cache.Set(cacheKey, progress, TimeSpan.FromMinutes(30));
+
+                return progress;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting export progress: {ExportId}", exportId);
+                throw;
+            }
+        }
+
+        private async Task<bool> CheckGDPRComplianceAsync(string fileUrl)
+        {
+            // Implement GDPR compliance checks
+            return true;
+        }
+
+        private async Task<bool> CheckHIPAAComplianceAsync(string fileUrl)
+        {
+            // Implement HIPAA compliance checks
+            return true;
+        }
+
+        private double CalculateComplianceScore(string fileUrl)
+        {
+            // Implement compliance score calculation
+            return 1.0;
+        }
+
+        public async Task<Dictionary<string, int>> GetOperationStatisticsAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var stats = new Dictionary<string, int>();
+                var operations = await GetFileOperationHistoryAsync(fileUrl);
+
+                // Group operations by type and count them
+                foreach (var operation in operations)
+                {
+                    var opType = operation["OperationType"].ToString();
+                    if (!stats.ContainsKey(opType))
+                        stats[opType] = 0;
+                    stats[opType]++;
+                }
+
+                // Add file access statistics
+                var fileInfo = new FileInfo(filePath);
+                stats["TotalAccessCount"] = operations.Count;
+                stats["LastAccessDays"] = (int)(DateTime.UtcNow - fileInfo.LastAccessTimeUtc).TotalDays;
+                stats["LastModifiedDays"] = (int)(DateTime.UtcNow - fileInfo.LastWriteTimeUtc).TotalDays;
+
+                return stats;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting operation statistics for file: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<bool> ExportAuditLogAsync(string fileUrl, string format)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                // In a real implementation, this would export audit log
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting audit log: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<bool> SyncFileAsync(string sourceUrl, string targetUrl)
+        {
+            try
+            {
+                var sourcePath = GetFilePathFromUrl(sourceUrl);
+                var targetPath = GetFilePathFromUrl(targetUrl);
+
+                if (!File.Exists(sourcePath))
+                    throw new FileNotFoundException("Source file not found", sourceUrl);
+
+                // In a real implementation, this would sync files
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing file: {SourceUrl} -> {TargetUrl}", sourceUrl, targetUrl);
+                return false;
+            }
+        }
+
+        public async Task<bool> IsFileSyncedAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                // In a real implementation, this would check sync status
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking file sync status: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, List<string>>> GetCategoryDistributionAsync(string? directory = null)
+        {
+            try
+            {
+                var path = string.IsNullOrEmpty(directory)
+                    ? _uploadDirectory
+                    : Path.Combine(_uploadDirectory, directory.TrimStart('/'));
+
+                if (!Directory.Exists(path))
+                    return new Dictionary<string, List<string>>();
+
+                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                var distribution = new Dictionary<string, List<string>>();
+
+                foreach (var file in files)
+                {
+                    var extension = Path.GetExtension(file).ToLower();
+                    var category = GetFileCategory(extension);
+
+                    if (!distribution.ContainsKey(category))
+                        distribution[category] = new List<string>();
+
+                    distribution[category].Add(Path.GetRelativePath(_uploadDirectory, file));
+                }
+
+                return distribution;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting category distribution: {Directory}", directory);
+                throw;
+            }
+        }
+
+        private string GetFileCategory(string extension)
+        {
+            return extension switch
+            {
+                // Documents
+                ".doc" or ".docx" or ".pdf" or ".txt" or ".rtf" or ".odt" or ".xls" or ".xlsx" or ".ppt" or ".pptx" => "Documents",
+                
+                // Images
+                ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".tiff" or ".webp" or ".svg" => "Images",
+                
+                // Videos
+                ".mp4" or ".avi" or ".mov" or ".wmv" or ".flv" or ".mkv" or ".webm" => "Videos",
+                
+                // Audio
+                ".mp3" or ".wav" or ".ogg" or ".flac" or ".m4a" or ".aac" => "Audio",
+                
+                // Archives
+                ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "Archives",
+                
+                // Others
+                _ => "Others"
+            };
+        }
+
+        public async Task<bool> AutoCategorizeFileAsync(string fileUrl)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                // In a real implementation, this would auto-categorize the file
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error auto-categorizing file: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<string> SaveFileAsync(byte[] fileData, string fileName, string contentType)
+        {
+            try
+            {
+                var filePath = Path.Combine(_uploadDirectory, SanitizeFileName(fileName));
+                await File.WriteAllBytesAsync(filePath, fileData);
+                return $"/uploads/{Path.GetRelativePath(_uploadDirectory, filePath)}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving file: {FileName}", fileName);
+                throw;
+            }
+        }
+
+        public async Task DeleteFileAsync(string filePath)
+        {
+            try
+            {
+                var fullPath = GetFilePathFromUrl(filePath);
+                if (!File.Exists(fullPath))
+                    throw new FileNotFoundException("File not found", filePath);
+
+                File.Delete(fullPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting file: {FilePath}", filePath);
+                throw;
+            }
+        }
+
+        public async Task<string> SaveMessagesAsync(List<Message> messages)
+        {
+            try
+            {
+                if (messages == null || !messages.Any())
+                    throw new ArgumentException("Messages list cannot be null or empty");
+
+                var messagesDir = Path.Combine(_uploadDirectory, "messages");
+                Directory.CreateDirectory(messagesDir);
+
+                var fileName = $"messages_{DateTime.UtcNow:yyyyMMddHHmmss}.json";
+                var filePath = Path.Combine(messagesDir, fileName);
+
+                var options = new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(messages, options);
+                await File.WriteAllTextAsync(filePath, json);
+
+                _logger.LogInformation("Messages saved successfully to: {FilePath}", filePath);
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving messages");
+                throw;
+            }
+        }
+
+        public async Task DeleteMessagesAsync(string backupPath)
+        {
+            try
+            {
+                // In a real implementation, this would delete messages
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting messages from: {BackupPath}", backupPath);
+                throw;
+            }
+        }
+
+        public async Task<bool> ValidateImportDataAsync(byte[] data, ImportFormat format)
+        {
+            try
+            {
+                switch (format)
+                {
+                    case ImportFormat.Json:
+                        var json = System.Text.Encoding.UTF8.GetString(data);
+                        var jsonMessages = System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
+                        return jsonMessages != null;
+                    case ImportFormat.Xml:
+                        using (var stream = new MemoryStream(data))
+                        {
+                            var xml = new System.Xml.Serialization.XmlSerializer(typeof(List<Message>));
+                            var xmlMessages = (List<Message>)xml.Deserialize(stream);
+                            return xmlMessages != null;
+                        }
+                    default:
+                        throw new ArgumentException($"Unsupported import format: {format}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating import data");
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, object>> GetBackupMetadataAsync(string backupId)
+        {
+            try
+            {
+                var backupPath = Path.Combine(_uploadDirectory, "backups", backupId);
+                if (!File.Exists(backupPath))
+                    throw new FileNotFoundException("Backup not found", backupId);
+
+                var metadata = await GetFileMetadataAsync($"/uploads/backups/{backupId}");
+                if (metadata == null)
+                    throw new InvalidOperationException("Backup metadata not found");
+
+                return new Dictionary<string, object>
+                {
+                    { "FileName", metadata.FileName },
+                    { "ContentType", metadata.ContentType },
+                    { "FileSize", metadata.FileSize },
+                    { "CreatedAt", metadata.CreatedAt },
+                    { "LastModified", metadata.LastModified },
+                    { "Hash", metadata.Hash },
+                    { "CustomMetadata", metadata.CustomMetadata }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting backup metadata: {BackupId}", backupId);
                 throw;
             }
         }

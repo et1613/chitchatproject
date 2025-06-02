@@ -17,7 +17,6 @@ namespace WebApplication1.Models.Users
         public string DisplayName { get; set; } = null!;
         public string? ProfilePicture { get; set; }
         public string? Bio { get; set; }
-        public DateTime CreatedAt { get; set; }
         public DateTime? LastLoginAt { get; set; }
         public bool IsOnline { get; set; }
         public string? Status { get; set; }
