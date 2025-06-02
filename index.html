@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -9,67 +10,88 @@
 </head>
 <body class="bg-light">
   <div class="container text-center mt-5">
-    <h1 class="mb-4 text-primary">ChitChat</h1>
+    <h1 class="mb-4 text-primary">ChitChat - Giriş Yap</h1>
     <div class="card mx-auto p-4" style="max-width: 400px;">
       <input type="email" id="email" class="form-control mb-3" placeholder="E-posta">
-      <input type="password" id="password" class="form-control mb-3" placeholder="Şifre">
+
+      <!-- Şifre inputu + Göster/Gizle butonu -->
+      <div class="mb-3 position-relative">
+        <input type="password" id="password" class="form-control" placeholder="Şifre">
+        <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-50 end-0 translate-middle-y me-2"
+                onclick="togglePassword('password', this)">👁</button>
+      </div>
+
       <button class="btn btn-primary w-100 mb-2" onclick="login()">Giriş Yap</button>
       <a href="register.html" class="btn btn-outline-secondary w-100">Kayıt Ol</a>
       <div id="status" class="alert d-none mt-3" role="alert"></div>
-
     </div>
   </div>
 
   <script>
-   async function login() {
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
-
-  if (!email || !password) {
-  const statusBox = document.getElementById("status");
-  statusBox.className = "alert alert-danger";
-  statusBox.innerText = "E-posta ve şifre girin.";
-  statusBox.classList.remove("d-none");
-  return;
-}
-
-  try {
-    const res = await fetch("https://41f0-85-101-7-31.ngrok-free.app/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || "Giriş başarısız.");
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁";
+      }
     }
 
-    const data = await res.json();
-    localStorage.setItem("token", data.token);
-localStorage.setItem("chitchat_user", JSON.stringify(data.user));
+    async function login() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const statusBox = document.getElementById("status");
+      const btn = document.querySelector("button.btn-primary");
 
+      if (!email || !password) {
+        statusBox.className = "alert alert-danger";
+        statusBox.innerText = "E-posta ve şifre girin.";
+        statusBox.classList.remove("d-none");
+        return;
+      }
 
+      btn.disabled = true;
+      btn.innerText = "Giriş yapılıyor...";
 
-//Başarı mesajı göster
-const statusBox = document.getElementById("status");
-statusBox.className = "alert alert-success";
-statusBox.innerText = "✅ Giriş başarılı. Yönlendiriliyorsunuz...";
-statusBox.classList.remove("d-none");
+      try {
+        const res = await fetch("https://f0dd-85-101-157-155.ngrok-free.app/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
 
-// Sonra yönlendir
-setTimeout(() => {
-  window.location.href = "chat.html";
-}, 1500);
+        if (!res.ok) {
+          let errMsg = "Giriş başarısız.";
+          try {
+            const err = await res.json();
+            errMsg = err.message || errMsg;
+          } catch (_) {}
+          throw new Error(errMsg);
+        }
 
-  } catch (err) {
-    const statusBox = document.getElementById("status");
-statusBox.className = "alert alert-danger mt-3";
-statusBox.innerText = `❌ ${err.message}`;
-statusBox.classList.remove("d-none");
+        const data = await res.json();
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("chitchat_user", JSON.stringify(data.user));
 
-  }
-}
+        statusBox.className = "alert alert-success";
+        statusBox.innerText = "✅ Giriş başarılı. Yönlendiriliyorsunuz...";
+        statusBox.classList.remove("d-none");
+
+        setTimeout(() => {
+          window.location.href = "chat.html";
+        }, 1500);
+
+      } catch (err) {
+        statusBox.className = "alert alert-danger mt-3";
+        statusBox.innerText = `❌ ${err.message}`;
+        statusBox.classList.remove("d-none");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Giriş Yap";
+      }
+    }
   </script>
 </body>
 </html>

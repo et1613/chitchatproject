@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>ChitChat Admin Paneli</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+</head>
+<body class="bg-light">
+  <div class="container mt-5">
+    <h2 class="mb-4 text-center text-primary">Admin Paneli</h2>
+<div class="input-group mb-3">
+  <input type="text" class="form-control" id="userSearch" placeholder="İsim veya e-posta ara...">
+  <button class="btn btn-outline-secondary" onclick="loadUsers()">Temizle</button>
+</div>
+
+    <div id="adminContent" class="card p-4">
+        <div class="row text-center mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card bg-primary text-white p-3">
+      <h4 id="totalCount">0</h4>
+      <small>Toplam Kullanıcı</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card bg-info text-white p-3">
+      <h4 id="maleCount">0</h4>
+      <small>Erkek</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6 mt-3 mt-md-0">
+    <div class="card bg-warning text-white p-3">
+      <h4 id="femaleCount">0</h4>
+      <small>Kadın</small>
+    </div>
+  </div>
+  <div class="col-md-3 col-6 mt-3 mt-md-0">
+    <div class="card bg-success text-white p-3">
+      <h4 id="verifiedCount">0</h4>
+      <small>Doğrulanmış</small>
+    </div>
+  </div>
+</div>
+
+      <h5 class="mb-3">👥 Kayıtlı Kullanıcılar</h5>
+      <table class="table table-bordered table-striped">
+        <thead>
+          <tr>
+            <th>İsim</th>
+            <th>E-posta</th>
+            <th>Cinsiyet</th>
+            <th>Durum</th>
+             <th>Son Giriş</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <!-- JS ile doldurulacak -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+
+  async function deleteUser(email) {
+    if (!confirm(`❗ ${email} adresli kullanıcıyı silmek istediğinize emin misiniz?`)) return;
+
+    try {
+      const res = await fetch(`https://f0dd-85-101-157-155.ngrok-free.app/api/users/${encodeURIComponent(email)}`, {
+        method: "DELETE"
+      });
+
+      if (!res.ok) throw new Error("Silme işlemi başarısız.");
+
+      alert("✅ Kullanıcı silindi.");
+      loadUsers(); // listeyi yenile
+    } catch (err) {
+      alert("❌ Hata: " + err.message);
+    }
+  }
+
+    async function loadUsers() {
+  try {
+    const res = await fetch("https://f0dd-85-101-157-155.ngrok-free.app/api/users");
+    const users = await res.json();
+
+    // 🔍 Arama kutusundan filtre
+    const search = document.getElementById("userSearch").value.trim().toLowerCase();
+    const filtered = search
+      ? users.filter(u =>
+          u.name.toLowerCase().includes(search) ||
+          u.email.toLowerCase().includes(search)
+        )
+      : users;
+
+    // İstatistik kutularını güncelle
+    document.getElementById("totalCount").innerText = users.length;
+    document.getElementById("maleCount").innerText = users.filter(u => u.gender === "male").length;
+    document.getElementById("femaleCount").innerText = users.filter(u => u.gender === "female").length;
+    document.getElementById("verifiedCount").innerText = users.filter(u => u.avatar).length;
+
+    const tbody = document.getElementById("userTableBody");
+    tbody.innerHTML = "";
+
+    filtered.forEach(u => {
+      const row = `
+        <tr>
+          <td>${u.name}</td>
+          <td>${u.email}</td>
+          <td>${u.gender === "male" ? "Erkek" : "Kadın"}</td>
+          <td>
+            <span class="badge bg-${u.avatar ? 'success' : 'secondary'}">${u.avatar ? 'Profil Var' : 'Yok'}</span>
+            <button class="btn btn-sm btn-danger ms-2" onclick="deleteUser('${u.email}')">Sil</button>
+          </td>
+           <td>${u.lastLogin || "-"}</td>
+        </tr>
+      `;
+      tbody.innerHTML += row;
+    });
+
+  } catch (err) {
+    console.error("Kullanıcılar alınamadı:", err);
+  }
+}
+
+ // ✅ Arama kutusu yazıldıkça filtreleme için
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("userSearch").addEventListener("input", loadUsers);
+  });
+
+  function clearSearch() {
+    document.getElementById("userSearch").value = "";
+    loadUsers();
+  }
+
+    window.onload = loadUsers;
+
+
+    
+  </script>
+</body>
+</html>
