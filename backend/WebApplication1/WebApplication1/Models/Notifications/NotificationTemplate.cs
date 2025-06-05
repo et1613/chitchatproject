@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using WebApplication1.Models.Enums;
 using WebApplication1.Services;
 
 namespace WebApplication1.Models.Notifications

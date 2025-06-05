@@ -25,25 +25,95 @@ namespace WebApplication1.Controllers
             _logger = logger;
         }
 
-        // Temel Bildirim İşlemleri
         [HttpPost]
-        public async Task<IActionResult> CreateNotification([FromBody] CreateNotificationRequest request)
+        public async Task<IActionResult> SendNotification([FromBody] SendNotificationRequest request)
         {
             try
             {
-                var notification = await _notificationService.CreateNotificationAsync(
-                    userId: request.UserId,
-                    content: request.Content,
-                    type: request.Type,
-                    priority: request.Priority
-                );
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var notification = await _notificationService.SendNotificationAsync(
+                    request.UserId,
+                    request.Title,
+                    request.Message,
+                    request.Type,
+                    request.Data);
 
                 return Ok(notification);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating notification");
-                return StatusCode(500, "Error creating notification");
+                _logger.LogError(ex, "Error sending notification");
+                return StatusCode(500, "Error sending notification");
+            }
+        }
+
+        [HttpPost("broadcast")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> BroadcastNotification([FromBody] BroadcastNotificationRequest request)
+        {
+            try
+            {
+                var notification = await _notificationService.BroadcastNotificationAsync(
+                    request.Title,
+                    request.Message,
+                    request.Type,
+                    request.Data);
+
+                return Ok(notification);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting notification");
+                return StatusCode(500, "Error broadcasting notification");
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetNotifications(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] bool includeRead = false)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var notifications = await _notificationService.GetNotificationsAsync(
+                    userId,
+                    page,
+                    pageSize,
+                    includeRead);
+
+                return Ok(notifications);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting notifications");
+                return StatusCode(500, "Error getting notifications");
+            }
+        }
+
+        [HttpGet("unread")]
+        public async Task<IActionResult> GetUnreadNotifications()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var notifications = await _notificationService.GetUnreadNotificationsAsync(userId);
+                return Ok(notifications);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unread notifications");
+                return StatusCode(500, "Error getting unread notifications");
             }
         }
 
@@ -57,7 +127,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.MarkAsReadAsync(notificationId, userId);
-                return Ok(new { Success = result });
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -76,7 +146,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.MarkAllAsReadAsync(userId);
-                return Ok(new { Success = result });
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -95,7 +165,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.DeleteNotificationAsync(notificationId, userId);
-                return Ok(new { Success = result });
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -104,26 +174,8 @@ namespace WebApplication1.Controllers
             }
         }
 
-        [HttpGet("{notificationId}")]
-        public async Task<IActionResult> GetNotification(string notificationId)
-        {
-            try
-            {
-                var notification = await _notificationService.GetNotificationAsync(notificationId);
-                if (notification == null)
-                    return NotFound();
-
-                return Ok(notification);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving notification");
-                return StatusCode(500, "Error retrieving notification");
-            }
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetUserNotifications([FromQuery] int skip = 0, [FromQuery] int take = 50)
+        [HttpDelete]
+        public async Task<IActionResult> DeleteAllNotifications()
         {
             try
             {
@@ -131,38 +183,18 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var notifications = await _notificationService.GetUserNotificationsAsync(userId, skip, take);
-                return Ok(notifications);
+                var result = await _notificationService.DeleteAllNotificationsAsync(userId);
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving user notifications");
-                return StatusCode(500, "Error retrieving notifications");
+                _logger.LogError(ex, "Error deleting all notifications");
+                return StatusCode(500, "Error deleting all notifications");
             }
         }
 
-        [HttpGet("unread/count")]
-        public async Task<IActionResult> GetUnreadNotificationCount()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var count = await _notificationService.GetUnreadNotificationCountAsync(userId);
-                return Ok(new { Count = count });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting unread notification count");
-                return StatusCode(500, "Error getting unread notification count");
-            }
-        }
-
-        // Bildirim Tercihleri
         [HttpGet("preferences")]
-        public async Task<IActionResult> GetUserPreferences()
+        public async Task<IActionResult> GetNotificationPreferences()
         {
             try
             {
@@ -170,18 +202,18 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var preferences = await _notificationService.GetUserPreferencesAsync(userId);
+                var preferences = await _notificationService.GetNotificationPreferencesAsync(userId);
                 return Ok(preferences);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving user preferences");
-                return StatusCode(500, "Error retrieving preferences");
+                _logger.LogError(ex, "Error getting notification preferences");
+                return StatusCode(500, "Error getting notification preferences");
             }
         }
 
         [HttpPut("preferences")]
-        public async Task<IActionResult> UpdateUserPreferences([FromBody] NotificationPreferences preferences)
+        public async Task<IActionResult> UpdateNotificationPreferences([FromBody] UpdateNotificationPreferencesRequest request)
         {
             try
             {
@@ -189,18 +221,24 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.UpdateUserPreferencesAsync(userId, preferences);
-                return Ok(new { Success = result });
+                var preferences = await _notificationService.UpdateNotificationPreferencesAsync(
+                    userId,
+                    request.EmailEnabled,
+                    request.PushEnabled,
+                    request.InAppEnabled,
+                    request.NotificationTypes);
+
+                return Ok(preferences);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating user preferences");
-                return StatusCode(500, "Error updating preferences");
+                _logger.LogError(ex, "Error updating notification preferences");
+                return StatusCode(500, "Error updating notification preferences");
             }
         }
 
-        [HttpPost("preferences/type/{type}/enable")]
-        public async Task<IActionResult> EnableNotificationType(NotificationType type)
+        [HttpPost("subscribe")]
+        public async Task<IActionResult> SubscribeToNotifications([FromBody] SubscribeToNotificationsRequest request)
         {
             try
             {
@@ -208,18 +246,22 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.EnableNotificationTypeAsync(userId, type);
-                return Ok(new { Success = result });
+                var result = await _notificationService.SubscribeToNotificationsAsync(
+                    userId,
+                    request.DeviceToken,
+                    request.Platform);
+
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error enabling notification type");
-                return StatusCode(500, "Error enabling notification type");
+                _logger.LogError(ex, "Error subscribing to notifications");
+                return StatusCode(500, "Error subscribing to notifications");
             }
         }
 
-        [HttpPost("preferences/type/{type}/disable")]
-        public async Task<IActionResult> DisableNotificationType(NotificationType type)
+        [HttpPost("unsubscribe")]
+        public async Task<IActionResult> UnsubscribeFromNotifications([FromBody] UnsubscribeFromNotificationsRequest request)
         {
             try
             {
@@ -227,688 +269,53 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.DisableNotificationTypeAsync(userId, type);
-                return Ok(new { Success = result });
+                var result = await _notificationService.UnsubscribeFromNotificationsAsync(
+                    userId,
+                    request.DeviceToken);
+
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error disabling notification type");
-                return StatusCode(500, "Error disabling notification type");
+                _logger.LogError(ex, "Error unsubscribing from notifications");
+                return StatusCode(500, "Error unsubscribing from notifications");
             }
-        }
-
-        [HttpPost("preferences/channel/{channel}")]
-        public async Task<IActionResult> SetNotificationChannel(NotificationChannel channel, [FromBody] SetChannelRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var result = await _notificationService.SetNotificationChannelAsync(userId, channel, request.Enabled);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error setting notification channel");
-                return StatusCode(500, "Error setting notification channel");
-            }
-        }
-
-        // Bildirim Şablonları
-        [HttpPost("templates")]
-        public async Task<IActionResult> CreateTemplate([FromBody] CreateTemplateRequest request)
-        {
-            try
-            {
-                var template = await _notificationService.CreateTemplateAsync(
-                    name: request.Name,
-                    content: request.Content,
-                    type: request.Type
-                );
-
-                return Ok(template);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating notification template");
-                return StatusCode(500, "Error creating template");
-            }
-        }
-
-        [HttpPut("templates/{templateId}")]
-        public async Task<IActionResult> UpdateTemplate(string templateId, [FromBody] UpdateTemplateRequest request)
-        {
-            try
-            {
-                var result = await _notificationService.UpdateTemplateAsync(templateId, request.Content);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating notification template");
-                return StatusCode(500, "Error updating template");
-            }
-        }
-
-        [HttpDelete("templates/{templateId}")]
-        public async Task<IActionResult> DeleteTemplate(string templateId)
-        {
-            try
-            {
-                var result = await _notificationService.DeleteTemplateAsync(templateId);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error deleting notification template");
-                return StatusCode(500, "Error deleting template");
-            }
-        }
-
-        [HttpGet("templates/{templateId}")]
-        public async Task<IActionResult> GetTemplate(string templateId)
-        {
-            try
-            {
-                var template = await _notificationService.GetTemplateAsync(templateId);
-                if (template == null)
-                    return NotFound();
-
-                return Ok(template);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving notification template");
-                return StatusCode(500, "Error retrieving template");
-            }
-        }
-
-        [HttpGet("templates")]
-        public async Task<IActionResult> GetAllTemplates()
-        {
-            try
-            {
-                var templates = await _notificationService.GetAllTemplatesAsync();
-                return Ok(templates);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving all notification templates");
-                return StatusCode(500, "Error retrieving templates");
-            }
-        }
-
-        [HttpPost("templates/{templateId}/send")]
-        public async Task<IActionResult> SendNotificationFromTemplate(string templateId, [FromBody] SendTemplateRequest request)
-        {
-            try
-            {
-                var notification = await _notificationService.SendNotificationFromTemplateAsync(
-                    userId: request.UserId,
-                    templateId: templateId,
-                    parameters: request.Parameters
-                );
-
-                return Ok(notification);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error sending notification from template");
-                return StatusCode(500, "Error sending notification");
-            }
-        }
-
-        // Bildirim İstatistikleri
-        [HttpGet("stats/user")]
-        public async Task<IActionResult> GetUserNotificationStats()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var stats = await _notificationService.GetUserNotificationStatsAsync(userId);
-                return Ok(stats);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting user notification stats");
-                return StatusCode(500, "Error getting stats");
-            }
-        }
-
-        [HttpGet("stats/system")]
-        public async Task<IActionResult> GetSystemNotificationStats()
-        {
-            try
-            {
-                var stats = await _notificationService.GetSystemNotificationStatsAsync();
-                return Ok(stats);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting system notification stats");
-                return StatusCode(500, "Error getting stats");
-            }
-        }
-
-        [HttpGet("stats/type-distribution")]
-        public async Task<IActionResult> GetNotificationTypeDistribution()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var distribution = await _notificationService.GetNotificationTypeDistributionAsync(userId);
-                return Ok(distribution);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting notification type distribution");
-                return StatusCode(500, "Error getting distribution");
-            }
-        }
-
-        [HttpGet("stats/priority-distribution")]
-        public async Task<IActionResult> GetNotificationPriorityDistribution()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var distribution = await _notificationService.GetNotificationPriorityDistributionAsync(userId);
-                return Ok(distribution);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting notification priority distribution");
-                return StatusCode(500, "Error getting distribution");
-            }
-        }
-
-        // Bildirim Filtreleme ve Arama
-        [HttpGet("search")]
-        public async Task<IActionResult> SearchNotifications([FromQuery] string query)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var notifications = await _notificationService.SearchNotificationsAsync(userId, query);
-                return Ok(notifications);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error searching notifications");
-                return StatusCode(500, "Error searching notifications");
-            }
-        }
-
-        [HttpGet("filter/type/{type}")]
-        public async Task<IActionResult> FilterNotificationsByType(NotificationType type)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var notifications = await _notificationService.FilterNotificationsByTypeAsync(userId, type);
-                return Ok(notifications);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error filtering notifications by type");
-                return StatusCode(500, "Error filtering notifications");
-            }
-        }
-
-        [HttpGet("filter/priority/{priority}")]
-        public async Task<IActionResult> FilterNotificationsByPriority(NotificationPriority priority)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var notifications = await _notificationService.FilterNotificationsByPriorityAsync(userId, priority);
-                return Ok(notifications);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error filtering notifications by priority");
-                return StatusCode(500, "Error filtering notifications");
-            }
-        }
-
-        [HttpGet("filter/date-range")]
-        public async Task<IActionResult> GetNotificationsByDateRange([FromQuery] DateRangeRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var notifications = await _notificationService.GetNotificationsByDateRangeAsync(
-                    userId: userId,
-                    startDate: request.StartDate,
-                    endDate: request.EndDate
-                );
-
-                return Ok(notifications);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting notifications by date range");
-                return StatusCode(500, "Error getting notifications");
-            }
-        }
-
-        // Bildirim Gruplandırma
-        [HttpPost("groups")]
-        public async Task<IActionResult> CreateNotificationGroup([FromBody] CreateGroupRequest request)
-        {
-            try
-            {
-                var group = await _notificationService.CreateNotificationGroupAsync(
-                    name: request.Name,
-                    userIds: request.UserIds
-                );
-
-                return Ok(group);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating notification group");
-                return StatusCode(500, "Error creating group");
-            }
-        }
-
-        [HttpPost("groups/{groupId}/users/{userId}")]
-        public async Task<IActionResult> AddUserToGroup(string groupId, string userId)
-        {
-            try
-            {
-                var result = await _notificationService.AddUserToGroupAsync(groupId, userId);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error adding user to notification group");
-                return StatusCode(500, "Error adding user to group");
-            }
-        }
-
-        [HttpDelete("groups/{groupId}/users/{userId}")]
-        public async Task<IActionResult> RemoveUserFromGroup(string groupId, string userId)
-        {
-            try
-            {
-                var result = await _notificationService.RemoveUserFromGroupAsync(groupId, userId);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error removing user from notification group");
-                return StatusCode(500, "Error removing user from group");
-            }
-        }
-
-        [HttpPost("groups/{groupId}/notify")]
-        public async Task<IActionResult> SendGroupNotification(string groupId, [FromBody] SendGroupNotificationRequest request)
-        {
-            try
-            {
-                var result = await _notificationService.SendGroupNotificationAsync(
-                    groupId: groupId,
-                    content: request.Content,
-                    type: request.Type
-                );
-
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error sending group notification");
-                return StatusCode(500, "Error sending group notification");
-            }
-        }
-
-        // Bildirim Zamanlama
-        [HttpPost("schedule")]
-        public async Task<IActionResult> ScheduleNotification([FromBody] ScheduleNotificationRequest request)
-        {
-            try
-            {
-                var scheduledNotification = await _notificationService.ScheduleNotificationAsync(
-                    userId: request.UserId,
-                    content: request.Content,
-                    scheduledTime: request.ScheduledTime,
-                    type: request.Type
-                );
-
-                return Ok(scheduledNotification);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error scheduling notification");
-                return StatusCode(500, "Error scheduling notification");
-            }
-        }
-
-        [HttpDelete("schedule/{scheduledNotificationId}")]
-        public async Task<IActionResult> CancelScheduledNotification(string scheduledNotificationId)
-        {
-            try
-            {
-                var result = await _notificationService.CancelScheduledNotificationAsync(scheduledNotificationId);
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error canceling scheduled notification");
-                return StatusCode(500, "Error canceling scheduled notification");
-            }
-        }
-
-        [HttpGet("schedule")]
-        public async Task<IActionResult> GetScheduledNotifications()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var notifications = await _notificationService.GetScheduledNotificationsAsync(userId);
-                return Ok(notifications);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting scheduled notifications");
-                return StatusCode(500, "Error getting scheduled notifications");
-            }
-        }
-
-        [HttpPut("schedule/{scheduledNotificationId}")]
-        public async Task<IActionResult> UpdateScheduledNotification(string scheduledNotificationId, [FromBody] UpdateScheduledNotificationRequest request)
-        {
-            try
-            {
-                var result = await _notificationService.UpdateScheduledNotificationAsync(
-                    scheduledNotificationId: scheduledNotificationId,
-                    newScheduledTime: request.NewScheduledTime
-                );
-
-                return Ok(new { Success = result });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating scheduled notification");
-                return StatusCode(500, "Error updating scheduled notification");
-            }
-        }
-
-        // Bildirim Doğrulama
-        [HttpPost("validate/content")]
-        public async Task<IActionResult> ValidateNotificationContent([FromBody] ValidateContentRequest request)
-        {
-            try
-            {
-                var isValid = await _notificationService.ValidateNotificationContentAsync(request.Content);
-                return Ok(new { IsValid = isValid });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error validating notification content");
-                return StatusCode(500, "Error validating content");
-            }
-        }
-
-        [HttpPost("validate/template/{templateId}")]
-        public async Task<IActionResult> ValidateNotificationTemplate(string templateId)
-        {
-            try
-            {
-                var isValid = await _notificationService.ValidateNotificationTemplateAsync(templateId);
-                return Ok(new { IsValid = isValid });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error validating notification template");
-                return StatusCode(500, "Error validating template");
-            }
-        }
-
-        [HttpPost("validate/preferences")]
-        public async Task<IActionResult> ValidateNotificationPreferences([FromBody] NotificationPreferences preferences)
-        {
-            try
-            {
-                var isValid = await _notificationService.ValidateNotificationPreferencesAsync(preferences);
-                return Ok(new { IsValid = isValid });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error validating notification preferences");
-                return StatusCode(500, "Error validating preferences");
-            }
-        }
-
-        // Bildirim Raporlama
-        [HttpGet("reports/user")]
-        public async Task<IActionResult> GenerateUserReport([FromQuery] GenerateReportRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var report = await _notificationService.GenerateUserReportAsync(
-                    userId: userId,
-                    startDate: request.StartDate,
-                    endDate: request.EndDate
-                );
-
-                return Ok(report);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating user notification report");
-                return StatusCode(500, "Error generating report");
-            }
-        }
-
-        [HttpGet("reports/system")]
-        public async Task<IActionResult> GenerateSystemReport([FromQuery] GenerateReportRequest request)
-        {
-            try
-            {
-                var report = await _notificationService.GenerateSystemReportAsync(
-                    startDate: request.StartDate,
-                    endDate: request.EndDate
-                );
-
-                return Ok(report);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating system notification report");
-                return StatusCode(500, "Error generating report");
-            }
-        }
-
-        [HttpGet("reports/export")]
-        public async Task<IActionResult> ExportNotificationReport([FromQuery] ExportReportRequest request)
-        {
-            try
-            {
-                var report = await _notificationService.GenerateUserReportAsync(
-                    userId: request.UserId,
-                    startDate: request.StartDate,
-                    endDate: request.EndDate
-                );
-
-                var data = await _notificationService.ExportNotificationReportAsync(report, request.Format);
-                return File(data, GetContentType(request.Format), $"notification_report_{DateTime.UtcNow:yyyyMMddHHmmss}.{GetFileExtension(request.Format)}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error exporting notification report");
-                return StatusCode(500, "Error exporting report");
-            }
-        }
-
-        private string GetContentType(string format)
-        {
-            return format.ToLower() switch
-            {
-                "json" => "application/json",
-                "csv" => "text/csv",
-                "pdf" => "application/pdf",
-                _ => "application/octet-stream"
-            };
-        }
-
-        private string GetFileExtension(string format)
-        {
-            return format.ToLower() switch
-            {
-                "json" => "json",
-                "csv" => "csv",
-                "pdf" => "pdf",
-                _ => "bin"
-            };
         }
     }
 
-    public class CreateNotificationRequest
+    public class SendNotificationRequest
     {
-        [Required]
-        public string UserId { get; set; }
-
-        [Required]
-        public string Content { get; set; }
-
-        [Required]
-        public NotificationType Type { get; set; }
-
-        public NotificationPriority Priority { get; set; } = NotificationPriority.Normal;
+        public required string UserId { get; set; }
+        public required string Title { get; set; }
+        public required string Message { get; set; }
+        public string Type { get; set; } = "Info";
+        public Dictionary<string, string>? Data { get; set; }
     }
 
-    public class SetChannelRequest
+    public class BroadcastNotificationRequest
     {
-        [Required]
-        public bool Enabled { get; set; }
+        public required string Title { get; set; }
+        public required string Message { get; set; }
+        public string Type { get; set; } = "Info";
+        public Dictionary<string, string>? Data { get; set; }
     }
 
-    public class CreateTemplateRequest
+    public class UpdateNotificationPreferencesRequest
     {
-        [Required]
-        public string Name { get; set; }
-
-        [Required]
-        public string Content { get; set; }
-
-        [Required]
-        public NotificationType Type { get; set; }
+        public bool EmailEnabled { get; set; } = true;
+        public bool PushEnabled { get; set; } = true;
+        public bool InAppEnabled { get; set; } = true;
+        public List<string>? NotificationTypes { get; set; }
     }
 
-    public class UpdateTemplateRequest
+    public class SubscribeToNotificationsRequest
     {
-        [Required]
-        public string Content { get; set; }
+        public required string DeviceToken { get; set; }
+        public required string Platform { get; set; }
     }
 
-    public class SendTemplateRequest
+    public class UnsubscribeFromNotificationsRequest
     {
-        [Required]
-        public string UserId { get; set; }
-
-        public Dictionary<string, string> Parameters { get; set; }
-    }
-
-    public class DateRangeRequest
-    {
-        [Required]
-        public DateTime StartDate { get; set; }
-
-        [Required]
-        public DateTime EndDate { get; set; }
-    }
-
-    public class CreateGroupRequest
-    {
-        [Required]
-        public string Name { get; set; }
-
-        [Required]
-        public List<string> UserIds { get; set; }
-    }
-
-    public class SendGroupNotificationRequest
-    {
-        [Required]
-        public string Content { get; set; }
-
-        [Required]
-        public NotificationType Type { get; set; }
-    }
-
-    public class ScheduleNotificationRequest
-    {
-        [Required]
-        public string UserId { get; set; }
-
-        [Required]
-        public string Content { get; set; }
-
-        [Required]
-        public DateTime ScheduledTime { get; set; }
-
-        [Required]
-        public NotificationType Type { get; set; }
-    }
-
-    public class UpdateScheduledNotificationRequest
-    {
-        [Required]
-        public DateTime NewScheduledTime { get; set; }
-    }
-
-    public class ValidateContentRequest
-    {
-        [Required]
-        public string Content { get; set; }
-    }
-
-    public class GenerateReportRequest
-    {
-        [Required]
-        public DateTime StartDate { get; set; }
-
-        [Required]
-        public DateTime EndDate { get; set; }
-    }
-
-    public class ExportReportRequest : GenerateReportRequest
-    {
-        [Required]
-        public string UserId { get; set; }
-
-        [Required]
-        public string Format { get; set; }
+        public required string DeviceToken { get; set; }
     }
 } 

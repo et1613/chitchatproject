@@ -1,4 +1,4 @@
-using System;
+await CreateSessionAsync(user.Id, refreshToken, request.DeviceInfo, request.IpAddress);using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,14 +10,16 @@ using WebApplication1.Services;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
+using WebApplication1.Models.Enums;
 
 namespace WebApplication1.Services
 {
     public interface IUserService
     {
-        Task<User> GetUserByIdAsync(string id);
-        Task<User> GetUserByEmailAsync(string email);
-        Task<User> GetUserByUsernameAsync(string username);
+        Task<User?> GetUserByIdAsync(string id);
+        Task<User?> GetUserByEmailAsync(string email);
+        Task<User?> GetUserByUsernameAsync(string username);
         Task<IEnumerable<User>> GetAllUsersAsync();
         Task<IEnumerable<User>> SearchUsersAsync(string searchTerm);
         Task<User> CreateUserAsync(UserCreateDto userDto);
@@ -33,14 +35,16 @@ namespace WebApplication1.Services
         Task<bool> UnblockUserAsync(string userId, string blockedUserId);
         Task<IEnumerable<User>> GetBlockedUsersAsync(string userId);
         Task<bool> UpdateUserSettingsAsync(string userId, UserSettings settings);
-        Task<UserSettings> GetUserSettingsAsync(string userId);
+        Task<UserSettings?> GetUserSettingsAsync(string userId);
         Task<bool> UpdateUserPreferencesAsync(string userId, UserPreferences preferences);
-        Task<UserPreferences> GetUserPreferencesAsync(string userId);
+        Task<UserPreferences?> GetUserPreferencesAsync(string userId);
         Task<bool> ValidateUserCredentialsAsync(string email, string password);
         Task<bool> IsEmailUniqueAsync(string email);
         Task<bool> IsUsernameUniqueAsync(string username);
         Task<bool> UpdateLastSeenAsync(string userId);
         Task<IEnumerable<UserActivity>> GetUserActivitiesAsync(string userId, int limit = 10);
+        Task SendFriendRequestNotificationAsync(string toEmail, string fromUserName);
+        Task SendPasswordChangeNotificationAsync(string toEmail, string userName);
     }
 
     public class UserService : IUserService
@@ -50,22 +54,25 @@ namespace WebApplication1.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly ISecurityService _securityService;
+        private readonly IConfiguration _configuration;
 
         public UserService(
             ApplicationDbContext context,
             ILogger<UserService> logger,
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
-            ISecurityService securityService)
+            ISecurityService securityService,
+            IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _securityService = securityService;
+            _configuration = configuration;
         }
 
-        public async Task<User> GetUserByIdAsync(string id)
+        public async Task<User?> GetUserByIdAsync(string id)
         {
             try
             {
@@ -83,7 +90,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<User> GetUserByEmailAsync(string email)
+        public async Task<User?> GetUserByEmailAsync(string email)
         {
             try
             {
@@ -97,7 +104,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<User> GetUserByUsernameAsync(string username)
+        public async Task<User?> GetUserByUsernameAsync(string username)
         {
             try
             {
@@ -131,9 +138,9 @@ namespace WebApplication1.Services
             try
             {
                 return await _context.Users
-                    .Where(u => u.UserName.Contains(searchTerm) || 
-                               u.Email.Contains(searchTerm) || 
-                               u.DisplayName.Contains(searchTerm))
+                    .Where(u => EF.Property<string>(u, "DisplayName").Contains(searchTerm) ||
+                                u.Email.Contains(searchTerm) ||
+                                u.UserName.Contains(searchTerm))
                     .ToListAsync();
             }
             catch (Exception ex)
@@ -160,8 +167,107 @@ namespace WebApplication1.Services
                     DisplayName = userDto.DisplayName,
                     CreatedAt = DateTime.UtcNow,
                     Status = UserStatus.Offline,
-                    UserSettings = new UserSettings(),
-                    UserPreferences = new UserPreferences()
+                    IsOnline = false,
+                    LastSeen = DateTime.UtcNow,
+                    IsActive = true,
+                    IsVerified = false,
+                    Role = UserRole.Member
+                };
+
+                // Initialize UserSettings with required members
+                user.UserSettings = new UserSettings
+                {
+                    User = user,
+                    UserId = user.Id,
+                    TimeZone = "UTC",
+                    Language = "en",
+                    Theme = "light",
+                    NotificationsEnabled = true,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true,
+                    SoundEnabled = true,
+                    TwoFactorEnabled = false,
+                    RememberMe = true,
+                    SessionTimeout = 30, // minutes
+                    ShowOnlineStatus = true,
+                    ShowLastSeen = true,
+                    ShowReadReceipts = true,
+                    ShowTypingIndicator = true,
+                    AutoSaveDrafts = true,
+                    DraftAutoSaveInterval = 5, // minutes
+                    EnableMessageSearch = true,
+                    EnableFileSharing = true,
+                    MaxFileSize = 10 * 1024 * 1024, // 10MB
+                    AllowedFileTypes = new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx", ".txt" },
+                    EnableVoiceMessages = true,
+                    EnableVideoCalls = true,
+                    EnableScreenSharing = true,
+                    EnableLocationSharing = false,
+                    EnableContactSync = true,
+                    EnableCalendarSync = true,
+                    EnableTaskSync = true,
+                    EnableNoteSync = true,
+                    EnableCloudBackup = false,
+                    BackupFrequency = 24, // hours
+                    LastBackup = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                // Initialize UserPreferences with required members
+                user.UserPreferences = new UserPreferences
+                {
+                    User = user,
+                    UserId = user.Id,
+                    DisplayName = userDto.DisplayName,
+                    IsPhoneNumberPublic = false,
+                    IsEmailPublic = false,
+                    IsLocationPublic = false,
+                    IsOnlineStatusPublic = true,
+                    IsLastSeenPublic = true,
+                    IsReadReceiptsPublic = true,
+                    IsTypingIndicatorPublic = true,
+                    IsProfilePicturePublic = true,
+                    IsBioPublic = true,
+                    IsWebsitePublic = false,
+                    IsActivityStatusPublic = true,
+                    IsFriendListPublic = true,
+                    IsGroupListPublic = true,
+                    IsMessageHistoryPublic = false,
+                    IsMediaGalleryPublic = true,
+                    IsTaggedPhotosPublic = true,
+                    IsCheckInsPublic = false,
+                    IsEventsPublic = true,
+                    IsNotesPublic = false,
+                    IsTasksPublic = false,
+                    IsCalendarPublic = false,
+                    IsContactListPublic = false,
+                    IsDeviceListPublic = false,
+                    IsLoginHistoryPublic = false,
+                    IsSecuritySettingsPublic = false,
+                    IsNotificationSettingsPublic = false,
+                    IsPrivacySettingsPublic = false,
+                    IsBlockedUsersListPublic = false,
+                    IsMutedUsersListPublic = false,
+                    IsRestrictedUsersListPublic = false,
+                    IsReportedUsersListPublic = false,
+                    IsDeletedMessagesListPublic = false,
+                    IsArchivedMessagesListPublic = false,
+                    IsStarredMessagesListPublic = false,
+                    IsPinnedMessagesListPublic = false,
+                    IsSavedItemsListPublic = false,
+                    IsRecentSearchesListPublic = false,
+                    IsRecentContactsListPublic = false,
+                    IsRecentGroupsListPublic = false,
+                    IsRecentFilesListPublic = false,
+                    IsRecentLinksListPublic = false,
+                    IsRecentLocationsListPublic = false,
+                    IsRecentEventsListPublic = false,
+                    IsRecentNotesListPublic = false,
+                    IsRecentTasksListPublic = false,
+                    IsRecentCalendarItemsListPublic = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 };
 
                 user.PasswordHash = _passwordHasher.HashPassword(user, userDto.Password);
@@ -235,6 +341,12 @@ namespace WebApplication1.Services
                 if (user == null)
                     return false;
 
+                if (string.IsNullOrEmpty(user.PasswordHash))
+                {
+                    _logger.LogWarning("User {UserId} has no password hash set", userId);
+                    return false;
+                }
+
                 var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword);
                 if (result != PasswordVerificationResult.Success)
                     return false;
@@ -243,7 +355,14 @@ namespace WebApplication1.Services
                 await _context.SaveChangesAsync();
 
                 // Send password change notification email
-                await _emailService.SendPasswordChangeNotificationAsync(user.Email);
+                if (!string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(user.DisplayName))
+                {
+                    await _emailService.SendPasswordChangeNotificationAsync(user.Email, user.DisplayName);
+                }
+                else
+                {
+                    _logger.LogWarning("Could not send password change notification for user {UserId} - missing email or display name", userId);
+                }
 
                 return true;
             }
@@ -302,14 +421,27 @@ namespace WebApplication1.Services
                 if (user == null || friend == null)
                     return false;
 
-                if (user.Friends.Contains(friend))
-                    return true; // Already friends
+                // Check if already friends
+                if (user.Friends.Any(f => f.Id == friendId))
+                    return false;
+
+                // Check if blocked
+                if (user.BlockedUsers.Any(b => b.BlockedUserId == friendId) ||
+                    friend.BlockedUsers.Any(b => b.BlockedUserId == userId))
+                    return false;
 
                 user.Friends.Add(friend);
                 await _context.SaveChangesAsync();
 
                 // Send friend request notification
-                await _emailService.SendFriendRequestNotificationAsync(friend.Email, user.DisplayName);
+                if (!string.IsNullOrEmpty(friend.Email) && !string.IsNullOrEmpty(user.DisplayName))
+                {
+                    await _emailService.SendFriendRequestNotificationAsync(friend.Email, user.DisplayName);
+                }
+                else
+                {
+                    _logger.LogWarning("Could not send friend request notification - missing email or display name for user {UserId}", userId);
+                }
 
                 return true;
             }
@@ -359,17 +491,24 @@ namespace WebApplication1.Services
         {
             try
             {
-                var user = await GetUserByIdAsync(userId);
-                var blockedUser = await GetUserByIdAsync(blockedUserId);
+                // Check if already blocked
+                if (await _context.BlockedUsers.AnyAsync(b => b.BlockerUserId == userId && b.BlockedUserId == blockedUserId))
+                    return false;
 
-                if (user == null || blockedUser == null)
+                // Get both users
+                var blockerUser = await _context.Users.FindAsync(userId);
+                var blockedUser = await _context.Users.FindAsync(blockedUserId);
+
+                if (blockerUser == null || blockedUser == null)
                     return false;
 
                 var blockedUserEntity = new BlockedUser
                 {
                     BlockerUserId = userId,
                     BlockedUserId = blockedUserId,
-                    BlockedAt = DateTime.UtcNow
+                    BlockedAt = DateTime.UtcNow,
+                    BlockerUser = blockerUser,
+                    BlockedUserEntity = blockedUser
                 };
 
                 _context.BlockedUsers.Add(blockedUserEntity);
@@ -378,7 +517,7 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error blocking user: {UserId} -> {BlockedUserId}", userId, blockedUserId);
+                _logger.LogError(ex, "Error blocking user: {UserId} blocked {BlockedUserId}", userId, blockedUserId);
                 throw;
             }
         }
@@ -439,12 +578,18 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<UserSettings> GetUserSettingsAsync(string userId)
+        public async Task<UserSettings?> GetUserSettingsAsync(string userId)
         {
             try
             {
                 var user = await GetUserByIdAsync(userId);
-                return user?.UserSettings;
+                if (user == null)
+                {
+                    _logger.LogWarning("User not found: {UserId}", userId);
+                    return null;
+                }
+
+                return user.UserSettings;
             }
             catch (Exception ex)
             {
@@ -472,12 +617,18 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<UserPreferences> GetUserPreferencesAsync(string userId)
+        public async Task<UserPreferences?> GetUserPreferencesAsync(string userId)
         {
             try
             {
                 var user = await GetUserByIdAsync(userId);
-                return user?.UserPreferences;
+                if (user == null)
+                {
+                    _logger.LogWarning("User not found: {UserId}", userId);
+                    return null;
+                }
+
+                return user.UserPreferences;
             }
             catch (Exception ex)
             {
@@ -493,6 +644,12 @@ namespace WebApplication1.Services
                 var user = await GetUserByEmailAsync(email);
                 if (user == null)
                     return false;
+
+                if (string.IsNullOrEmpty(user.PasswordHash))
+                {
+                    _logger.LogWarning("User {Email} has no password hash set", email);
+                    return false;
+                }
 
                 var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
                 return result == PasswordVerificationResult.Success;
@@ -565,20 +722,63 @@ namespace WebApplication1.Services
                 throw;
             }
         }
+
+        public async Task SendFriendRequestNotificationAsync(string toEmail, string fromUserName)
+        {
+            try
+            {
+                var subject = "New Friend Request";
+                var body = $@"
+                    <h2>New Friend Request</h2>
+                    <p>Hello,</p>
+                    <p>{fromUserName} has sent you a friend request.</p>
+                    <p>Click the link below to view and respond to the request:</p>
+                    <p><a href='{_configuration["AppSettings:BaseUrl"]}/friends/requests'>View Friend Request</a></p>
+                    <p>Best regards,<br>Your App Team</p>";
+
+                await _emailService.SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending friend request notification to {Email}", toEmail);
+                throw;
+            }
+        }
+
+        public async Task SendPasswordChangeNotificationAsync(string toEmail, string userName)
+        {
+            try
+            {
+                var subject = "Password Changed";
+                var body = $@"
+                    <h2>Password Changed</h2>
+                    <p>Hello {userName},</p>
+                    <p>Your password has been successfully changed.</p>
+                    <p>If you did not make this change, please contact support immediately.</p>
+                    <p>Best regards,<br>Your App Team</p>";
+
+                await _emailService.SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending password change notification to {Email}", toEmail);
+                throw;
+            }
+        }
     }
 
     public class UserCreateDto
     {
-        public string UserName { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
-        public string DisplayName { get; set; }
+        public required string UserName { get; set; }
+        public required string Email { get; set; }
+        public required string Password { get; set; }
+        public required string DisplayName { get; set; }
     }
 
     public class UserUpdateDto
     {
-        public string DisplayName { get; set; }
-        public string Bio { get; set; }
-        public string ProfilePictureUrl { get; set; }
+        public required string DisplayName { get; set; }
+        public string? Bio { get; set; }
+        public string? ProfilePictureUrl { get; set; }
     }
 } 

@@ -16,17 +16,6 @@ namespace WebApplication1.Services
         public EncryptionException(string message, Exception inner) : base(message, inner) { }
     }
 
-    public interface IEncryptionService
-    {
-        Task<string> EncryptStringAsync(string plainText);
-        Task<string> DecryptStringAsync(string cipherText);
-        Task<byte[]> EncryptFileAsync(Stream inputStream);
-        Task<byte[]> DecryptFileAsync(Stream inputStream);
-        Task<string> HashStringAsync(string input);
-        Task<bool> VerifyHashAsync(string input, string hash);
-        (string key, string iv) GenerateSecureKeys();
-    }
-
     public class EncryptionService : IEncryptionService
     {
         private readonly ILogger<EncryptionService> _logger;
@@ -219,6 +208,65 @@ namespace WebApplication1.Services
                 throw new EncryptionException("Hash verification failed", ex);
             }
         }
+
+        public void EncryptFileWithAes(Stream inputStream, Stream outputStream, string key, string iv)
+        {
+            try
+            {
+                if (inputStream == null)
+                    throw new ArgumentNullException(nameof(inputStream));
+                if (outputStream == null)
+                    throw new ArgumentNullException(nameof(outputStream));
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentNullException(nameof(key));
+                if (string.IsNullOrEmpty(iv))
+                    throw new ArgumentNullException(nameof(iv));
+
+                using var aes = Aes.Create();
+                aes.Key = Convert.FromBase64String(key);
+                aes.IV = Convert.FromBase64String(iv);
+
+                using var encryptor = aes.CreateEncryptor();
+                using var cryptoStream = new CryptoStream(outputStream, encryptor, CryptoStreamMode.Write);
+
+                inputStream.CopyTo(cryptoStream);
+                cryptoStream.FlushFinalBlock();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "File encryption with custom key failed");
+                throw new EncryptionException("File encryption with custom key failed", ex);
+            }
+        }
+
+        public void DecryptFileWithAes(Stream inputStream, Stream outputStream, string key, string iv)
+        {
+            try
+            {
+                if (inputStream == null)
+                    throw new ArgumentNullException(nameof(inputStream));
+                if (outputStream == null)
+                    throw new ArgumentNullException(nameof(outputStream));
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentNullException(nameof(key));
+                if (string.IsNullOrEmpty(iv))
+                    throw new ArgumentNullException(nameof(iv));
+
+                using var aes = Aes.Create();
+                aes.Key = Convert.FromBase64String(key);
+                aes.IV = Convert.FromBase64String(iv);
+
+                using var decryptor = aes.CreateDecryptor();
+                using var cryptoStream = new CryptoStream(inputStream, decryptor, CryptoStreamMode.Read);
+
+                cryptoStream.CopyTo(outputStream);
+                cryptoStream.FlushFinalBlock();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "File decryption with custom key failed");
+                throw new EncryptionException("File decryption with custom key failed", ex);
+            }
+        }
     }
-} 
 } 

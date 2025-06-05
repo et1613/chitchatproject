@@ -2,26 +2,27 @@ using Microsoft.AspNetCore.SignalR;
 using WebApplication1.Models.Chat;
 using WebApplication1.Models.Messages;
 using WebApplication1.Services;
+using System.Security.Claims;
 
 namespace WebApplication1.Hubs
 {
     public class ChatHub : Hub
     {
+        private readonly SignalRConnectionManager _connectionManager;
         private readonly IChatService _chatService;
-        private readonly ConnectionManager _connectionManager;
 
-        public ChatHub(IChatService chatService, ConnectionManager connectionManager)
+        public ChatHub(SignalRConnectionManager connectionManager, IChatService chatService)
         {
-            _chatService = chatService;
             _connectionManager = connectionManager;
+            _chatService = chatService;
         }
 
         public override async Task OnConnectedAsync()
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!string.IsNullOrEmpty(userId))
             {
-                _connectionManager.AddClient(userId, Context.ConnectionId);
+                await _connectionManager.AddClientAsync(userId, Context.ConnectionId);
                 await Clients.All.SendAsync("UserConnected", userId);
             }
             await base.OnConnectedAsync();
@@ -29,10 +30,10 @@ namespace WebApplication1.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!string.IsNullOrEmpty(userId))
             {
-                _connectionManager.RemoveClient(userId);
+                await _connectionManager.RemoveClientAsync(userId);
                 await Clients.All.SendAsync("UserDisconnected", userId);
             }
             await base.OnDisconnectedAsync(exception);
@@ -40,7 +41,7 @@ namespace WebApplication1.Hubs
 
         public async Task SendMessage(string chatRoomId, string content)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
                 return;
 
@@ -50,7 +51,7 @@ namespace WebApplication1.Hubs
 
         public async Task JoinChatRoom(string chatRoomId)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
                 return;
 
@@ -60,7 +61,7 @@ namespace WebApplication1.Hubs
 
         public async Task LeaveChatRoom(string chatRoomId)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
                 return;
 
@@ -70,7 +71,7 @@ namespace WebApplication1.Hubs
 
         public async Task Typing(string chatRoomId, bool isTyping)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
                 return;
 
@@ -79,7 +80,7 @@ namespace WebApplication1.Hubs
 
         public async Task MarkAsRead(string chatRoomId, string messageId)
         {
-            var userId = Context.User?.FindFirst("sub")?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
                 return;
 

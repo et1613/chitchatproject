@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
+using WebApplication1.Models.Tokens;
+using WebApplication1.Models.Requests;
+using WebApplication1.Models.Responses;
 
 namespace WebApplication1.Controllers
 {
@@ -13,17 +16,22 @@ namespace WebApplication1.Controllers
     [Authorize]
     public class TokenController : ControllerBase
     {
-        private readonly TokenStorageService _tokenService;
+        private readonly ITokenStorageService _tokenStorageService;
+        private readonly IAuthService _authService;
         private readonly ILogger<TokenController> _logger;
 
-        public TokenController(TokenStorageService tokenService, ILogger<TokenController> logger)
+        public TokenController(
+            ITokenStorageService tokenStorageService,
+            IAuthService authService,
+            ILogger<TokenController> logger)
         {
-            _tokenService = tokenService;
+            _tokenStorageService = tokenStorageService;
+            _authService = authService;
             _logger = logger;
         }
 
-        [HttpPost("refresh")]
-        public async Task<ActionResult<TokenResponse>> RefreshToken([FromBody] RefreshTokenRequest request)
+        [HttpPost("store")]
+        public async Task<IActionResult> StoreToken([FromBody] StoreTokenRequest request)
         {
             try
             {
@@ -31,21 +39,23 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _tokenService.RefreshTokenAsync(request.RefreshToken, userId);
-                if (result == null)
-                    return BadRequest("Invalid refresh token");
+                var result = await _tokenStorageService.StoreTokenAsync(
+                    userId,
+                    request.Token,
+                    request.TokenType,
+                    request.ExpirationMinutes);
 
                 return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error refreshing token");
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "Error storing token");
+                return StatusCode(500, "Error storing token");
             }
         }
 
-        [HttpPost("revoke")]
-        public async Task<ActionResult> RevokeToken([FromBody] RevokeTokenRequest request)
+        [HttpGet("validate/{token}")]
+        public async Task<IActionResult> ValidateToken(string token)
         {
             try
             {
@@ -53,62 +63,87 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _tokenService.RevokeTokenAsync(request.Token, userId);
-                if (!result)
-                    return BadRequest("Invalid token");
-
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error revoking token");
-                return StatusCode(500, "Internal server error");
-            }
-        }
-
-        [HttpPost("revoke-all")]
-        public async Task<ActionResult> RevokeAllTokens()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                await _tokenService.RevokeAllTokensAsync(userId);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error revoking all tokens");
-                return StatusCode(500, "Internal server error");
-            }
-        }
-
-        [HttpGet("validate")]
-        public async Task<ActionResult<TokenValidationResponse>> ValidateToken([FromQuery] string token)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var result = await _tokenService.ValidateTokenAsync(token, userId);
-                if (!result.IsValid)
-                    return BadRequest(result);
-
-                return Ok(result);
+                var isValid = await _tokenStorageService.ValidateTokenAsync(token, userId);
+                return Ok(new { IsValid = isValid });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error validating token");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, "Error validating token");
+            }
+        }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.RefreshToken))
+                {
+                    return BadRequest(new { error = "Refresh token is required" });
+                }
+
+                var (accessToken, refreshToken) = await _authService.RefreshTokenAsync(request.RefreshToken);
+
+                return Ok(new TokenResponse
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshToken,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(15)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing token");
+                return Unauthorized(new { error = "Invalid refresh token" });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("revoke")]
+        public async Task<IActionResult> RevokeToken([FromBody] RevokeTokenRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.RefreshToken))
+                {
+                    return BadRequest(new { error = "Refresh token is required" });
+                }
+
+                await _tokenStorageService.RevokeTokenAsync(request.RefreshToken, User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                return Ok(new { message = "Token revoked successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking token");
+                return BadRequest(new { error = "Error revoking token" });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("revoke-all")]
+        public async Task<IActionResult> RevokeAllTokens()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { error = "User not authenticated" });
+                }
+
+                await _tokenStorageService.RevokeAllTokensAsync(userId);
+                return Ok(new { message = "All tokens revoked successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking all tokens");
+                return BadRequest(new { error = "Error revoking all tokens" });
             }
         }
 
         [HttpGet("active")]
-        public async Task<ActionResult<TokenInfoResponse>> GetActiveTokens()
+        public async Task<IActionResult> GetActiveTokens()
         {
             try
             {
@@ -116,18 +151,18 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var tokens = await _tokenService.GetActiveTokensAsync(userId);
+                var tokens = await _tokenStorageService.GetActiveTokensAsync(userId);
                 return Ok(tokens);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting active tokens");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, "Error getting active tokens");
             }
         }
 
-        [HttpGet("stats")]
-        public async Task<ActionResult<TokenStatsResponse>> GetTokenStats()
+        [HttpGet("info/{token}")]
+        public async Task<IActionResult> GetTokenInfo(string token)
         {
             try
             {
@@ -135,112 +170,109 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var stats = await _tokenService.GetTokenStatsAsync(userId);
+                var tokenInfo = await _tokenStorageService.GetTokenInfoAsync(token, userId);
+                return Ok(tokenInfo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting token info");
+                return StatusCode(500, "Error getting token info");
+            }
+        }
+
+        [HttpPost("extend")]
+        public async Task<IActionResult> ExtendTokenExpiration([FromBody] ExtendTokenRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _tokenStorageService.ExtendTokenExpirationAsync(
+                    request.Token,
+                    userId,
+                    request.AdditionalMinutes);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error extending token expiration");
+                return StatusCode(500, "Error extending token expiration");
+            }
+        }
+
+        [HttpGet("stats")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetTokenStats()
+        {
+            try
+            {
+                var stats = await _tokenStorageService.GetTokenStatsAsync();
                 return Ok(stats);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting token stats");
-                return StatusCode(500, "Internal server error");
+                return StatusCode(500, "Error getting token stats");
             }
         }
 
-        [HttpPost("blacklist")]
-        public async Task<ActionResult> BlacklistToken([FromBody] BlacklistTokenRequest request)
+        [HttpPost("cleanup")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CleanupExpiredTokens()
         {
             try
             {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var result = await _tokenService.BlacklistTokenAsync(request.Token, userId, request.Reason);
-                if (!result)
-                    return BadRequest("Could not blacklist token");
-
-                return Ok();
+                var result = await _tokenStorageService.CleanupExpiredTokensAsync();
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error blacklisting token");
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "Error cleaning up expired tokens");
+                return StatusCode(500, "Error cleaning up expired tokens");
             }
         }
 
-        [HttpGet("blacklist")]
-        public async Task<ActionResult<BlacklistedTokenResponse>> GetBlacklistedTokens()
+        [Authorize]
+        [HttpGet("validate")]
+        public async Task<IActionResult> ValidateToken()
         {
             try
             {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
+                var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
+                if (string.IsNullOrEmpty(token))
+                {
+                    return BadRequest(new { error = "Token is required" });
+                }
 
-                var tokens = await _tokenService.GetBlacklistedTokensAsync(userId);
-                return Ok(tokens);
+                var isValid = await _authService.ValidateTokenAsync(token);
+                return Ok(new { isValid });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting blacklisted tokens");
-                return StatusCode(500, "Internal server error");
+                _logger.LogError(ex, "Error validating token");
+                return BadRequest(new { error = "Error validating token" });
             }
         }
+    }
+
+    public class StoreTokenRequest
+    {
+        public required string Token { get; set; }
+        public string TokenType { get; set; } = "Access";
+        public int ExpirationMinutes { get; set; } = 60;
     }
 
     public class RefreshTokenRequest
     {
-        public string RefreshToken { get; set; }
+        public required string RefreshToken { get; set; }
     }
 
-    public class RevokeTokenRequest
+    public class ExtendTokenRequest
     {
-        public string Token { get; set; }
-    }
-
-    public class BlacklistTokenRequest
-    {
-        public string Token { get; set; }
-        public string Reason { get; set; }
-    }
-
-    public class TokenResponse
-    {
-        public string AccessToken { get; set; }
-        public string RefreshToken { get; set; }
-        public DateTime ExpiresAt { get; set; }
-    }
-
-    public class TokenValidationResponse
-    {
-        public bool IsValid { get; set; }
-        public string Message { get; set; }
-        public DateTime? ExpiresAt { get; set; }
-    }
-
-    public class TokenInfoResponse
-    {
-        public string Token { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime ExpiresAt { get; set; }
-        public string DeviceInfo { get; set; }
-        public string IpAddress { get; set; }
-    }
-
-    public class TokenStatsResponse
-    {
-        public int TotalTokens { get; set; }
-        public int ActiveTokens { get; set; }
-        public int BlacklistedTokens { get; set; }
-        public DateTime LastTokenCreated { get; set; }
-        public DateTime LastTokenRevoked { get; set; }
-    }
-
-    public class BlacklistedTokenResponse
-    {
-        public string Token { get; set; }
-        public DateTime BlacklistedAt { get; set; }
-        public string Reason { get; set; }
-        public string DeviceInfo { get; set; }
-        public string IpAddress { get; set; }
+        public required string Token { get; set; }
+        public int AdditionalMinutes { get; set; } = 30;
     }
 } 

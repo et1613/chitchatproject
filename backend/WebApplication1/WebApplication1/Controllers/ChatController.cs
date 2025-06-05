@@ -4,6 +4,7 @@ using WebApplication1.Services;
 using WebApplication1.Models.Chat;
 using WebApplication1.Models.Messages;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 
 namespace WebApplication1.Controllers
 {
@@ -13,15 +14,18 @@ namespace WebApplication1.Controllers
     public class ChatController : ControllerBase
     {
         private readonly IChatService _chatService;
+        private readonly IFileService _fileService;
         private readonly ILogger<ChatController> _logger;
         private readonly ApplicationDbContext _context;
 
         public ChatController(
             IChatService chatService,
+            IFileService fileService,
             ILogger<ChatController> logger,
             ApplicationDbContext context)
         {
             _chatService = chatService;
+            _fileService = fileService;
             _logger = logger;
             _context = context;
         }
@@ -33,42 +37,54 @@ namespace WebApplication1.Controllers
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
                 var message = await _chatService.SendMessageAsync(userId, request.ChatRoomId, request.Content);
                 return Ok(message);
             }
-            catch (ArgumentException ex)
-            {
-                _logger.LogWarning(ex, "Message sending failed: {Message}", ex.Message);
-                return BadRequest(ex.Message);
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Message sending error");
-                return StatusCode(500, "An error occurred while sending the message");
+                _logger.LogError(ex, "Error sending message");
+                return StatusCode(500, "Error sending message");
             }
         }
 
-        [HttpGet("rooms/{chatRoomId}/messages")]
-        public async Task<IActionResult> GetChatHistory(
-            string chatRoomId,
-            [FromQuery] int skip = 0,
-            [FromQuery] int take = 50)
+        [HttpPost("direct-messages")]
+        public async Task<IActionResult> SendDirectMessage([FromBody] SendDirectMessageRequest request)
         {
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var messages = await _chatService.GetChatHistoryAsync(chatRoomId, userId, skip, take);
+                var user = await _chatService.GetUserByIdAsync(userId);
+                await _chatService.SendDirectMessage(user, request.ReceiverId, request.Content);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending direct message");
+                return StatusCode(500, "Error sending direct message");
+            }
+        }
+
+        [HttpGet("rooms/{roomId}/messages")]
+        public async Task<IActionResult> GetChatHistory(string roomId, [FromQuery] int skip = 0, [FromQuery] int take = 50)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var messages = await _chatService.GetChatHistoryAsync(roomId, userId, skip, take);
                 return Ok(messages);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrieving chat history");
-                return StatusCode(500, "An error occurred while retrieving chat history");
+                _logger.LogError(ex, "Error getting chat history");
+                return StatusCode(500, "Error getting chat history");
             }
         }
 
@@ -79,15 +95,15 @@ namespace WebApplication1.Controllers
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
                 var result = await _chatService.DeleteMessageAsync(messageId, userId);
-                return Ok(new { success = result });
+                return Ok(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting message");
-                return StatusCode(500, "An error occurred while deleting the message");
+                return StatusCode(500, "Error deleting message");
             }
         }
 
@@ -98,122 +114,15 @@ namespace WebApplication1.Controllers
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
                 var result = await _chatService.EditMessageAsync(messageId, userId, request.NewContent);
-                return Ok(new { success = result });
+                return Ok(result);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error editing message");
-                return StatusCode(500, "An error occurred while editing the message");
-            }
-        }
-
-        [HttpGet("rooms")]
-        public async Task<IActionResult> GetChatRooms()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var chatRooms = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .Where(cr => cr.Participants.Any(p => p.Id == userId))
-                    .Select(cr => new
-                    {
-                        cr.Id,
-                        cr.Name,
-                        cr.Description,
-                        cr.Picture,
-                        cr.IsPrivate,
-                        cr.CreatedAt,
-                        ParticipantCount = cr.Participants.Count,
-                        LastMessage = cr.Messages
-                            .OrderByDescending(m => m.Timestamp)
-                            .Select(m => new
-                            {
-                                m.Id,
-                                m.Content,
-                                m.Timestamp,
-                                SenderName = m.Sender.UserName
-                            })
-                            .FirstOrDefault()
-                    })
-                    .ToListAsync();
-
-                return Ok(chatRooms);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving chat rooms");
-                return StatusCode(500, "An error occurred while retrieving chat rooms");
-            }
-        }
-
-        [HttpGet("rooms/{chatRoomId}")]
-        public async Task<IActionResult> GetChatRoom(string chatRoomId)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .Include(cr => cr.Messages)
-                        .ThenInclude(m => m.Sender)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
-
-                if (chatRoom == null)
-                    return NotFound("Chat room not found");
-
-                if (!chatRoom.Participants.Any(p => p.Id == userId))
-                    return Forbid();
-
-                var response = new
-                {
-                    chatRoom.Id,
-                    chatRoom.Name,
-                    chatRoom.Description,
-                    chatRoom.Picture,
-                    chatRoom.IsPrivate,
-                    chatRoom.CreatedAt,
-                    Participants = chatRoom.Participants.Select(p => new
-                    {
-                        p.Id,
-                        p.UserName,
-                        p.Email,
-                        p.ProfilePicture
-                    }),
-                    Messages = chatRoom.Messages
-                        .OrderByDescending(m => m.Timestamp)
-                        .Take(50)
-                        .Select(m => new
-                        {
-                            m.Id,
-                            m.Content,
-                            m.Timestamp,
-                            m.IsEdited,
-                            m.EditedAt,
-                            Sender = new
-                            {
-                                m.Sender.Id,
-                                m.Sender.UserName,
-                                m.Sender.ProfilePicture
-                            }
-                        })
-                };
-
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving chat room");
-                return StatusCode(500, "An error occurred while retrieving the chat room");
+                return StatusCode(500, "Error editing message");
             }
         }
 
@@ -224,186 +133,229 @@ namespace WebApplication1.Controllers
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var user = await _context.Users.FindAsync(userId);
-                if (user == null)
-                    return BadRequest("User not found");
-
-                var chatRoom = new ChatRoom
-                {
-                    Name = request.Name,
-                    Description = request.Description,
-                    IsPrivate = request.IsPrivate,
-                    AdminId = userId,
-                    Admin = user,
-                    MaxParticipants = request.MaxParticipants,
-                    AllowMessageEditing = request.AllowMessageEditing,
-                    MessageEditTimeLimit = request.MessageEditTimeLimit,
-                    MaxPinnedMessages = request.MaxPinnedMessages
-                };
-
-                chatRoom.Participants.Add(user);
-                _context.ChatRooms.Add(chatRoom);
-                await _context.SaveChangesAsync();
-
-                return CreatedAtAction(nameof(GetChatRoom), new { chatRoomId = chatRoom.Id }, chatRoom);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating chat room");
-                return StatusCode(500, "An error occurred while creating the chat room");
-            }
-        }
-
-        [HttpPut("rooms/{chatRoomId}")]
-        public async Task<IActionResult> UpdateChatRoom(string chatRoomId, [FromBody] UpdateChatRoomRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Admin)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
-
-                if (chatRoom == null)
-                    return NotFound("Chat room not found");
-
-                if (chatRoom.AdminId != userId)
-                    return Forbid();
-
-                chatRoom.UpdateSettings(
-                    request.Name,
-                    request.Description,
-                    request.IsPrivate,
-                    request.MaxParticipants,
-                    request.AllowMessageEditing,
-                    request.MessageEditTimeLimit,
-                    request.MaxPinnedMessages);
-
-                await _context.SaveChangesAsync();
-
+                var chatRoom = await _chatService.CreateChatRoomAsync(request.Name, request.Description, userId);
                 return Ok(chatRoom);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating chat room");
-                return StatusCode(500, "An error occurred while updating the chat room");
+                _logger.LogError(ex, "Error creating chat room");
+                return StatusCode(500, "Error creating chat room");
             }
         }
 
-        [HttpPost("rooms/{chatRoomId}/participants")]
-        public async Task<IActionResult> AddParticipant(string chatRoomId, [FromBody] AddParticipantRequest request)
+        [HttpGet("rooms")]
+        public async Task<IActionResult> GetUserChatRooms()
         {
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
-
-                if (chatRoom == null)
-                    return NotFound("Chat room not found");
-
-                if (chatRoom.AdminId != userId)
-                    return Forbid();
-
-                var user = await _context.Users.FindAsync(request.UserId);
-                if (user == null)
-                    return BadRequest("User not found");
-
-                if (chatRoom.Participants.Count >= chatRoom.MaxParticipants)
-                    return BadRequest("Chat room has reached maximum participant limit");
-
-                chatRoom.AddParticipant(user);
-                await _context.SaveChangesAsync();
-
-                return Ok();
+                var chatRooms = await _chatService.GetUserChatRoomsAsync(userId);
+                return Ok(chatRooms);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding participant");
-                return StatusCode(500, "An error occurred while adding the participant");
+                _logger.LogError(ex, "Error getting user chat rooms");
+                return StatusCode(500, "Error getting user chat rooms");
             }
         }
 
-        [HttpDelete("rooms/{chatRoomId}/participants/{participantId}")]
-        public async Task<IActionResult> RemoveParticipant(string chatRoomId, string participantId)
+        [HttpPost("rooms/{roomId}/users/{userId}")]
+        public async Task<IActionResult> AddUserToChatRoom(string roomId, string userId)
+        {
+            try
+            {
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized();
+
+                var result = await _chatService.AddUserToChatRoomAsync(userId, roomId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding user to chat room");
+                return StatusCode(500, "Error adding user to chat room");
+            }
+        }
+
+        [HttpDelete("rooms/{roomId}/users/{userId}")]
+        public async Task<IActionResult> RemoveUserFromChatRoom(string roomId, string userId)
+        {
+            try
+            {
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized();
+
+                var result = await _chatService.RemoveUserFromChatRoomAsync(userId, roomId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing user from chat room");
+                return StatusCode(500, "Error removing user from chat room");
+            }
+        }
+
+        [HttpPost("messages/{messageId}/files")]
+        public async Task<IActionResult> UploadFile(string messageId, IFormFile file)
         {
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var chatRoom = await _context.ChatRooms
-                    .Include(cr => cr.Participants)
-                    .FirstOrDefaultAsync(cr => cr.Id == chatRoomId);
-
-                if (chatRoom == null)
-                    return NotFound("Chat room not found");
-
-                if (chatRoom.AdminId != userId && userId != participantId)
-                    return Forbid();
-
-                var user = await _context.Users.FindAsync(participantId);
-                if (user == null)
-                    return BadRequest("User not found");
-
-                chatRoom.RemoveParticipant(user);
-                await _context.SaveChangesAsync();
-
-                return Ok();
+                var attachment = await _fileService.UploadFileAsync(file, userId, messageId);
+                return Ok(attachment);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error removing participant");
-                return StatusCode(500, "An error occurred while removing the participant");
+                _logger.LogError(ex, "Error uploading file");
+                return StatusCode(500, "Error uploading file");
+            }
+        }
+
+        [HttpPost("messages/{messageId}/files/multiple")]
+        public async Task<IActionResult> UploadMultipleFiles(string messageId, List<IFormFile> files)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var attachments = await _fileService.UploadMultipleFilesAsync(files, userId, messageId);
+                return Ok(attachments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading multiple files");
+                return StatusCode(500, "Error uploading multiple files");
+            }
+        }
+
+        [HttpGet("files/{fileId}")]
+        public async Task<IActionResult> GetFile(string fileId)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var file = await _fileService.GetFileAsync(fileId);
+                return Ok(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting file");
+                return StatusCode(500, "Error getting file");
+            }
+        }
+
+        [HttpDelete("files/{fileId}")]
+        public async Task<IActionResult> DeleteFile(string fileId)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _fileService.DeleteFileAsync(fileId, userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting file");
+                return StatusCode(500, "Error deleting file");
+            }
+        }
+
+        [HttpGet("files/{fileId}/preview")]
+        public async Task<IActionResult> GetFilePreview(string fileId)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var previewUrl = await _fileService.GenerateFilePreviewAsync(fileId);
+                return Ok(new { PreviewUrl = previewUrl });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating file preview");
+                return StatusCode(500, "Error generating file preview");
+            }
+        }
+
+        [HttpPost("files/{fileId}/compress")]
+        public async Task<IActionResult> CompressFile(string fileId, [FromQuery] int quality = 80)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var compressedFile = await _fileService.CompressFileAsync(fileId, quality);
+                return Ok(compressedFile);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error compressing file");
+                return StatusCode(500, "Error compressing file");
+            }
+        }
+
+        [HttpPost("files/{fileId}/optimize")]
+        public async Task<IActionResult> OptimizeImage(string fileId, [FromQuery] int maxWidth = 1920, [FromQuery] int maxHeight = 1080)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var optimizedFile = await _fileService.OptimizeImageAsync(fileId, maxWidth, maxHeight);
+                return Ok(optimizedFile);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error optimizing image");
+                return StatusCode(500, "Error optimizing image");
             }
         }
     }
 
     public class SendMessageRequest
     {
-        public string ChatRoomId { get; set; }
-        public string Content { get; set; }
+        public required string ChatRoomId { get; set; }
+        public required string Content { get; set; }
+    }
+
+    public class SendDirectMessageRequest
+    {
+        public required string ReceiverId { get; set; }
+        public required string Content { get; set; }
     }
 
     public class EditMessageRequest
     {
-        public string NewContent { get; set; }
+        public required string NewContent { get; set; }
     }
 
     public class CreateChatRoomRequest
     {
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public bool IsPrivate { get; set; }
-        public int MaxParticipants { get; set; } = 100;
-        public bool AllowMessageEditing { get; set; } = true;
-        public int MessageEditTimeLimit { get; set; } = 5;
-        public int MaxPinnedMessages { get; set; } = 5;
-    }
-
-    public class UpdateChatRoomRequest
-    {
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public bool IsPrivate { get; set; }
-        public int MaxParticipants { get; set; }
-        public bool AllowMessageEditing { get; set; }
-        public int MessageEditTimeLimit { get; set; }
-        public int MaxPinnedMessages { get; set; }
-    }
-
-    public class AddParticipantRequest
-    {
-        public string UserId { get; set; }
+        public required string Name { get; set; }
+        public string? Description { get; set; }
     }
 } 

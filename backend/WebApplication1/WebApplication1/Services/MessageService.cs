@@ -66,7 +66,7 @@ namespace WebApplication1.Services
 
     public class ExportProgress
     {
-        public required string ExportId { get; set; }
+        public string ExportId { get; set; }
         public int TotalMessages { get; set; }
         public int ProcessedMessages { get; set; }
         public ExportStatus Status { get; set; } = ExportStatus.Pending;
@@ -740,15 +740,15 @@ namespace WebApplication1.Services
                 if (messages.Count == 0)
                     return false;
 
-                var backup = new WebApplication1.Models.Messages.MessageBackup
+                var backupPath = await _storageService.SaveMessagesAsync(messages);
+                var backup = new MessageBackup
                 {
-                    Id = Guid.NewGuid().ToString(),
                     ChatRoomId = chatRoomId,
                     UserId = userId,
+                    BackupPath = backupPath,
                     CreatedAt = DateTime.UtcNow,
                     MessageCount = messages.Count,
-                    BackupSize = messages.Sum(m => m.Attachments.Sum(a => a.Url.Length)),
-                    BackupPath = await _storageService.SaveMessagesAsync(messages)
+                    BackupSize = messages.Sum(m => m.Attachments.Sum(a => a.Url?.Length ?? 0))
                 };
 
                 _context.MessageBackups.Add(backup);

@@ -167,17 +167,20 @@ namespace WebApplication1.Services
         private readonly ILogger<NotificationService> _logger;
         private readonly IEmailService _emailService;
         private readonly ConnectionManager _connectionManager;
+        private readonly UserNotificationPreferencesService _preferencesService;
 
         public NotificationService(
             ApplicationDbContext context,
             ILogger<NotificationService> logger,
             IEmailService emailService,
-            ConnectionManager connectionManager)
+            ConnectionManager connectionManager,
+            UserNotificationPreferencesService preferencesService)
         {
             _context = context;
             _logger = logger;
             _emailService = emailService;
             _connectionManager = connectionManager;
+            _preferencesService = preferencesService;
         }
 
         // Temel Bildirim İşlemleri

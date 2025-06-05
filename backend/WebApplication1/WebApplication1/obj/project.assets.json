@@ -1459,7 +1459,20 @@
           }
         }
       },
-      "SixLabors.ImageSharp/3.1.8": {
+      "SixLabors.Fonts/2.0.1": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0/SixLabors.Fonts.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/SixLabors.Fonts.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "SixLabors.ImageSharp/3.1.9": {
         "type": "package",
         "compile": {
           "lib/net6.0/SixLabors.ImageSharp.dll": {
@@ -1473,6 +1486,23 @@
         },
         "build": {
           "build/SixLabors.ImageSharp.props": {}
+        }
+      },
+      "SixLabors.ImageSharp.Drawing/2.0.1": {
+        "type": "package",
+        "dependencies": {
+          "SixLabors.Fonts": "2.0.0",
+          "SixLabors.ImageSharp": "3.0.2"
+        },
+        "compile": {
+          "lib/net6.0/SixLabors.ImageSharp.Drawing.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/SixLabors.ImageSharp.Drawing.dll": {
+            "related": ".xml"
+          }
         }
       },
       "Swashbuckle.AspNetCore/6.6.2": {
@@ -5580,10 +5610,25 @@
         "version.txt"
       ]
     },
-    "SixLabors.ImageSharp/3.1.8": {
-      "sha512": "8eJkROLGh6DBQLR666q2aOpAaean2puZaZ6Ur9YxoyGzjaZhv8OJSxtnDou54+OXMkXtLUdyQC0so47sOsqZjg==",
+    "SixLabors.Fonts/2.0.1": {
+      "sha512": "ubgkOt7Eb5garmLMigeWAAAMyZF6JWuT09RApHouncPZeML2nRJahm2JJUkw3HLB+XbYJfBfOTCMvbsdCO5LDw==",
       "type": "package",
-      "path": "sixlabors.imagesharp/3.1.8",
+      "path": "sixlabors.fonts/2.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "lib/net6.0/SixLabors.Fonts.dll",
+        "lib/net6.0/SixLabors.Fonts.xml",
+        "sixlabors.fonts.128.png",
+        "sixlabors.fonts.2.0.1.nupkg.sha512",
+        "sixlabors.fonts.nuspec"
+      ]
+    },
+    "SixLabors.ImageSharp/3.1.9": {
+      "sha512": "8yY4Bcxgw5u7xLWFXb2mK4fbX+0JYJ7eyM19n0inj/cgcHAuIAge982Eiy8vTHT9Zow4HvKJaZKRFBhTNFqD4A==",
+      "type": "package",
+      "path": "sixlabors.imagesharp/3.1.9",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -5592,8 +5637,23 @@
         "lib/net6.0/SixLabors.ImageSharp.dll",
         "lib/net6.0/SixLabors.ImageSharp.xml",
         "sixlabors.imagesharp.128.png",
-        "sixlabors.imagesharp.3.1.8.nupkg.sha512",
+        "sixlabors.imagesharp.3.1.9.nupkg.sha512",
         "sixlabors.imagesharp.nuspec"
+      ]
+    },
+    "SixLabors.ImageSharp.Drawing/2.0.1": {
+      "sha512": "zTusvJi0hzu51EYVOa0IupIrem6HQOLXYAbTmmvfqfwU/MZD7ku9BG5SKghQjm8HKAyQxdgrt3udeuHAzPVypQ==",
+      "type": "package",
+      "path": "sixlabors.imagesharp.drawing/2.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "lib/net6.0/SixLabors.ImageSharp.Drawing.dll",
+        "lib/net6.0/SixLabors.ImageSharp.Drawing.xml",
+        "sixlabors.imagesharp.drawing.128.png",
+        "sixlabors.imagesharp.drawing.2.0.1.nupkg.sha512",
+        "sixlabors.imagesharp.drawing.nuspec"
       ]
     },
     "Swashbuckle.AspNetCore/6.6.2": {
@@ -9773,7 +9833,9 @@
       "Microsoft.VisualStudio.Services.Client >= 19.225.1",
       "Polly >= 8.5.2",
       "Pomelo.EntityFrameworkCore.MySql >= 8.0.3",
-      "SixLabors.ImageSharp >= 3.1.8",
+      "SixLabors.Fonts >= 2.0.1",
+      "SixLabors.ImageSharp >= 3.1.9",
+      "SixLabors.ImageSharp.Drawing >= 2.0.1",
       "Swashbuckle.AspNetCore >= 6.6.2"
     ]
   },
@@ -9876,9 +9938,17 @@
             "target": "Package",
             "version": "[8.0.3, )"
           },
+          "SixLabors.Fonts": {
+            "target": "Package",
+            "version": "[2.0.1, )"
+          },
           "SixLabors.ImageSharp": {
             "target": "Package",
-            "version": "[3.1.8, )"
+            "version": "[3.1.9, )"
+          },
+          "SixLabors.ImageSharp.Drawing": {
+            "target": "Package",
+            "version": "[2.0.1, )"
           },
           "Swashbuckle.AspNetCore": {
             "target": "Package",

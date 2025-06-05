@@ -64,6 +64,10 @@ namespace WebApplication1.Services
         Task<Dictionary<string, string>> GetFilePreviewsAsync(List<string> fileIds);
         Task<Attachment> EncryptFileAsync(string fileId, string encryptionKey);
         Task<Attachment> DecryptFileAsync(string fileId, string encryptionKey);
+        Task<string> UploadFileAsync(Stream fileStream, string fileName);
+        Task DeleteFileAsync(string fileUrl);
+        Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId);
+        Task DeleteAttachmentAsync(Attachment attachment);
     }
 
     public class FileService : IFileService
@@ -342,7 +346,16 @@ namespace WebApplication1.Services
                 if (!attachment.IsImage() && !attachment.IsVideo())
                     throw new InvalidOperationException("Sadece görsel ve video dosyaları sıkıştırılabilir");
 
-                var compressedUrl = await _storageService.CompressFileAsync(attachment.Url, quality);
+                // Convert quality (0-100) to CompressionLevel
+                var compressionLevel = quality switch
+                {
+                    >= 90 => System.IO.Compression.CompressionLevel.NoCompression,
+                    >= 70 => System.IO.Compression.CompressionLevel.Fastest,
+                    >= 40 => System.IO.Compression.CompressionLevel.Optimal,
+                    _ => System.IO.Compression.CompressionLevel.SmallestSize
+                };
+
+                var compressedUrl = await _storageService.CompressFileAsync(attachment.Url, compressionLevel);
                 
                 var compressedAttachment = new Attachment
                 {
@@ -1105,6 +1118,99 @@ namespace WebApplication1.Services
                 _logger.LogError(ex, "Dosya yedekten geri yükleme hatası: {FileId}", fileId);
                 throw;
             }
+        }
+
+        public async Task<string> UploadFileAsync(Stream fileStream, string fileName)
+        {
+            if (fileStream == null || string.IsNullOrEmpty(fileName))
+                throw new ArgumentException("File stream and file name are required");
+
+            var fileType = Path.GetExtension(fileName).ToLower();
+            var fileSize = fileStream.Length;
+
+            // Validate file type
+            var allowedTypes = new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx", ".txt" };
+            if (!allowedTypes.Contains(fileType))
+                throw new ArgumentException("Invalid file type");
+
+            // Validate file size (10MB)
+            const long maxSize = 10 * 1024 * 1024;
+            if (fileSize > maxSize)
+                throw new ArgumentException("File size exceeds limit");
+
+            var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
+            var fileUrl = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
+
+            return fileUrl;
+        }
+
+        public async Task DeleteFileAsync(string fileUrl)
+        {
+            if (string.IsNullOrEmpty(fileUrl))
+                throw new ArgumentException("File URL is required");
+
+            await _storageService.DeleteFileAsync(fileUrl);
+        }
+
+        public async Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId)
+        {
+            if (fileStream == null || string.IsNullOrEmpty(fileName))
+                throw new ArgumentException("File stream and file name are required");
+
+            var fileType = Path.GetExtension(fileName).ToLower();
+            var fileSize = fileStream.Length;
+
+            // Validate file type
+            var allowedTypes = new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx", ".txt" };
+            if (!allowedTypes.Contains(fileType))
+                throw new ArgumentException("Invalid file type");
+
+            // Validate file size (10MB)
+            const long maxSize = 10 * 1024 * 1024;
+            if (fileSize > maxSize)
+                throw new ArgumentException("File size exceeds limit");
+
+            var attachment = new Attachment
+            {
+                FileName = fileName,
+                FileType = fileType,
+                FileSize = fileSize,
+                UploadedBy = userId,
+                MimeType = GetMimeType(fileName)
+            };
+
+            var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
+            attachment.Url = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
+
+            return attachment;
+        }
+
+        public async Task DeleteAttachmentAsync(Attachment attachment)
+        {
+            if (attachment.IsDeleted) return;
+
+            if (!string.IsNullOrEmpty(attachment.Url))
+            {
+                await DeleteFileAsync(attachment.Url);
+            }
+
+            attachment.Delete(attachment.DeletedBy);
+        }
+
+        private string GetMimeType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLower();
+            return extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".txt" => "text/plain",
+                _ => "application/octet-stream"
+            };
         }
     }
 } 

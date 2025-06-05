@@ -20,6 +20,7 @@ using WebApplication1.Models.Messages;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models;
+using WebApplication1.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,7 +36,22 @@ builder.Configuration.AddUserSecrets<Program>();
 // Configure MySQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+{
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString), mysqlOptions =>
+    {
+        mysqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+        
+        // Enable sensitive data logging in development
+        if (builder.Environment.IsDevelopment())
+        {
+            options.EnableSensitiveDataLogging();
+            options.EnableDetailedErrors();
+        }
+    });
+});
 
 // Configure SignalR
 builder.Services.AddSignalR();
@@ -102,7 +118,12 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IFriendService, FriendService>();
 builder.Services.AddScoped<HashingService>();
 builder.Services.AddScoped<IEncryptionService, EncryptionService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IStorageService, StorageService>();
+builder.Services.AddHostedService<TokenCleanupService>();
 builder.Services.AddSingleton<ConnectionManager>();
+builder.Services.AddSingleton<SignalRConnectionManager>();
 
 var app = builder.Build();
 
@@ -119,6 +140,7 @@ app.UseRouting();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseTokenValidation();
 
 app.MapControllers();
 app.MapHub<ChatHub>("/chatHub");

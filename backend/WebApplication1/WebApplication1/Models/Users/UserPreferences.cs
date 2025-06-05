@@ -7,56 +7,121 @@ namespace WebApplication1.Models.Users
     public class UserPreferences
     {
         [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int Id { get; set; }
 
         [Required]
         public required string UserId { get; set; }
 
-        public string MessageSound { get; set; } = "default";
+        [ForeignKey("UserId")]
+        public virtual required User User { get; set; }
 
-        public string NotificationSound { get; set; } = "default";
+        [Required]
+        public required string DisplayName { get; set; }
 
-        public string Ringtone { get; set; } = "default";
+        public string? ProfilePicture { get; set; }
 
-        public bool EnableMessagePreview { get; set; } = true;
+        public string? Bio { get; set; }
 
-        public bool EnableGroupChatNotifications { get; set; } = true;
+        public string? Location { get; set; }
 
-        public bool EnableFriendRequestNotifications { get; set; } = true;
+        public string? Website { get; set; }
 
-        public bool EnableBirthdayNotifications { get; set; } = true;
+        public string? PhoneNumber { get; set; }
 
-        public bool EnableEventNotifications { get; set; } = true;
+        public bool IsPhoneNumberPublic { get; set; }
 
-        public bool EnableMarketingEmails { get; set; } = false;
+        public bool IsEmailPublic { get; set; }
 
-        public bool EnableNewsletter { get; set; } = false;
+        public bool IsLocationPublic { get; set; }
 
-        public bool EnableLocationSharing { get; set; } = false;
+        public bool IsOnlineStatusPublic { get; set; }
 
-        public bool EnableStatusUpdates { get; set; } = true;
+        public bool IsLastSeenPublic { get; set; }
 
-        public bool EnableProfileVisibility { get; set; } = true;
+        public bool IsReadReceiptsPublic { get; set; }
 
-        public bool EnableFriendListVisibility { get; set; } = true;
+        public bool IsTypingIndicatorPublic { get; set; }
 
-        public bool EnableActivityVisibility { get; set; } = true;
+        public bool IsProfilePicturePublic { get; set; }
 
-        public string DefaultChatView { get; set; } = "list"; // list or grid
+        public bool IsBioPublic { get; set; }
 
-        public string DefaultMessageView { get; set; } = "bubble"; // bubble or compact
+        public bool IsWebsitePublic { get; set; }
 
-        public bool EnableMessageSearch { get; set; } = true;
+        public bool IsActivityStatusPublic { get; set; }
 
-        public bool EnableMessageTranslation { get; set; } = false;
+        public bool IsFriendListPublic { get; set; }
 
-        public string DefaultLanguage { get; set; } = "tr";
+        public bool IsGroupListPublic { get; set; }
+
+        public bool IsMessageHistoryPublic { get; set; }
+
+        public bool IsMediaGalleryPublic { get; set; }
+
+        public bool IsTaggedPhotosPublic { get; set; }
+
+        public bool IsCheckInsPublic { get; set; }
+
+        public bool IsEventsPublic { get; set; }
+
+        public bool IsNotesPublic { get; set; }
+
+        public bool IsTasksPublic { get; set; }
+
+        public bool IsCalendarPublic { get; set; }
+
+        public bool IsContactListPublic { get; set; }
+
+        public bool IsDeviceListPublic { get; set; }
+
+        public bool IsLoginHistoryPublic { get; set; }
+
+        public bool IsSecuritySettingsPublic { get; set; }
+
+        public bool IsNotificationSettingsPublic { get; set; }
+
+        public bool IsPrivacySettingsPublic { get; set; }
+
+        public bool IsBlockedUsersListPublic { get; set; }
+
+        public bool IsMutedUsersListPublic { get; set; }
+
+        public bool IsRestrictedUsersListPublic { get; set; }
+
+        public bool IsReportedUsersListPublic { get; set; }
+
+        public bool IsDeletedMessagesListPublic { get; set; }
+
+        public bool IsArchivedMessagesListPublic { get; set; }
+
+        public bool IsStarredMessagesListPublic { get; set; }
+
+        public bool IsPinnedMessagesListPublic { get; set; }
+
+        public bool IsSavedItemsListPublic { get; set; }
+
+        public bool IsRecentSearchesListPublic { get; set; }
+
+        public bool IsRecentContactsListPublic { get; set; }
+
+        public bool IsRecentGroupsListPublic { get; set; }
+
+        public bool IsRecentFilesListPublic { get; set; }
+
+        public bool IsRecentLinksListPublic { get; set; }
+
+        public bool IsRecentLocationsListPublic { get; set; }
+
+        public bool IsRecentEventsListPublic { get; set; }
+
+        public bool IsRecentNotesListPublic { get; set; }
+
+        public bool IsRecentTasksListPublic { get; set; }
+
+        public bool IsRecentCalendarItemsListPublic { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime? LastModified { get; set; }
-
-        [ForeignKey("UserId")]
-        public virtual required User User { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 } 

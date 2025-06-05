@@ -18,21 +18,24 @@ namespace WebApplication1.Models.Users
         public required string ReceiverId { get; set; }
         public required virtual User Receiver { get; set; }
 
-        public DateTime SentAt { get; set; } = DateTime.UtcNow;
+        public FriendRequestStatus Status { get; set; } = FriendRequestStatus.Pending;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public bool IsRead { get; set; } = false;
+        public DateTime? ReadAt { get; set; }
         public DateTime? RespondedAt { get; set; }
-        public bool Accepted { get; set; }
-        public string? RejectionReason { get; set; }
-        public bool IsBlocked { get; set; }
+        public string ResponseMessage { get; set; } = string.Empty;
+        public bool IsBlocked { get; set; } = false;
         public DateTime? BlockedAt { get; set; }
-        public string? BlockedByUserId { get; set; }
-        public virtual User? BlockedByUser { get; set; }
+        public string BlockReason { get; set; } = string.Empty;
 
         public void Accept()
         {
             if (RespondedAt.HasValue)
                 throw new InvalidOperationException("Bu arkadaşlık isteği zaten yanıtlanmış");
 
-            Accepted = true;
+            Status = FriendRequestStatus.Accepted;
             RespondedAt = DateTime.UtcNow;
         }
 
@@ -41,10 +44,11 @@ namespace WebApplication1.Models.Users
             if (RespondedAt.HasValue)
                 throw new InvalidOperationException("Bu arkadaşlık isteği zaten yanıtlanmış");
 
-            Accepted = false;
-            RejectionReason = reason;
+            Status = FriendRequestStatus.Rejected;
+            ResponseMessage = reason ?? string.Empty; // Ensure a non-null value is assigned
             RespondedAt = DateTime.UtcNow;
         }
+
 
         public void Block(string blockedByUserId)
         {
@@ -52,7 +56,7 @@ namespace WebApplication1.Models.Users
             {
                 IsBlocked = true;
                 BlockedAt = DateTime.UtcNow;
-                BlockedByUserId = blockedByUserId;
+                BlockReason = blockedByUserId;
             }
         }
 
@@ -62,15 +66,16 @@ namespace WebApplication1.Models.Users
             {
                 IsBlocked = false;
                 BlockedAt = null;
-                BlockedByUserId = null;
+                BlockReason = string.Empty; // Use an empty string instead of null
             }
         }
 
-        public bool IsExpired => !RespondedAt.HasValue && (DateTime.UtcNow - SentAt).TotalDays > 30;
+
+        public bool IsExpired => !RespondedAt.HasValue && (DateTime.UtcNow - CreatedAt).TotalDays > 30;
 
         public override string ToString()
         {
-            return $"{Sender?.UserName ?? SenderId} -> {Receiver?.UserName ?? ReceiverId} ({SentAt:g})";
+            return $"{Sender?.UserName ?? SenderId} -> {Receiver?.UserName ?? ReceiverId} ({CreatedAt:g})";
         }
     }
 } 

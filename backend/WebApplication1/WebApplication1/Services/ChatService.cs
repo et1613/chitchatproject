@@ -345,7 +345,7 @@ namespace WebApplication1.Services
 
             try
             {
-                _connectionManager.AddClient(userId, webSocket);
+                await _connectionManager.AddClientAsync(userId, webSocket);
 
                 var buffer = new byte[1024 * 4];
                 var receiveResult = await webSocket.ReceiveAsync(
@@ -391,7 +391,14 @@ namespace WebApplication1.Services
             }
             finally
             {
-                _connectionManager.RemoveClient(userId);
+                try
+                {
+                    await _connectionManager.RemoveClientAsync(userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error removing client connection for user {UserId}", userId);
+                }
             }
         }
 

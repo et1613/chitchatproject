@@ -10,10 +10,10 @@ namespace WebApplication1.Models.Messages
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string ChatRoomId { get; set; }
+        public required string ChatRoomId { get; set; }
 
         [Required]
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -22,9 +22,20 @@ namespace WebApplication1.Models.Messages
         public long BackupSize { get; set; }
 
         [Required]
-        public string BackupPath { get; set; }
+        public required string BackupPath { get; set; }
 
         [NotMapped]
         public string FileName => $"backup_{Id}_{CreatedAt:yyyyMMddHHmmss}.json";
+
+        public static MessageBackup Create(string chatRoomId, string userId, string backupPath)
+        {
+            return new MessageBackup
+            {
+                ChatRoomId = chatRoomId,
+                UserId = userId,
+                BackupPath = backupPath,
+                CreatedAt = DateTime.UtcNow
+            };
+        }
     }
 } 

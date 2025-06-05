@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using WebApplication1.Models.Users;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 
 namespace WebApplication1.Controllers
 {
@@ -24,25 +25,11 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var (accessToken, refreshToken, user) = await _authService.LoginAsync(
-                    request.Email,
-                    request.Password,
-                    request.TwoFactorCode);
+                request.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+                request.DeviceInfo = HttpContext.Request.Headers["User-Agent"].ToString();
 
-                return Ok(new
-                {
-                    accessToken,
-                    refreshToken,
-                    user = new
-                    {
-                        user.Id,
-                        user.UserName,
-                        user.Email,
-                        user.Role,
-                        user.IsVerified,
-                        user.TwoFactorEnabled
-                    }
-                });
+                var response = await _authService.LoginAsync(request);
+                return Ok(response);
             }
             catch (AuthException ex)
             {
@@ -61,25 +48,8 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var (accessToken, refreshToken, user) = await _authService.RegisterAsync(
-                    request.Username,
-                    request.Email,
-                    request.Password);
-
-                return Ok(new
-                {
-                    accessToken,
-                    refreshToken,
-                    user = new
-                    {
-                        user.Id,
-                        user.UserName,
-                        user.Email,
-                        user.Role,
-                        user.IsVerified,
-                        user.TwoFactorEnabled
-                    }
-                });
+                var response = await _authService.RegisterAsync(request);
+                return Ok(response);
             }
             catch (AuthException ex)
             {
@@ -98,8 +68,8 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var (accessToken, refreshToken) = await _authService.RefreshTokenAsync(request.RefreshToken);
-                return Ok(new { accessToken, refreshToken });
+                var response = await _authService.RefreshTokenAsync(request.RefreshToken);
+                return Ok(response);
             }
             catch (AuthException ex)
             {
@@ -163,10 +133,10 @@ namespace WebApplication1.Controllers
                 var result = await _authService.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword);
                 return Ok(new { success = result });
             }
-            catch (InvalidOperationException ex)
+            catch (AuthException ex)
             {
                 _logger.LogWarning(ex, "Password change failed: {Message}", ex.Message);
-                return StatusCode(400, new { error = ex.Message });
+                return StatusCode(400, new { error = ex.Message, errorType = ex.ErrorType });
             }
             catch (Exception ex)
             {
@@ -241,31 +211,6 @@ namespace WebApplication1.Controllers
         }
 
         [Authorize]
-        [HttpPost("verify-2fa")]
-        public async Task<IActionResult> VerifyTwoFactor([FromBody] TwoFactorRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var result = await _authService.VerifyTwoFactorAsync(userId, request.Code);
-                return Ok(new { success = result });
-            }
-            catch (AuthException ex)
-            {
-                _logger.LogWarning(ex, "2FA verification failed: {Message}", ex.Message);
-                return StatusCode(400, new { error = ex.Message, errorType = ex.ErrorType });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "2FA verification error");
-                return StatusCode(500, "An error occurred during 2FA verification");
-            }
-        }
-
-        [Authorize]
         [HttpGet("sessions")]
         public async Task<IActionResult> GetActiveSessions()
         {
@@ -306,49 +251,50 @@ namespace WebApplication1.Controllers
         }
     }
 
-    public class LoginRequest
-    {
-        public string Email { get; set; }
-        public string Password { get; set; }
-        public string TwoFactorCode { get; set; }
-    }
-
-    public class RegisterRequest
-    {
-        public string Username { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
-    }
-
     public class RefreshTokenRequest
     {
-        public string RefreshToken { get; set; }
+        [Required]
+        public required string RefreshToken { get; set; }
     }
 
     public class ResetPasswordRequest
     {
-        public string Email { get; set; }
+        [Required]
+        [EmailAddress]
+        public required string Email { get; set; }
     }
 
     public class ChangePasswordRequest
     {
-        public string CurrentPassword { get; set; }
-        public string NewPassword { get; set; }
+        [Required]
+        public required string CurrentPassword { get; set; }
+
+        [Required]
+        [MinLength(8)]
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
+            ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character")]
+        public required string NewPassword { get; set; }
     }
 
     public class VerifyEmailRequest
     {
-        public string UserId { get; set; }
-        public string Token { get; set; }
+        [Required]
+        public required string UserId { get; set; }
+
+        [Required]
+        public required string Token { get; set; }
     }
 
     public class TwoFactorRequest
     {
-        public string Code { get; set; }
+        [Required]
+        [StringLength(6, MinimumLength = 6)]
+        public required string Code { get; set; }
     }
 
     public class RevokeSessionRequest
     {
-        public string SessionId { get; set; }
+        [Required]
+        public required string SessionId { get; set; }
     }
 } 

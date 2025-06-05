@@ -14,30 +14,24 @@ namespace WebApplication1.Models.Users
     public class User : IdentityUser
     {
         public new string Id { get; set; } = null!;
-        public string DisplayName { get; set; } = null!;
+        [StringLength(100)]
+        public string? DisplayName { get; set; }
         public string? ProfilePicture { get; set; }
+        [StringLength(500)]
         public string? Bio { get; set; }
         public DateTime? LastLoginAt { get; set; }
         public bool IsOnline { get; set; }
-        public string? Status { get; set; }
+        public UserStatus Status { get; set; }
         public new string UserName { get; set; } = null!;
         public new string Email { get; set; } = null!;
         public new string? PasswordHash { get; set; }
         public string? PhoneNumber { get; set; }
-        public bool TwoFactorEnabled { get; set; }
         public DateTime? LockoutEnd { get; set; }
         public bool LockoutEnabled { get; set; }
         public int AccessFailedCount { get; set; }
-
-        [StringLength(100)]
-        public string? DisplayName { get; set; }
-
-        [StringLength(500)]
-        public string? Bio { get; set; }
+        public int FailedLoginAttempts { get; set; }
 
         public string? ProfilePictureUrl { get; set; }
-
-        public UserStatus Status { get; set; }
 
         public UserRole Role { get; set; } = UserRole.Member;
 
@@ -154,15 +148,31 @@ namespace WebApplication1.Models.Users
 
         public void RecordFailedLogin()
         {
-            // Implementation of RecordFailedLogin method
+            FailedLoginAttempts++;
+            AccessFailedCount++;
         }
 
         public void ResetFailedLoginAttempts()
         {
-            // Implementation of ResetFailedLoginAttempts method
+            FailedLoginAttempts = 0;
+            AccessFailedCount = 0;
         }
 
-        public bool IsLockedOut => false; // Implementation of IsLockedOut property
+        public bool IsLockedOut => LockoutEnd.HasValue && LockoutEnd.Value > DateTime.UtcNow;
+
+        public void LockAccount(TimeSpan duration)
+        {
+            LockoutEnd = DateTime.UtcNow.Add(duration);
+            LockoutEnabled = true;
+        }
+
+        public void UnlockAccount()
+        {
+            LockoutEnd = null;
+            LockoutEnabled = false;
+            FailedLoginAttempts = 0;
+            AccessFailedCount = 0;
+        }
 
         public void UpdateProfile(string? firstName, string? lastName, string? bio, string? profilePicture)
         {

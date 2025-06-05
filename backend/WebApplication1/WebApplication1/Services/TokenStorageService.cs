@@ -13,18 +13,18 @@ namespace WebApplication1.Services
 {
     public class TokenMetadata
     {
-        public string IpAddress { get; set; }
-        public string UserAgent { get; set; }
-        public string DeviceId { get; set; }
-        public Dictionary<string, string> CustomData { get; set; }
+        public required string IpAddress { get; set; }
+        public required string UserAgent { get; set; }
+        public string? DeviceId { get; set; }
+        public Dictionary<string, string>? CustomData { get; set; }
     }
 
     public class TokenUsageStats
     {
         public int UsageCount { get; set; }
         public DateTime LastUsedAt { get; set; }
-        public string LastUsedIp { get; set; }
-        public string LastUsedUserAgent { get; set; }
+        public string? LastUsedIp { get; set; }
+        public string? LastUsedUserAgent { get; set; }
     }
 
     public class TokenStorageService
@@ -54,7 +54,7 @@ namespace WebApplication1.Services
                 .SetAbsoluteExpiration(TimeSpan.FromHours(1));
         }
 
-        public async Task<string> StoreTokenAsync(string userId, string tokenType, string token, DateTime? expiration = null, TokenMetadata metadata = null)
+        public async Task<string> StoreTokenAsync(string userId, string tokenType, string token, DateTime? expiration = null, TokenMetadata? metadata = null)
         {
             try
             {
@@ -70,7 +70,10 @@ namespace WebApplication1.Services
                     LastUsedAt = DateTime.UtcNow
                 };
 
-                tokenEntity.SetMetadata(metadata);
+                if (metadata != null)
+                {
+                    tokenEntity.SetMetadata(metadata);
+                }
 
                 _context.StoredTokens.Add(tokenEntity);
                 await _context.SaveChangesAsync();
@@ -88,7 +91,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> ValidateTokenAsync(string token, string tokenType, string ipAddress = null, string userAgent = null)
+        public async Task<bool> ValidateTokenAsync(string token, string tokenType, string? ipAddress = null, string? userAgent = null)
         {
             try
             {
@@ -98,7 +101,7 @@ namespace WebApplication1.Services
 
                 // Try to get from cache
                 var cacheKey = $"{TOKEN_CACHE_PREFIX}{token}";
-                if (_cache.TryGetValue(cacheKey, out StoredToken cachedToken))
+                if (_cache.TryGetValue(cacheKey, out StoredToken? cachedToken))
                 {
                     return ValidateCachedToken(cachedToken, tokenType);
                 }
@@ -136,9 +139,9 @@ namespace WebApplication1.Services
             }
         }
 
-        private bool ValidateCachedToken(StoredToken token, string tokenType)
+        private bool ValidateCachedToken(StoredToken? token, string tokenType)
         {
-            if (token.TokenType != tokenType || token.IsRevoked || token.ExpiresAt < DateTime.UtcNow)
+            if (token == null || token.TokenType != tokenType || token.IsRevoked || token.ExpiresAt < DateTime.UtcNow)
                 return false;
 
             if (token.UsageCount >= MAX_TOKEN_USAGE)
@@ -147,7 +150,7 @@ namespace WebApplication1.Services
             return true;
         }
 
-        public async Task RevokeTokenAsync(string token, string reason = null)
+        public async Task RevokeTokenAsync(string token, string? reason = null)
         {
             try
             {
@@ -173,7 +176,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task RevokeAllUserTokensAsync(string userId, string tokenType = null, string reason = null)
+        public async Task RevokeAllUserTokensAsync(string userId, string? tokenType = null, string? reason = null)
         {
             try
             {
@@ -201,32 +204,38 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> GenerateAndStoreAccessTokenAsync(string userId, TimeSpan? expiration = null, TokenMetadata metadata = null)
+        public async Task<string> GenerateAndStoreAccessTokenAsync(string userId, TimeSpan? expiration = null, TokenMetadata? metadata = null)
         {
             try
             {
                 var token = _hashingService.GenerateTemporaryAccessToken(userId, expiration);
-                await StoreTokenAsync(userId, "AccessToken", token, DateTime.UtcNow.Add(expiration ?? TimeSpan.FromDays(30)), metadata);
-                return token;
+                var expirationTime = expiration.HasValue 
+                    ? DateTime.UtcNow.Add(expiration.Value) 
+                    : DateTime.UtcNow.AddDays(30);
+
+                return await StoreTokenAsync(userId, "access", token, expirationTime, metadata);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating and storing access token for user {UserId}", userId);
+                _logger.LogError(ex, "Error generating access token for user {UserId}", userId);
                 throw;
             }
         }
 
-        public async Task<string> GenerateAndStoreUrlTokenAsync(string url, TimeSpan? expiration = null, TokenMetadata metadata = null)
+        public async Task<string> GenerateAndStoreUrlTokenAsync(string url, TimeSpan? expiration = null, TokenMetadata? metadata = null)
         {
             try
             {
-                var token = _hashingService.GenerateSecureUrlToken(url, expiration);
-                await StoreTokenAsync("system", "UrlToken", token, DateTime.UtcNow.Add(expiration ?? TimeSpan.FromDays(7)), metadata);
-                return token;
+                var token = _hashingService.GenerateTemporaryAccessToken(url, expiration);
+                var expirationTime = expiration.HasValue 
+                    ? DateTime.UtcNow.Add(expiration.Value) 
+                    : DateTime.UtcNow.AddDays(7);
+
+                return await StoreTokenAsync(url, "url", token, expirationTime, metadata);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating and storing URL token");
+                _logger.LogError(ex, "Error generating URL token for {Url}", url);
                 throw;
             }
         }
@@ -256,7 +265,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<IEnumerable<StoredToken>> GetUserTokensAsync(string userId, string tokenType = null)
+        public async Task<IEnumerable<StoredToken>> GetUserTokensAsync(string userId, string? tokenType = null)
         {
             try
             {
@@ -274,7 +283,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<TokenUsageStats> GetTokenUsageStatsAsync(string token)
+        public async Task<TokenUsageStats?> GetTokenUsageStatsAsync(string token)
         {
             try
             {
@@ -295,7 +304,7 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting token usage stats");
-                throw;
+                return null;
             }
         }
 
@@ -391,19 +400,19 @@ namespace WebApplication1.Services
     public class StoredToken
     {
         public int Id { get; set; }
-        public string UserId { get; set; }
-        public string TokenType { get; set; }
-        public string Token { get; set; }
+        public required string UserId { get; set; }
+        public required string TokenType { get; set; }
+        public required string Token { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime ExpiresAt { get; set; }
         public bool IsRevoked { get; set; }
-        public string RevocationReason { get; set; }
+        public string? RevocationReason { get; set; }
         public DateTime? RevokedAt { get; set; }
-        public string Metadata { get; set; }
+        public string? Metadata { get; set; }
         public int UsageCount { get; set; }
         public DateTime LastUsedAt { get; set; }
-        public string LastUsedIp { get; set; }
-        public string LastUsedUserAgent { get; set; }
+        public string? LastUsedIp { get; set; }
+        public string? LastUsedUserAgent { get; set; }
 
         public void SetMetadata(TokenMetadata metadata)
         {
@@ -423,7 +432,7 @@ namespace WebApplication1.Services
     public class TokenBlacklist
     {
         public int Id { get; set; }
-        public string Token { get; set; }
+        public required string Token { get; set; }
         public DateTime AddedAt { get; set; }
     }
 } 

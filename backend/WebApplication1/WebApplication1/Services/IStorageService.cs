@@ -30,7 +30,6 @@ namespace WebApplication1.Services
         Task<string> GenerateThumbnailAsync(Stream fileStream, string fileName);
 
         // Dosya optimizasyonu
-        Task<string> CompressFileAsync(string fileUrl, int quality = 80);
         Task<string> OptimizeImageAsync(string fileUrl, int maxWidth = 1920, int maxHeight = 1080);
         Task<string> ConvertFileFormatAsync(string fileUrl, string targetFormat);
         Task<string> ResizeImageAsync(string fileUrl, int width, int height, bool maintainAspectRatio = true);
@@ -104,7 +103,7 @@ namespace WebApplication1.Services
 
         // Dosya analizi
         Task<Dictionary<string, object>> AnalyzeFileAsync(string fileUrl);
-        Task<bool> IsFileVirusFreeAsync(string fileUrl);
+
         Task<Dictionary<string, object>> GetFileStatisticsAsync(string fileUrl);
         Task<bool> ValidateFileIntegrityAsync(string fileUrl);
         Task<Dictionary<string, object>> GetFileContentAnalysisAsync(string fileUrl);

@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
+using WebApplication1.Models.Security;
 
 namespace WebApplication1.Controllers
 {
@@ -16,7 +18,9 @@ namespace WebApplication1.Controllers
         private readonly ISecurityService _securityService;
         private readonly ILogger<SecurityController> _logger;
 
-        public SecurityController(ISecurityService securityService, ILogger<SecurityController> logger)
+        public SecurityController(
+            ISecurityService securityService,
+            ILogger<SecurityController> logger)
         {
             _securityService = securityService;
             _logger = logger;
@@ -492,6 +496,258 @@ namespace WebApplication1.Controllers
                 return StatusCode(500, "An error occurred while generating compliance report");
             }
         }
+
+        [HttpPost("ip-restrictions")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AddIpRestriction([FromBody] AddIpRestrictionRequest request)
+        {
+            try
+            {
+                var result = await _securityService.AddIpRestrictionAsync(
+                    request.IpAddress,
+                    request.Description,
+                    request.ExpirationMinutes);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding IP restriction");
+                return StatusCode(500, "Error adding IP restriction");
+            }
+        }
+
+        [HttpDelete("ip-restrictions/{ipAddress}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RemoveIpRestriction(string ipAddress)
+        {
+            try
+            {
+                var result = await _securityService.RemoveIpRestrictionAsync(ipAddress);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing IP restriction");
+                return StatusCode(500, "Error removing IP restriction");
+            }
+        }
+
+        [HttpGet("ip-restrictions")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetIpRestrictions()
+        {
+            try
+            {
+                var restrictions = await _securityService.GetIpRestrictionsAsync();
+                return Ok(restrictions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting IP restrictions");
+                return StatusCode(500, "Error getting IP restrictions");
+            }
+        }
+
+        [HttpPost("sessions/revoke")]
+        public async Task<IActionResult> RevokeSession([FromBody] RevokeSessionRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.RevokeSessionAsync(request.SessionId, userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking session");
+                return StatusCode(500, "Error revoking session");
+            }
+        }
+
+        [HttpPost("sessions/revoke-all")]
+        public async Task<IActionResult> RevokeAllSessions()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.RevokeAllSessionsAsync(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking all sessions");
+                return StatusCode(500, "Error revoking all sessions");
+            }
+        }
+
+        [HttpGet("sessions")]
+        public async Task<IActionResult> GetActiveSessions()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var sessions = await _securityService.GetActiveSessionsAsync(userId);
+                return Ok(sessions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting active sessions");
+                return StatusCode(500, "Error getting active sessions");
+            }
+        }
+
+        [HttpGet("logs")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetSecurityLogs(
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] string? eventType = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50)
+        {
+            try
+            {
+                var logs = await _securityService.GetSecurityLogsAsync(
+                    startDate,
+                    endDate,
+                    eventType,
+                    page,
+                    pageSize);
+
+                return Ok(logs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting security logs");
+                return StatusCode(500, "Error getting security logs");
+            }
+        }
+
+        [HttpPost("2fa/enable")]
+        public async Task<IActionResult> EnableTwoFactorAuth()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.EnableTwoFactorAuthAsync(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error enabling two-factor authentication");
+                return StatusCode(500, "Error enabling two-factor authentication");
+            }
+        }
+
+        [HttpPost("2fa/disable")]
+        public async Task<IActionResult> DisableTwoFactorAuth([FromBody] DisableTwoFactorAuthRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.DisableTwoFactorAuthAsync(userId, request.Code);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error disabling two-factor authentication");
+                return StatusCode(500, "Error disabling two-factor authentication");
+            }
+        }
+
+        [HttpPost("2fa/verify")]
+        public async Task<IActionResult> VerifyTwoFactorAuth([FromBody] VerifyTwoFactorAuthRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.VerifyTwoFactorAuthAsync(userId, request.Code);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying two-factor authentication");
+                return StatusCode(500, "Error verifying two-factor authentication");
+            }
+        }
+
+        [HttpPost("password/change")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _securityService.ChangePasswordAsync(
+                    userId,
+                    request.CurrentPassword,
+                    request.NewPassword);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error changing password");
+                return StatusCode(500, "Error changing password");
+            }
+        }
+
+        [HttpPost("password/reset-request")]
+        [AllowAnonymous]
+        public async Task<IActionResult> RequestPasswordReset([FromBody] RequestPasswordResetRequest request)
+        {
+            try
+            {
+                var result = await _securityService.RequestPasswordResetAsync(request.Email);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error requesting password reset");
+                return StatusCode(500, "Error requesting password reset");
+            }
+        }
+
+        [HttpPost("password/reset")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            try
+            {
+                var result = await _securityService.ResetPasswordAsync(
+                    request.Email,
+                    request.Token,
+                    request.NewPassword);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resetting password");
+                return StatusCode(500, "Error resetting password");
+            }
+        }
     }
 
     // Request Models
@@ -605,5 +861,45 @@ namespace WebApplication1.Controllers
     public class CheckIpBlockedRequest
     {
         public string IpAddress { get; set; }
+    }
+
+    public class AddIpRestrictionRequest
+    {
+        public required string IpAddress { get; set; }
+        public string? Description { get; set; }
+        public int ExpirationMinutes { get; set; } = 60;
+    }
+
+    public class RevokeSessionRequest
+    {
+        public required string SessionId { get; set; }
+    }
+
+    public class DisableTwoFactorAuthRequest
+    {
+        public required string Code { get; set; }
+    }
+
+    public class VerifyTwoFactorAuthRequest
+    {
+        public required string Code { get; set; }
+    }
+
+    public class ChangePasswordRequest
+    {
+        public required string CurrentPassword { get; set; }
+        public required string NewPassword { get; set; }
+    }
+
+    public class RequestPasswordResetRequest
+    {
+        public required string Email { get; set; }
+    }
+
+    public class ResetPasswordRequest
+    {
+        public required string Email { get; set; }
+        public required string Token { get; set; }
+        public required string NewPassword { get; set; }
     }
 } 

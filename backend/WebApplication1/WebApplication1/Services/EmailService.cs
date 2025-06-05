@@ -17,6 +17,8 @@ namespace WebApplication1.Services
         Task SendWelcomeEmailAsync(string to, string username);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendEmailVerificationAsync(string to, string verificationLink);
+        Task SendPasswordChangeNotificationAsync(string to, string username);
+        Task SendFriendRequestNotificationAsync(string to, string fromUsername);
         string CreateJwtToken(string email, string secret, TimeSpan expiresIn);
         ClaimsPrincipal ValidateToken(string token, string secret);
     }
@@ -180,6 +182,51 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Email doğrulama emaili gönderilirken hata oluştu: {To}", to);
+                throw;
+            }
+        }
+
+        public async Task SendPasswordChangeNotificationAsync(string to, string username)
+        {
+            try
+            {
+                var subject = "Şifre Değişikliği Bildirimi";
+                var body = $@"
+                    <h2>Şifre Değişikliği</h2>
+                    <p>Merhaba {username},</p>
+                    <p>Hesabınızın şifresi başarıyla değiştirildi.</p>
+                    <p>Eğer bu değişikliği siz yapmadıysanız, lütfen hemen destek ekibimizle iletişime geçin.</p>
+                    <p>İyi günler,<br>ChitChat Ekibi</p>";
+
+                await SendEmailAsync(to, subject, body);
+                _logger.LogInformation("Şifre değişikliği bildirimi gönderildi: {To}, {Username}", to, username);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Şifre değişikliği bildirimi gönderilirken hata oluştu: {To}, {Username}", to, username);
+                throw;
+            }
+        }
+
+        public async Task SendFriendRequestNotificationAsync(string to, string fromUsername)
+        {
+            try
+            {
+                var subject = "Yeni Arkadaşlık İsteği";
+                var body = $@"
+                    <h2>Yeni Arkadaşlık İsteği</h2>
+                    <p>Merhaba,</p>
+                    <p>{fromUsername} size bir arkadaşlık isteği gönderdi.</p>
+                    <p>İsteği görüntülemek ve yanıtlamak için aşağıdaki bağlantıya tıklayın:</p>
+                    <p><a href='{_backendUrl}/friends/requests'>Arkadaşlık İsteğini Görüntüle</a></p>
+                    <p>İyi günler,<br>ChitChat Ekibi</p>";
+
+                await SendEmailAsync(to, subject, body);
+                _logger.LogInformation("Arkadaşlık isteği bildirimi gönderildi: {To}, {FromUsername}", to, fromUsername);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Arkadaşlık isteği bildirimi gönderilirken hata oluştu: {To}, {FromUsername}", to, fromUsername);
                 throw;
             }
         }

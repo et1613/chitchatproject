@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
+using System.Security.Claims;
+using WebApplication1.Models.Hashing;
 using System.Threading.Tasks;
 using System.IO;
 using Microsoft.AspNetCore.Http;
@@ -13,58 +15,162 @@ namespace WebApplication1.Controllers
     [Authorize]
     public class HashingController : ControllerBase
     {
-        private readonly HashingService _hashingService;
+        private readonly IHashingService _hashingService;
         private readonly ILogger<HashingController> _logger;
 
         public HashingController(
-            HashingService hashingService,
+            IHashingService hashingService,
             ILogger<HashingController> logger)
         {
             _hashingService = hashingService;
             _logger = logger;
         }
 
-        [HttpPost("hash-password")]
-        public IActionResult HashPassword([FromBody] HashPasswordRequest request)
+        [HttpPost("hash")]
+        public async Task<IActionResult> HashData([FromBody] HashDataRequest request)
         {
             try
             {
-                var hashedPassword = _hashingService.HashPassword(request.Password);
-                return Ok(new { HashedPassword = hashedPassword });
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var hashResult = await _hashingService.HashDataAsync(request.Data, request.Algorithm);
+                return Ok(hashResult);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error hashing password");
-                return StatusCode(500, "Error hashing password");
+                _logger.LogError(ex, "Error hashing data");
+                return StatusCode(500, "Error hashing data");
             }
         }
 
-        [HttpPost("verify-password")]
-        public IActionResult VerifyPassword([FromBody] VerifyPasswordRequest request)
+        [HttpPost("verify")]
+        public async Task<IActionResult> VerifyHash([FromBody] VerifyHashRequest request)
         {
             try
             {
-                var isValid = _hashingService.VerifyHash(request.Password, request.HashedPassword);
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var isValid = await _hashingService.VerifyHashAsync(request.Data, request.Hash, request.Algorithm);
                 return Ok(new { IsValid = isValid });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error verifying password");
-                return StatusCode(500, "Error verifying password");
+                _logger.LogError(ex, "Error verifying hash");
+                return StatusCode(500, "Error verifying hash");
+            }
+        }
+
+        [HttpPost("generate-salt")]
+        public async Task<IActionResult> GenerateSalt([FromQuery] int length = 16)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var salt = await _hashingService.GenerateSaltAsync(length);
+                return Ok(new { Salt = salt });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating salt");
+                return StatusCode(500, "Error generating salt");
+            }
+        }
+
+        [HttpPost("hash-with-salt")]
+        public async Task<IActionResult> HashWithSalt([FromBody] HashWithSaltRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var hashResult = await _hashingService.HashWithSaltAsync(request.Data, request.Salt, request.Algorithm);
+                return Ok(hashResult);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error hashing with salt");
+                return StatusCode(500, "Error hashing with salt");
+            }
+        }
+
+        [HttpPost("secure-storage")]
+        public async Task<IActionResult> StoreSecureData([FromBody] StoreSecureDataRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _hashingService.StoreSecureDataAsync(request.Key, request.Data, request.ExpirationMinutes);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error storing secure data");
+                return StatusCode(500, "Error storing secure data");
+            }
+        }
+
+        [HttpGet("secure-storage/{key}")]
+        public async Task<IActionResult> GetSecureData(string key)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var data = await _hashingService.GetSecureDataAsync(key);
+                return Ok(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving secure data");
+                return StatusCode(500, "Error retrieving secure data");
+            }
+        }
+
+        [HttpDelete("secure-storage/{key}")]
+        public async Task<IActionResult> DeleteSecureData(string key)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _hashingService.DeleteSecureDataAsync(key);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting secure data");
+                return StatusCode(500, "Error deleting secure data");
             }
         }
 
         [HttpPost("hash-file")]
-        public async Task<IActionResult> HashFile(IFormFile file)
+        public async Task<IActionResult> HashFile(IFormFile file, [FromQuery] string algorithm = "SHA256")
         {
             try
             {
-                if (file == null || file.Length == 0)
-                    return BadRequest("No file uploaded");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
                 using var stream = file.OpenReadStream();
-                var fileHash = await _hashingService.HashFileAsync(stream);
-                return Ok(new { FileHash = fileHash });
+                var hashResult = await _hashingService.HashFileAsync(stream, algorithm);
+                return Ok(hashResult);
             }
             catch (Exception ex)
             {
@@ -73,149 +179,51 @@ namespace WebApplication1.Controllers
             }
         }
 
-        [HttpPost("generate-secure-password")]
-        public IActionResult GenerateSecurePassword([FromBody] GeneratePasswordRequest request)
+        [HttpPost("verify-file")]
+        public async Task<IActionResult> VerifyFileHash(IFormFile file, [FromQuery] string hash, [FromQuery] string algorithm = "SHA256")
         {
             try
             {
-                var password = _hashingService.GenerateSecurePassword(request.Length);
-                return Ok(new { Password = password });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating secure password");
-                return StatusCode(500, "Error generating secure password");
-            }
-        }
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-        [HttpPost("generate-secure-filename")]
-        public IActionResult GenerateSecureFileName([FromBody] GenerateFileNameRequest request)
-        {
-            try
-            {
-                var secureFileName = _hashingService.GenerateSecureFileName(request.OriginalFileName);
-                return Ok(new { SecureFileName = secureFileName });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating secure file name");
-                return StatusCode(500, "Error generating secure file name");
-            }
-        }
-
-        [HttpPost("generate-url-token")]
-        public IActionResult GenerateUrlToken([FromBody] GenerateUrlTokenRequest request)
-        {
-            try
-            {
-                var token = _hashingService.GenerateSecureUrlToken(request.Url, request.Expiration);
-                return Ok(new { Token = token });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating URL token");
-                return StatusCode(500, "Error generating URL token");
-            }
-        }
-
-        [HttpPost("verify-url-token")]
-        public IActionResult VerifyUrlToken([FromBody] VerifyUrlTokenRequest request)
-        {
-            try
-            {
-                var isValid = _hashingService.ValidateSecureUrlToken(request.Token, request.Url);
+                using var stream = file.OpenReadStream();
+                var isValid = await _hashingService.VerifyFileHashAsync(stream, hash, algorithm);
                 return Ok(new { IsValid = isValid });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error verifying URL token");
-                return StatusCode(500, "Error verifying URL token");
-            }
-        }
-
-        [HttpPost("generate-access-token")]
-        public IActionResult GenerateAccessToken([FromBody] GenerateAccessTokenRequest request)
-        {
-            try
-            {
-                var token = _hashingService.GenerateTemporaryAccessToken(request.UserId, request.Expiration);
-                return Ok(new { Token = token });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating access token");
-                return StatusCode(500, "Error generating access token");
-            }
-        }
-
-        [HttpPost("verify-access-token")]
-        public IActionResult VerifyAccessToken([FromBody] VerifyAccessTokenRequest request)
-        {
-            try
-            {
-                var isValid = _hashingService.ValidateTemporaryAccessToken(request.Token, out string userId);
-                return Ok(new { IsValid = isValid, UserId = userId });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error verifying access token");
-                return StatusCode(500, "Error verifying access token");
+                _logger.LogError(ex, "Error verifying file hash");
+                return StatusCode(500, "Error verifying file hash");
             }
         }
     }
 
-    public class HashPasswordRequest
+    public class HashDataRequest
     {
-        [Required]
-        public string Password { get; set; }
+        public required string Data { get; set; }
+        public string Algorithm { get; set; } = "SHA256";
     }
 
-    public class VerifyPasswordRequest
+    public class VerifyHashRequest
     {
-        [Required]
-        public string Password { get; set; }
-
-        [Required]
-        public string HashedPassword { get; set; }
+        public required string Data { get; set; }
+        public required string Hash { get; set; }
+        public string Algorithm { get; set; } = "SHA256";
     }
 
-    public class GeneratePasswordRequest
+    public class HashWithSaltRequest
     {
-        public int Length { get; set; } = 16;
+        public required string Data { get; set; }
+        public required string Salt { get; set; }
+        public string Algorithm { get; set; } = "SHA256";
     }
 
-    public class GenerateFileNameRequest
+    public class StoreSecureDataRequest
     {
-        [Required]
-        public string OriginalFileName { get; set; }
-    }
-
-    public class GenerateUrlTokenRequest
-    {
-        [Required]
-        public string Url { get; set; }
-        public TimeSpan? Expiration { get; set; }
-    }
-
-    public class VerifyUrlTokenRequest
-    {
-        [Required]
-        public string Token { get; set; }
-
-        [Required]
-        public string Url { get; set; }
-    }
-
-    public class GenerateAccessTokenRequest
-    {
-        [Required]
-        public string UserId { get; set; }
-        public TimeSpan? Expiration { get; set; }
-    }
-
-    public class VerifyAccessTokenRequest
-    {
-        [Required]
-        public string Token { get; set; }
+        public required string Key { get; set; }
+        public required string Data { get; set; }
+        public int ExpirationMinutes { get; set; } = 60;
     }
 } 

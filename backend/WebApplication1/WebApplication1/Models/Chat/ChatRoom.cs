@@ -28,11 +28,17 @@ namespace WebApplication1.Models.Chat
         public required virtual User Admin { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastActivityAt { get; set; }
+        public bool IsActive { get; set; } = true;
         public bool IsPrivate { get; set; }
         public int MaxParticipants { get; set; } = 100;
         public bool AllowMessageEditing { get; set; } = true;
         public int MessageEditTimeLimit { get; set; } = 5; // dakika cinsinden
         public int MaxPinnedMessages { get; set; } = 5;
+        public bool AllowInvites { get; set; } = true;
+        public bool RequireApproval { get; set; } = false;
+        public string? AvatarUrl { get; set; }
+        public string? CustomData { get; set; }
 
         // Navigation properties
         public virtual ICollection<User> Participants { get; set; } = new List<User>();

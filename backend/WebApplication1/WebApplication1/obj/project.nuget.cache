@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "UOSVvdx+Elk=",
+  "dgSpecHash": "NAqOE8nl65U=",
   "success": true,
   "projectFilePath": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\WebApplication1.csproj",
   "expectedPackageFiles": [
@@ -86,7 +86,9 @@
     "C:\\Users\\emir_\\.nuget\\packages\\runtime.win-arm64.runtime.native.system.data.sqlclient.sni\\4.4.0\\runtime.win-arm64.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
     "C:\\Users\\emir_\\.nuget\\packages\\runtime.win-x64.runtime.native.system.data.sqlclient.sni\\4.4.0\\runtime.win-x64.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
     "C:\\Users\\emir_\\.nuget\\packages\\runtime.win-x86.runtime.native.system.data.sqlclient.sni\\4.4.0\\runtime.win-x86.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
-    "C:\\Users\\emir_\\.nuget\\packages\\sixlabors.imagesharp\\3.1.8\\sixlabors.imagesharp.3.1.8.nupkg.sha512",
+    "C:\\Users\\emir_\\.nuget\\packages\\sixlabors.fonts\\2.0.1\\sixlabors.fonts.2.0.1.nupkg.sha512",
+    "C:\\Users\\emir_\\.nuget\\packages\\sixlabors.imagesharp\\3.1.9\\sixlabors.imagesharp.3.1.9.nupkg.sha512",
+    "C:\\Users\\emir_\\.nuget\\packages\\sixlabors.imagesharp.drawing\\2.0.1\\sixlabors.imagesharp.drawing.2.0.1.nupkg.sha512",
     "C:\\Users\\emir_\\.nuget\\packages\\swashbuckle.aspnetcore\\6.6.2\\swashbuckle.aspnetcore.6.6.2.nupkg.sha512",
     "C:\\Users\\emir_\\.nuget\\packages\\swashbuckle.aspnetcore.swagger\\6.6.2\\swashbuckle.aspnetcore.swagger.6.6.2.nupkg.sha512",
     "C:\\Users\\emir_\\.nuget\\packages\\swashbuckle.aspnetcore.swaggergen\\6.6.2\\swashbuckle.aspnetcore.swaggergen.6.6.2.nupkg.sha512",

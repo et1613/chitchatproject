@@ -7,52 +7,79 @@ namespace WebApplication1.Models.Users
     public class UserSettings
     {
         [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int Id { get; set; }
 
         [Required]
         public required string UserId { get; set; }
 
-        public string Language { get; set; } = "tr";
+        [ForeignKey("UserId")]
+        public required virtual User User { get; set; }
 
+        [Required]
         public required string TimeZone { get; set; }
 
-        public bool ShowOnlineStatus { get; set; } = true;
+        [Required]
+        public required string Language { get; set; }
 
-        public bool ShowLastSeen { get; set; } = true;
+        [Required]
+        public required string Theme { get; set; }
 
-        public bool ShowReadReceipts { get; set; } = true;
+        public bool NotificationsEnabled { get; set; }
 
-        public bool ShowTypingStatus { get; set; } = true;
+        public bool EmailNotificationsEnabled { get; set; }
 
-        public bool EnableNotifications { get; set; } = true;
+        public bool PushNotificationsEnabled { get; set; }
 
-        public bool EnableEmailNotifications { get; set; } = true;
+        public bool SoundEnabled { get; set; }
 
-        public bool EnablePushNotifications { get; set; } = true;
+        public bool RememberMe { get; set; }
 
-        public bool EnableSoundNotifications { get; set; } = true;
+        public int SessionTimeout { get; set; }
 
-        public bool EnableVibrationNotifications { get; set; } = true;
+        public bool ShowOnlineStatus { get; set; }
 
-        public string Theme { get; set; } = "light";
+        public bool ShowLastSeen { get; set; }
 
-        public string FontSize { get; set; } = "medium";
+        public bool ShowReadReceipts { get; set; }
 
-        public bool EnableAutoSave { get; set; } = true;
+        public bool ShowTypingIndicator { get; set; }
 
-        public int AutoSaveInterval { get; set; } = 5; // minutes
+        public bool AutoSaveDrafts { get; set; }
 
-        public bool EnableTwoFactorAuth { get; set; } = false;
+        public int DraftAutoSaveInterval { get; set; }
 
-        public bool EnableLoginNotifications { get; set; } = true;
+        public bool EnableMessageSearch { get; set; }
 
-        public bool EnableActivityLogging { get; set; } = true;
+        public bool EnableFileSharing { get; set; }
+
+        public int MaxFileSize { get; set; }
+
+        public string[] AllowedFileTypes { get; set; } = Array.Empty<string>();
+
+        public bool EnableVoiceMessages { get; set; }
+
+        public bool EnableVideoCalls { get; set; }
+
+        public bool EnableScreenSharing { get; set; }
+
+        public bool EnableLocationSharing { get; set; }
+
+        public bool EnableContactSync { get; set; }
+
+        public bool EnableCalendarSync { get; set; }
+
+        public bool EnableTaskSync { get; set; }
+
+        public bool EnableNoteSync { get; set; }
+
+        public bool EnableCloudBackup { get; set; }
+
+        public int BackupFrequency { get; set; }
+
+        public DateTime LastBackup { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime? LastModified { get; set; }
-
-        [ForeignKey("UserId")]
-        public required virtual User User { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 } 

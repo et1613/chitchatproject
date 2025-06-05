@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Controllers
 {
@@ -13,11 +14,11 @@ namespace WebApplication1.Controllers
     [Authorize]
     public class ConnectionController : ControllerBase
     {
-        private readonly ConnectionManager _connectionManager;
+        private readonly IConnectionManager _connectionManager;
         private readonly ILogger<ConnectionController> _logger;
 
         public ConnectionController(
-            ConnectionManager connectionManager,
+            IConnectionManager connectionManager,
             ILogger<ConnectionController> logger)
         {
             _connectionManager = connectionManager;
@@ -60,99 +61,205 @@ namespace WebApplication1.Controllers
         }
 
         [HttpGet("status")]
-        public IActionResult GetConnectionStatus()
+        public async Task<IActionResult> GetConnectionStatus()
         {
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var isConnected = _connectionManager.GetClient(userId) != null;
-                var connectionInfo = _connectionManager.GetAllConnections()
-                    .FirstOrDefault(c => c.Socket.State == WebSocketState.Open);
-
-                return Ok(new
-                {
-                    isConnected,
-                    connectionInfo = connectionInfo != null ? new
-                    {
-                        connectedAt = connectionInfo.ConnectedAt,
-                        lastActivity = connectionInfo.LastActivity,
-                        ipAddress = connectionInfo.IpAddress,
-                        messagesSent = connectionInfo.MessagesSent,
-                        messagesReceived = connectionInfo.MessagesReceived
-                    } : null
-                });
+                var status = await _connectionManager.GetConnectionStatusAsync(userId);
+                return Ok(status);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting connection status");
-                return StatusCode(500, "An error occurred while getting connection status");
+                return StatusCode(500, "Error getting connection status");
             }
         }
 
-        [HttpPost("ping")]
-        public async Task<IActionResult> PingConnection()
+        [HttpGet("active-users")]
+        public async Task<IActionResult> GetActiveUsers()
         {
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+                    return Unauthorized();
 
-                var isAlive = await _connectionManager.PingClient(userId);
-                return Ok(new { isAlive });
+                var activeUsers = await _connectionManager.GetActiveUsersAsync();
+                return Ok(activeUsers);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error pinging connection");
-                return StatusCode(500, "An error occurred while pinging connection");
+                _logger.LogError(ex, "Error getting active users");
+                return StatusCode(500, "Error getting active users");
             }
         }
 
-        [HttpGet("active")]
-        public IActionResult GetActiveConnections()
+        [HttpGet("user-status/{userId}")]
+        public async Task<IActionResult> GetUserStatus(string userId)
         {
             try
             {
-                var connections = _connectionManager.GetAllConnections()
-                    .Where(c => c.Socket.State == WebSocketState.Open)
-                    .Select(c => new
-                    {
-                        connectedAt = c.ConnectedAt,
-                        lastActivity = c.LastActivity,
-                        ipAddress = c.IpAddress,
-                        messagesSent = c.MessagesSent,
-                        messagesReceived = c.MessagesReceived
-                    });
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized();
 
-                return Ok(new
-                {
-                    totalConnections = _connectionManager.GetConnectionCount(),
-                    activeConnections = connections
-                });
+                var status = await _connectionManager.GetUserStatusAsync(userId);
+                return Ok(status);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting active connections");
-                return StatusCode(500, "An error occurred while getting active connections");
+                _logger.LogError(ex, "Error getting user status");
+                return StatusCode(500, "Error getting user status");
             }
         }
 
-        [HttpPost("cleanup")]
+        [HttpPost("disconnect")]
+        public async Task<IActionResult> DisconnectUser()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                await _connectionManager.RemoveClientAsync(userId);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error disconnecting user");
+                return StatusCode(500, "Error disconnecting user");
+            }
+        }
+
+        [HttpPost("disconnect/{userId}")]
         [Authorize(Roles = "Admin")]
-        public IActionResult CleanupConnections()
+        public async Task<IActionResult> DisconnectUserByAdmin(string userId)
         {
             try
             {
-                _connectionManager.CleanupClosedConnections();
-                return Ok(new { message = "Connection cleanup completed" });
+                await _connectionManager.RemoveClientAsync(userId);
+                return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error cleaning up connections");
-                return StatusCode(500, "An error occurred while cleaning up connections");
+                _logger.LogError(ex, "Error disconnecting user by admin");
+                return StatusCode(500, "Error disconnecting user by admin");
+            }
+        }
+
+        [HttpGet("sessions")]
+        public async Task<IActionResult> GetUserSessions()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var sessions = await _connectionManager.GetUserSessionsAsync(userId);
+                return Ok(sessions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user sessions");
+                return StatusCode(500, "Error getting user sessions");
+            }
+        }
+
+        [HttpDelete("sessions/{sessionId}")]
+        public async Task<IActionResult> RevokeSession(string sessionId)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _connectionManager.RevokeSessionAsync(sessionId, userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking session");
+                return StatusCode(500, "Error revoking session");
+            }
+        }
+
+        [HttpPost("sessions/revoke-all")]
+        public async Task<IActionResult> RevokeAllSessions()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _connectionManager.RevokeAllSessionsAsync(userId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking all sessions");
+                return StatusCode(500, "Error revoking all sessions");
+            }
+        }
+
+        [HttpGet("sessions/active")]
+        public async Task<IActionResult> GetActiveSessions()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var sessions = await _connectionManager.GetActiveSessionsAsync(userId);
+                return Ok(sessions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting active sessions");
+                return StatusCode(500, "Error getting active sessions");
+            }
+        }
+
+        [HttpPost("broadcast")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> BroadcastMessage([FromBody] BroadcastMessageRequest request)
+        {
+            try
+            {
+                await _connectionManager.BroadcastMessageAsync(request.Message, request.Type);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting message");
+                return StatusCode(500, "Error broadcasting message");
+            }
+        }
+
+        [HttpPost("notify/{userId}")]
+        public async Task<IActionResult> SendNotification(string userId, [FromBody] NotificationRequest request)
+        {
+            try
+            {
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized();
+
+                await _connectionManager.SendNotificationAsync(userId, request.Message, request.Type);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending notification");
+                return StatusCode(500, "Error sending notification");
             }
         }
 
@@ -224,5 +331,17 @@ namespace WebApplication1.Controllers
     {
         public string Type { get; set; }
         public string Content { get; set; }
+    }
+
+    public class BroadcastMessageRequest
+    {
+        public required string Message { get; set; }
+        public string? Type { get; set; }
+    }
+
+    public class NotificationRequest
+    {
+        public required string Message { get; set; }
+        public string? Type { get; set; }
     }
 } 

@@ -15,24 +15,27 @@ namespace WebApplication1.Models.Messages
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string MessageId { get; set; } = string.Empty;
-
-        [ForeignKey("MessageId")]
-        public required virtual Message Message { get; set; }
+        public required string MessageId { get; set; }
 
         [Required]
         public required string OldContent { get; set; }
 
-        public string? NewContent { get; set; }
-
         [Required]
-        public DateTime EditedAt { get; set; }
+        public required string NewContent { get; set; }
+
+        public DateTime EditedAt { get; set; } = DateTime.UtcNow;
 
         [Required]
         public required string EditedByUserId { get; set; }
 
-        [ForeignKey("EditedByUserId")]
-        public required virtual User EditedByUser { get; set; }
+        public virtual User? EditedByUser { get; set; }
+
+        [Column(TypeName = "jsonb")]
+        public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+
+        // Navigation property
+        [ForeignKey("MessageId")]
+        public required Message Message { get; set; }
 
         [Required]
         public EditType EditType { get; set; }
@@ -44,6 +47,7 @@ namespace WebApplication1.Models.Messages
         [NotMapped]
         public bool HasContentChanged =>
             !string.IsNullOrEmpty(NewContent) && !string.Equals(OldContent, NewContent, StringComparison.Ordinal);
+
         public string GetContentDiff()
         {
             if (string.IsNullOrEmpty(NewContent))

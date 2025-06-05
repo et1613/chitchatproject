@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using System.IO;
-using System;
+using System.Security.Claims;
+using WebApplication1.Models.Files;
 
 namespace WebApplication1.Controllers
 {
@@ -13,12 +11,14 @@ namespace WebApplication1.Controllers
     [Authorize]
     public class FileController : ControllerBase
     {
-        private readonly IStorageService _storageService;
+        private readonly IFileService _fileService;
         private readonly ILogger<FileController> _logger;
 
-        public FileController(IStorageService storageService, ILogger<FileController> logger)
+        public FileController(
+            IFileService fileService,
+            ILogger<FileController> logger)
         {
-            _storageService = storageService;
+            _fileService = fileService;
             _logger = logger;
         }
 
@@ -27,190 +27,258 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                if (file == null || file.Length == 0)
-                    return BadRequest("Dosya boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var fileUrl = await _storageService.UploadFileAsync(file.OpenReadStream(), file.FileName, file.ContentType);
-                return Ok(new { fileUrl });
+                var attachment = await _fileService.UploadFileAsync(file, userId);
+                return Ok(attachment);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya yüklenirken hata oluştu");
-                return StatusCode(500, "Dosya yüklenirken bir hata oluştu");
+                _logger.LogError(ex, "Error uploading file");
+                return StatusCode(500, "Error uploading file");
             }
         }
 
-        [HttpPost("upload/chunk")]
-        public async Task<IActionResult> UploadFileChunk(IFormFile file, [FromQuery] string fileName, [FromQuery] string contentType)
+        [HttpPost("upload/multiple")]
+        public async Task<IActionResult> UploadMultipleFiles(List<IFormFile> files)
         {
             try
             {
-                if (file == null || file.Length == 0)
-                    return BadRequest("Dosya boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var fileUrl = await _storageService.UploadFileInChunksAsync(file, fileName, contentType);
-                return Ok(new { fileUrl });
+                var attachments = await _fileService.UploadMultipleFilesAsync(files, userId);
+                return Ok(attachments);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya chunk yüklenirken hata oluştu");
-                return StatusCode(500, "Dosya yüklenirken bir hata oluştu");
+                _logger.LogError(ex, "Error uploading multiple files");
+                return StatusCode(500, "Error uploading multiple files");
             }
         }
 
-        [HttpGet("download/{*fileUrl}")]
-        public async Task<IActionResult> DownloadFile(string fileUrl)
+        [HttpGet("{fileId}")]
+        public async Task<IActionResult> GetFile(string fileId)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var fileStream = await _storageService.DownloadFileAsync(fileUrl);
-                var fileName = Path.GetFileName(fileUrl);
-
-                return File(fileStream, "application/octet-stream", fileName);
-            }
-            catch (FileNotFoundException)
-            {
-                return NotFound("Dosya bulunamadı");
+                var file = await _fileService.GetFileAsync(fileId);
+                return Ok(file);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya indirilirken hata oluştu");
-                return StatusCode(500, "Dosya indirilirken bir hata oluştu");
+                _logger.LogError(ex, "Error getting file");
+                return StatusCode(500, "Error getting file");
             }
         }
 
-        [HttpGet("thumbnail/{*fileUrl}")]
-        public async Task<IActionResult> GetThumbnail(string fileUrl)
+        [HttpGet("{fileId}/download")]
+        public async Task<IActionResult> DownloadFile(string fileId)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var thumbnailStream = await _storageService.GetThumbnailAsync(fileUrl);
-                return File(thumbnailStream, "image/jpeg");
-            }
-            catch (FileNotFoundException)
-            {
-                return NotFound("Thumbnail bulunamadı");
+                var (stream, fileName, contentType) = await _fileService.DownloadFileAsync(fileId);
+                return File(stream, contentType, fileName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Thumbnail alınırken hata oluştu");
-                return StatusCode(500, "Thumbnail alınırken bir hata oluştu");
+                _logger.LogError(ex, "Error downloading file");
+                return StatusCode(500, "Error downloading file");
             }
         }
 
-        [HttpGet("metadata/{*fileUrl}")]
-        public async Task<IActionResult> GetFileMetadata(string fileUrl)
+        [HttpDelete("{fileId}")]
+        public async Task<IActionResult> DeleteFile(string fileId)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var metadata = await _storageService.GetFileMetadataAsync(fileUrl);
-                return Ok(metadata);
-            }
-            catch (FileNotFoundException)
-            {
-                return NotFound("Dosya metadata'sı bulunamadı");
+                var result = await _fileService.DeleteFileAsync(fileId, userId);
+                return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya metadata'sı alınırken hata oluştu");
-                return StatusCode(500, "Dosya metadata'sı alınırken bir hata oluştu");
+                _logger.LogError(ex, "Error deleting file");
+                return StatusCode(500, "Error deleting file");
             }
         }
 
-        [HttpPost("compress/{*fileUrl}")]
-        public async Task<IActionResult> CompressFile(string fileUrl)
+        [HttpGet("{fileId}/preview")]
+        public async Task<IActionResult> GetFilePreview(string fileId)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                var compressedFileUrl = await _storageService.CompressFileAsync(fileUrl);
-                return Ok(new { compressedFileUrl });
-            }
-            catch (FileNotFoundException)
-            {
-                return NotFound("Dosya bulunamadı");
+                var previewUrl = await _fileService.GenerateFilePreviewAsync(fileId);
+                return Ok(new { PreviewUrl = previewUrl });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya sıkıştırılırken hata oluştu");
-                return StatusCode(500, "Dosya sıkıştırılırken bir hata oluştu");
+                _logger.LogError(ex, "Error generating file preview");
+                return StatusCode(500, "Error generating file preview");
             }
         }
 
-        [HttpPost("convert/{*fileUrl}")]
-        public async Task<IActionResult> ConvertFileFormat(string fileUrl, [FromQuery] string targetFormat)
+        [HttpPost("{fileId}/compress")]
+        public async Task<IActionResult> CompressFile(string fileId, [FromQuery] int quality = 80)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                if (string.IsNullOrEmpty(targetFormat))
-                    return BadRequest("Hedef format belirtilmedi");
-
-                var convertedFileUrl = await _storageService.ConvertFileFormatAsync(fileUrl, targetFormat);
-                return Ok(new { convertedFileUrl });
-            }
-            catch (FileNotFoundException)
-            {
-                return NotFound("Dosya bulunamadı");
-            }
-            catch (NotSupportedException ex)
-            {
-                return BadRequest(ex.Message);
+                var compressedFile = await _fileService.CompressFileAsync(fileId, quality);
+                return Ok(compressedFile);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya formatı dönüştürülürken hata oluştu");
-                return StatusCode(500, "Dosya formatı dönüştürülürken bir hata oluştu");
+                _logger.LogError(ex, "Error compressing file");
+                return StatusCode(500, "Error compressing file");
             }
         }
 
-        [HttpDelete("{*fileUrl}")]
-        public async Task<IActionResult> DeleteFile(string fileUrl)
+        [HttpPost("{fileId}/optimize")]
+        public async Task<IActionResult> OptimizeImage(string fileId, [FromQuery] int maxWidth = 1920, [FromQuery] int maxHeight = 1080)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
 
-                await _storageService.DeleteFileAsync(fileUrl);
-                return Ok();
+                var optimizedFile = await _fileService.OptimizeImageAsync(fileId, maxWidth, maxHeight);
+                return Ok(optimizedFile);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya silinirken hata oluştu");
-                return StatusCode(500, "Dosya silinirken bir hata oluştu");
+                _logger.LogError(ex, "Error optimizing image");
+                return StatusCode(500, "Error optimizing image");
             }
         }
 
-        [HttpGet("exists/{*fileUrl}")]
-        public async Task<IActionResult> FileExists(string fileUrl)
+        [HttpGet("user/{userId}")]
+        public async Task<IActionResult> GetUserFiles(string userId)
         {
             try
             {
-                if (string.IsNullOrEmpty(fileUrl))
-                    return BadRequest("Dosya URL'i boş olamaz");
+                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized();
 
-                var exists = await _storageService.FileExistsAsync(fileUrl);
-                return Ok(new { exists });
+                var files = await _fileService.GetUserFilesAsync(userId);
+                return Ok(files);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Dosya kontrolü yapılırken hata oluştu");
-                return StatusCode(500, "Dosya kontrolü yapılırken bir hata oluştu");
+                _logger.LogError(ex, "Error getting user files");
+                return StatusCode(500, "Error getting user files");
+            }
+        }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchFiles([FromQuery] string query, [FromQuery] string? fileType = null)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var files = await _fileService.SearchFilesAsync(query, fileType);
+                return Ok(files);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching files");
+                return StatusCode(500, "Error searching files");
+            }
+        }
+
+        [HttpPost("{fileId}/share")]
+        public async Task<IActionResult> ShareFile(string fileId, [FromBody] ShareFileRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _fileService.ShareFileAsync(fileId, request.SharedWithUserId, request.Permissions);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sharing file");
+                return StatusCode(500, "Error sharing file");
+            }
+        }
+
+        [HttpGet("shared")]
+        public async Task<IActionResult> GetSharedFiles()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var files = await _fileService.GetSharedFilesAsync(userId);
+                return Ok(files);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting shared files");
+                return StatusCode(500, "Error getting shared files");
+            }
+        }
+
+        [HttpPost("{fileId}/unshare")]
+        public async Task<IActionResult> UnshareFile(string fileId, [FromBody] UnshareFileRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var result = await _fileService.UnshareFileAsync(fileId, request.SharedWithUserId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unsharing file");
+                return StatusCode(500, "Error unsharing file");
             }
         }
     }
+
+    public class ShareFileRequest
+    {
+        public required string SharedWithUserId { get; set; }
+        public required string Permissions { get; set; }
+    }
+
+    public class UnshareFileRequest
+    {
+        public required string SharedWithUserId { get; set; }
+    }
+} 
 } 

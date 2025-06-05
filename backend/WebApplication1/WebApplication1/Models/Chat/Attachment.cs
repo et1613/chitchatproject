@@ -11,30 +11,36 @@ namespace WebApplication1.Models.Chat
 {
     public class Attachment
     {
+        private readonly IStorageService _storageService;
+
+        public Attachment(IStorageService storageService)
+        {
+            _storageService = storageService;
+        }
+
         [Key]
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string MessageId { get; set; }
+        public required string MessageId { get; set; }
+
+        public string? Url { get; set; }
 
         [Required]
-        public string Url { get; set; }
+        public required string FileName { get; set; }
 
         [Required]
-        public string FileName { get; set; }
-
-        [Required]
-        public string FileType { get; set; }
+        public required string FileType { get; set; }
 
         public long FileSize { get; set; }
 
         [Required]
-        public string UploadedBy { get; set; }
+        public required string UploadedBy { get; set; }
 
         public string? ThumbnailUrl { get; set; }
 
         [Required]
-        public string MimeType { get; set; }
+        public required string MimeType { get; set; }
 
         public int? Width { get; set; }
 
@@ -44,12 +50,16 @@ namespace WebApplication1.Models.Chat
 
         public DateTime? DeletedAt { get; set; }
 
-        public string DeletedBy { get; set; }
+        public string? DeletedBy { get; set; }
 
         public bool IsDeleted => DeletedAt.HasValue;
 
         [Column(TypeName = "jsonb")]
         public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+
+        // Navigation property
+        [ForeignKey("MessageId")]
+        public required Message Message { get; set; }
 
         public bool IsImage() => MimeType.StartsWith("image/");
         public bool IsVideo() => MimeType.StartsWith("video/");
@@ -95,7 +105,7 @@ namespace WebApplication1.Models.Chat
 
         public bool IsWithinSizeLimit()
         {
-            const long maxSize = 10 * 1024 * 1024;
+            const long maxSize = 10 * 1024 * 1024; // 10MB
             return FileSize <= maxSize;
         }
     }

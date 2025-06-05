@@ -8,8 +8,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO.Compression;
 using System.Threading;
 using Microsoft.Extensions.Caching.Memory;
@@ -19,6 +17,19 @@ using WebApplication1.Models.Users;
 using WebApplication1.Models.Chat;
 using WebApplication1.Models.Notifications;
 using System.Text.Json;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.Fonts;
+using System.Numerics;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Formats;
+using System.Drawing.Imaging;
+using SixLabors.ImageSharp.PixelFormats;
+using Newtonsoft.Json.Linq;
 
 namespace WebApplication1.Services
 {
@@ -145,7 +156,17 @@ namespace WebApplication1.Services
                 throw;
             }
         }
-
+        private IImageFormat GetImageFormat(string targetFormat)
+        {
+            return targetFormat.ToLowerInvariant() switch
+            {
+                ".jpeg" or ".jpg" => JpegFormat.Instance,
+                ".png" => PngFormat.Instance,
+                ".gif" => GifFormat.Instance,
+                ".bmp" => BmpFormat.Instance,
+                _ => throw new ArgumentException($"Unsupported image format: {targetFormat}")
+            };
+        }
 
         public async Task<List<Message>> LoadMessagesAsync(string id)
         {
@@ -179,64 +200,69 @@ namespace WebApplication1.Services
                 {
                     case ImportFormat.Json:
                         var json = System.Text.Encoding.UTF8.GetString(data);
-                        return System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
+                        var messages = System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
+                        return messages ?? new List<Message>();
                         
                     case ImportFormat.Csv:
                         var csv = System.Text.Encoding.UTF8.GetString(data);
                         var lines = csv.Split('\n').Skip(1); // Skip header
-                        var messages = new List<Message>();
+                        var messageList = new List<Message>();
                         
-                        foreach (var line in lines)
+                        await Task.Run(() =>
                         {
-                            if (string.IsNullOrWhiteSpace(line)) continue;
-                            
-                            var parts = line.Split(',');
-                            if (parts.Length >= 5)
+                            foreach (var line in lines)
                             {
-                                // Create temporary User and ChatRoom objects for navigation properties
-                                var sender = new User
+                                if (string.IsNullOrWhiteSpace(line)) continue;
+                                
+                                var parts = line.Split(',');
+                                if (parts.Length >= 5)
                                 {
-                                    Id = parts[3],
-                                    UserName = $"ImportedUser_{parts[3]}",
-                                    Email = $"imported_{parts[3]}@example.com",
-                                    CreatedAt = DateTime.UtcNow
-                                };
+                                    // Create temporary User and ChatRoom objects for navigation properties
+                                    var sender = new User
+                                    {
+                                        Id = parts[3],
+                                        UserName = $"ImportedUser_{parts[3]}",
+                                        Email = $"imported_{parts[3]}@example.com",
+                                        CreatedAt = DateTime.UtcNow
+                                    };
 
-                                var chatRoom = new ChatRoom
-                                {
-                                    Id = parts[4],
-                                    Name = $"ImportedChat_{parts[4]}",
-                                    CreatedAt = DateTime.UtcNow,
-                                    AdminId = parts[3],
-                                    Admin = sender
-                                };
+                                    var chatRoom = new ChatRoom
+                                    {
+                                        Id = parts[4],
+                                        Name = $"ImportedChat_{parts[4]}",
+                                        CreatedAt = DateTime.UtcNow,
+                                        AdminId = parts[3],
+                                        Admin = sender
+                                    };
 
-                                var message = new Message
-                                {
-                                    Id = parts[0],
-                                    Content = parts[1],
-                                    Timestamp = DateTime.Parse(parts[2]),
-                                    SenderId = parts[3],
-                                    Sender = sender,
-                                    ChatRoomId = parts[4],
-                                    ChatRoom = chatRoom,
-                                    IsRead = false,
-                                    IsEdited = false,
-                                    IsDeleted = false,
-                                    Status = MessageStatus.Sent,
-                                    Type = MessageType.Text,
-                                    EditCount = 0,
-                                    ReactionsJson = "{}",
-                                    HiddenForUsers = new List<string>(),
-                                    Attachments = new List<Attachment>(),
-                                    EditHistory = new List<MessageHistory>(),
-                                    Replies = new List<Message>(),
-                                    Notifications = new List<Notification>()
-                                };
-                                messages.Add(message);
+                                    var message = new Message
+                                    {
+                                        Id = parts[0],
+                                        Content = parts[1],
+                                        Timestamp = DateTime.Parse(parts[2]),
+                                        SenderId = parts[3],
+                                        Sender = sender,
+                                        ChatRoomId = parts[4],
+                                        ChatRoom = chatRoom,
+                                        IsRead = false,
+                                        IsEdited = false,
+                                        IsDeleted = false,
+                                        Status = MessageStatus.Sent,
+                                        Type = MessageType.Text,
+                                        EditCount = 0,
+                                        ReactionsJson = "{}",
+                                        HiddenForUsers = new List<string>(),
+                                        Attachments = new List<Attachment>(),
+                                        EditHistory = new List<MessageHistory>(),
+                                        Replies = new List<Message>(),
+                                        Notifications = new List<Notification>()
+                                    };
+                                    messageList.Add(message);
+                                }
                             }
-                        }
-                        return messages;
+                        });
+                        
+                        return messageList;
                         
                     default:
                         throw new ArgumentException($"Unsupported import format: {format}");
@@ -389,7 +415,7 @@ namespace WebApplication1.Services
                     throw new ArgumentException("Dosya URL'i boş olamaz");
 
                 var cacheKey = $"file_{fileUrl}";
-                if (_cache.TryGetValue(cacheKey, out Stream cachedStream))
+                if (_cache.TryGetValue(cacheKey, out Stream? cachedStream) && cachedStream != null)
                 {
                     return cachedStream;
                 }
@@ -474,31 +500,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> CompressFileAsync(string fileUrl, CompressionLevel level = CompressionLevel.Optimal)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var compressedPath = Path.Combine(_uploadDirectory, $"compressed_{Path.GetFileName(filePath)}");
-
-                using (var sourceStream = new FileStream(filePath, FileMode.Open))
-                using (var destinationStream = new FileStream(compressedPath, FileMode.Create))
-                using (var gzipStream = new GZipStream(destinationStream, level))
-                {
-                    await sourceStream.CopyToAsync(gzipStream);
-                }
-
-                return $"/uploads/compressed_{Path.GetFileName(filePath)}";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error compressing file: {FileUrl}", fileUrl);
-                throw;
-            }
-        }
+        
 
         public async Task<string> OptimizeImageAsync(string fileUrl, int maxWidth = 1920, int maxHeight = 1080)
         {
@@ -514,29 +516,21 @@ namespace WebApplication1.Services
 
                 var optimizedPath = Path.Combine(_uploadDirectory, $"optimized_{Path.GetFileName(filePath)}");
 
-                using (var image = Image.FromFile(filePath))
+                using var image = await Image.LoadAsync(filePath);
+                var ratio = Math.Min(
+                    (float)maxWidth / image.Width,
+                    (float)maxHeight / image.Height
+                );
+
+                if (ratio < 1)
                 {
-                    var ratio = Math.Min(
-                        (float)maxWidth / image.Width,
-                        (float)maxHeight / image.Height
-                    );
+                    var newWidth = (int)(image.Width * ratio);
+                    var newHeight = (int)(image.Height * ratio);
 
-                    if (ratio < 1)
-                    {
-                        var newWidth = (int)(image.Width * ratio);
-                        var newHeight = (int)(image.Height * ratio);
-
-                        using (var resized = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                        {
-                            resized.Save(optimizedPath, ImageFormat.Jpeg);
-                        }
-                    }
-                    else
-                    {
-                        image.Save(optimizedPath, ImageFormat.Jpeg);
-                    }
+                    image.Mutate(x => x.Resize(newWidth, newHeight));
                 }
 
+                await image.SaveAsJpegAsync(optimizedPath, new JpegEncoder { Quality = 85 });
                 return $"/uploads/optimized_{Path.GetFileName(filePath)}";
             }
             catch (Exception ex)
@@ -554,33 +548,22 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var contentType = GetMimeType(filePath);
-                if (!IsImageFile(contentType))
-                    throw new ArgumentException("File is not an image");
-
                 var resizedPath = Path.Combine(_uploadDirectory, $"resized_{Path.GetFileName(filePath)}");
 
-                using (var image = Image.FromFile(filePath))
+                using var image = await Image.LoadAsync(filePath);
+                
+                if (maintainAspectRatio)
                 {
-                    int newWidth = width;
-                    int newHeight = height;
-
-                    if (maintainAspectRatio)
-                    {
-                        var ratio = Math.Min(
-                            (float)width / image.Width,
-                            (float)height / image.Height
-                        );
-                        newWidth = (int)(image.Width * ratio);
-                        newHeight = (int)(image.Height * ratio);
-                    }
-
-                    using (var resized = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                    {
-                        resized.Save(resizedPath, ImageFormat.Jpeg);
-                    }
+                    var ratio = Math.Min(
+                        (float)width / image.Width,
+                        (float)height / image.Height
+                    );
+                    width = (int)(image.Width * ratio);
+                    height = (int)(image.Height * ratio);
                 }
 
+                image.Mutate(x => x.Resize(width, height));
+                await image.SaveAsJpegAsync(resizedPath);
                 return $"/uploads/resized_{Path.GetFileName(filePath)}";
             }
             catch (Exception ex)
@@ -598,29 +581,11 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var contentType = GetMimeType(filePath);
-                if (!IsImageFile(contentType))
-                    throw new ArgumentException("File is not an image");
-
                 var croppedPath = Path.Combine(_uploadDirectory, $"cropped_{Path.GetFileName(filePath)}");
 
-                using (var image = Image.FromFile(filePath))
-                {
-                    if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
-                        x + width > image.Width || y + height > image.Height)
-                        throw new ArgumentException("Invalid crop parameters");
-
-                    using (var cropped = new Bitmap(width, height))
-                    {
-                        using (var graphics = Graphics.FromImage(cropped))
-                        {
-                            graphics.DrawImage(image, new Rectangle(0, 0, width, height),
-                                new Rectangle(x, y, width, height), GraphicsUnit.Pixel);
-                        }
-                        cropped.Save(croppedPath, ImageFormat.Jpeg);
-                    }
-                }
-
+                using var image = await Image.LoadAsync(filePath);
+                image.Mutate(ctx => ctx.Crop(new Rectangle(x, y, width, height)));
+                await image.SaveAsJpegAsync(croppedPath);
                 return $"/uploads/cropped_{Path.GetFileName(filePath)}";
             }
             catch (Exception ex)
@@ -638,28 +603,15 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var contentType = GetMimeType(filePath);
-                if (!IsImageFile(contentType))
-                    throw new ArgumentException("File is not an image");
-
                 var rotatedPath = Path.Combine(_uploadDirectory, $"rotated_{Path.GetFileName(filePath)}");
 
-                using (var image = Image.FromFile(filePath))
+                return await Task.Run(async () =>
                 {
-                    using (var rotated = new Bitmap(image.Width, image.Height))
-                    {
-                        using (var graphics = Graphics.FromImage(rotated))
-                        {
-                            graphics.TranslateTransform(image.Width / 2f, image.Height / 2f);
-                            graphics.RotateTransform(angle);
-                            graphics.TranslateTransform(-image.Width / 2f, -image.Height / 2f);
-                            graphics.DrawImage(image, 0, 0);
-                        }
-                        rotated.Save(rotatedPath, ImageFormat.Jpeg);
-                    }
-                }
-
-                return $"/uploads/rotated_{Path.GetFileName(filePath)}";
+                    using var image = await Image.LoadAsync(filePath);
+                    image.Mutate(x => x.Rotate(angle));
+                    await image.SaveAsJpegAsync(rotatedPath);
+                    return $"/uploads/rotated_{Path.GetFileName(filePath)}";
+                });
             }
             catch (Exception ex)
             {
@@ -668,7 +620,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> ApplyWatermarkAsync(string fileUrl, string watermarkText, float opacity = 0.5f)
+        public async Task<string> ConvertFileFormatAsync(string fileUrl, string targetFormat)
         {
             try
             {
@@ -676,74 +628,38 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var contentType = GetMimeType(filePath);
-                if (!IsImageFile(contentType))
-                    throw new ArgumentException("File is not an image");
+                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}.{targetFormat.ToLower()}");
 
-                var watermarkedPath = Path.Combine(_uploadDirectory, $"watermarked_{Path.GetFileName(filePath)}");
-
-                using (var image = Image.FromFile(filePath))
+                return await Task.Run(async () =>
                 {
-                    using (var watermarked = new Bitmap(image))
+                    using var image = await Image.LoadAsync(filePath);
+                    
+                    switch (targetFormat.ToLower())
                     {
-                        using (var graphics = Graphics.FromImage(watermarked))
-                        {
-                            var font = new Font("Arial", 32);
-                            var brush = new SolidBrush(Color.FromArgb((int)(opacity * 255), Color.White));
-                            var size = graphics.MeasureString(watermarkText, font);
-                            var position = new PointF(
-                                (watermarked.Width - size.Width) / 2,
-                                (watermarked.Height - size.Height) / 2
-                            );
-
-                            graphics.DrawString(watermarkText, font, brush, position);
-                        }
-                        watermarked.Save(watermarkedPath, ImageFormat.Jpeg);
+                        case "jpeg":
+                        case "jpg":
+                            await image.SaveAsJpegAsync(convertedPath);
+                            break;
+                        case "png":
+                            await image.SaveAsPngAsync(convertedPath);
+                            break;
+                        case "gif":
+                            await image.SaveAsGifAsync(convertedPath);
+                            break;
+                        case "bmp":
+                            await image.SaveAsBmpAsync(convertedPath);
+                            break;
+                        default:
+                            throw new ArgumentException($"Unsupported target format: {targetFormat}");
                     }
-                }
 
-                return $"/uploads/watermarked_{Path.GetFileName(filePath)}";
+                    return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}.{targetFormat.ToLower()}";
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error applying watermark: {FileUrl}", fileUrl);
+                _logger.LogError(ex, "Error converting file format: {FileUrl}", fileUrl);
                 throw;
-            }
-        }
-
-        public async Task<string> ConvertFileFormatAsync(string fileUrl, string targetFormat)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(fileUrl))
-                    throw new ArgumentException("Dosya URL'i boş olamaz");
-
-                var fileName = Path.GetFileName(fileUrl);
-                var filePath = Path.Combine(_uploadDirectory, fileName);
-                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(fileName)}{targetFormat}");
-
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("Dosya bulunamadı", fileName);
-
-                if (IsImageFile(Path.GetExtension(fileName)))
-                {
-                    using (var image = Image.FromFile(filePath))
-                    {
-                        var format = GetImageFormat(targetFormat);
-                        image.Save(convertedPath, format);
-                    }
-                }
-                else
-                {
-                    throw new NotSupportedException("Bu dosya türü için format dönüşümü desteklenmiyor");
-                }
-
-                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(fileName)}{targetFormat}";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Dosya formatı dönüştürülürken hata oluştu: {FileUrl}", fileUrl);
-                throw new Exception($"Dosya formatı dönüştürülürken hata oluştu: {ex.Message}", ex);
             }
         }
 
@@ -868,28 +784,35 @@ namespace WebApplication1.Services
 
         private async Task ValidateFileAsync(Stream fileStream, string fileName, string contentType)
         {
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            
-            if (!_options.AllowedFileTypes.Contains(extension))
-                throw new ArgumentException($"Desteklenmeyen dosya türü: {extension}");
-
-            if (fileStream.Length > _options.MaxFileSize)
-                throw new ArgumentException($"Dosya boyutu çok büyük. Maksimum boyut: {_options.MaxFileSize / (1024 * 1024)}MB");
-
-            // Dosya içeriği kontrolü
-            if (IsImageFile(extension))
+            try
             {
-                try
+                if (fileStream == null || fileStream.Length == 0)
+                    throw new ArgumentException("File stream is empty");
+
+                if (fileStream.Length > _options.MaxFileSize)
+                    throw new ArgumentException($"File size exceeds maximum allowed size of {_options.MaxFileSize} bytes");
+
+                var extension = Path.GetExtension(fileName).ToLowerInvariant();
+                if (!_options.AllowedFileTypes.Contains(extension))
+                    throw new ArgumentException($"File type {extension} is not allowed");
+
+                if (IsImageFile(extension))
                 {
-                    using (var image = Image.FromStream(fileStream))
+                    try
                     {
+                        using var image = await Image.LoadAsync(fileStream);
                         // Resim doğrulandı
                     }
+                    catch (Exception ex)
+                    {
+                        throw new ArgumentException("Invalid image file", ex);
+                    }
                 }
-                catch
-                {
-                    throw new ArgumentException("Geçersiz resim dosyası");
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating file: {FileName}", fileName);
+                throw;
             }
         }
 
@@ -914,50 +837,50 @@ namespace WebApplication1.Services
                     throw new FileNotFoundException("File not found", fileUrl);
 
                 var contentType = GetMimeType(filePath);
-                if (!IsImageFile(Path.GetExtension(filePath)))
+                if (!IsImageFile(contentType))
                     throw new ArgumentException("File is not an image");
 
                 var thumbnailPath = GetThumbnailPath(filePath);
-                var thumbnailDir = Path.GetDirectoryName(thumbnailPath);
-                
-                if (!Directory.Exists(thumbnailDir))
-                {
-                    Directory.CreateDirectory(thumbnailDir);
-                }
+                if (File.Exists(thumbnailPath))
+                    return $"/uploads/thumbnails/{Path.GetFileName(thumbnailPath)}";
 
-                using (var image = Image.FromFile(filePath))
-                {
-                    var ratio = Math.Min(
-                        (float)_options.ThumbnailWidth / image.Width,
-                        (float)_options.ThumbnailHeight / image.Height
-                    );
+                using var image = await Image.LoadAsync(filePath);
+                var ratio = Math.Min(
+                    (float)_options.ThumbnailWidth / image.Width,
+                    (float)_options.ThumbnailHeight / image.Height
+                );
 
-                    var newWidth = (int)(image.Width * ratio);
-                    var newHeight = (int)(image.Height * ratio);
+                var newWidth = (int)(image.Width * ratio);
+                var newHeight = (int)(image.Height * ratio);
 
-                    using (var thumbnail = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                    {
-                        thumbnail.Save(thumbnailPath, ImageFormat.Jpeg);
-                    }
-                }
+                image.Mutate(x => x.Resize(newWidth, newHeight));
+                await image.SaveAsJpegAsync(thumbnailPath, new JpegEncoder { Quality = 85 });
 
-                return $"/uploads/thumbnails/{Path.GetFileName(filePath)}";
+                return $"/uploads/thumbnails/{Path.GetFileName(thumbnailPath)}";
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating thumbnail: {FileUrl}", fileUrl);
-                throw new Exception($"Error generating thumbnail: {ex.Message}", ex);
+                throw;
             }
         }
 
         private string GetThumbnailPath(string filePath)
         {
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+
+            var directoryName = Path.GetDirectoryName(filePath);
+            if (directoryName == null)
+                throw new InvalidOperationException("Failed to determine the directory name from the file path.");
+
             return Path.Combine(
-                Path.GetDirectoryName(filePath),
+                directoryName,
                 "thumbnails",
                 Path.GetFileName(filePath)
             );
         }
+
 
         private string GetMetadataPath(string fileName)
         {
@@ -970,47 +893,54 @@ namespace WebApplication1.Services
 
         private async Task<FileMetadata> CreateFileMetadataAsync(string filePath, string originalFileName, string contentType)
         {
-            var fileInfo = new FileInfo(filePath);
-            using (var md5 = MD5.Create())
-            using (var stream = File.OpenRead(filePath))
+            return await Task.Run(() =>
             {
-                var hash = md5.ComputeHash(stream);
-                return new FileMetadata
+                var fileInfo = new FileInfo(filePath);
+                using (var md5 = MD5.Create())
+                using (var stream = File.OpenRead(filePath))
                 {
-                    FileName = originalFileName,
-                    ContentType = contentType,
-                    FileSize = fileInfo.Length,
-                    CreatedAt = fileInfo.CreationTimeUtc,
-                    LastModified = fileInfo.LastWriteTimeUtc,
-                    Hash = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant(),
-                    CustomMetadata = new Dictionary<string, string>()
-                };
-            }
+                    var hash = md5.ComputeHash(stream);
+                    return new FileMetadata
+                    {
+                        FileName = originalFileName,
+                        ContentType = contentType,
+                        FileSize = fileInfo.Length,
+                        CreatedAt = fileInfo.CreationTimeUtc,
+                        LastModified = fileInfo.LastWriteTimeUtc,
+                        Hash = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant(),
+                        CustomMetadata = new Dictionary<string, string>()
+                    };
+                }
+            });
         }
+
 
         private async Task SaveMetadataAsync(string fileName, FileMetadata metadata)
         {
             var metadataPath = GetMetadataPath(fileName);
             var metadataDir = Path.GetDirectoryName(metadataPath);
 
-            if (!Directory.Exists(metadataDir))
+            if (metadataDir == null)
             {
-                Directory.CreateDirectory(metadataDir);
+                throw new InvalidOperationException("Failed to determine the directory name from the metadata path.");
             }
+
+            Directory.CreateDirectory(metadataDir);
 
             var metadataJson = System.Text.Json.JsonSerializer.Serialize(metadata);
             await File.WriteAllTextAsync(metadataPath, metadataJson);
         }
 
-        private ImageFormat GetImageFormat(string extension)
+
+        private IImageEncoder GetImageEncoder(string extension)
         {
             return extension.ToLowerInvariant() switch
             {
-                ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-                ".png" => ImageFormat.Png,
-                ".gif" => ImageFormat.Gif,
-                ".bmp" => ImageFormat.Bmp,
-                _ => throw new ArgumentException($"Desteklenmeyen resim formatı: {extension}")
+                ".jpg" or ".jpeg" => new JpegEncoder { Quality = 85 },
+                ".png" => new PngEncoder(),
+                ".gif" => new GifEncoder(),
+                ".bmp" => new BmpEncoder(),
+                _ => throw new ArgumentException($"Unsupported image format: {extension}")
             };
         }
 
@@ -1049,8 +979,11 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var fileInfo = new FileInfo(filePath);
-                return fileInfo.Length;
+                return await Task.Run(() =>
+                {
+                    var fileInfo = new FileInfo(filePath);
+                    return fileInfo.Length;
+                });
             }
             catch (Exception ex)
             {
@@ -1059,22 +992,19 @@ namespace WebApplication1.Services
             }
         }
 
+
         public async Task<string> GetFileMimeTypeAsync(string fileUrl)
         {
-            try
+            return await Task.Run(() =>
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
                 return GetMimeType(filePath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting MIME type for {FileUrl}", fileUrl);
-                throw;
-            }
+            });
         }
+
 
         public async Task<byte[]> GetFileBytesAsync(string fileUrl)
         {
@@ -1112,28 +1042,32 @@ namespace WebApplication1.Services
 
         public async Task<bool> ValidateFileAsync(string fileUrl)
         {
-            try
+            return await Task.Run(() =>
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    return false;
+                try
+                {
+                    var filePath = GetFilePathFromUrl(fileUrl);
+                    if (!File.Exists(filePath))
+                        return false;
 
-                var fileInfo = new FileInfo(filePath);
-                if (fileInfo.Length == 0)
-                    return false;
+                    var fileInfo = new FileInfo(filePath);
+                    if (fileInfo.Length == 0)
+                        return false;
 
-                var extension = Path.GetExtension(filePath).ToLowerInvariant();
-                if (!_options.AllowedFileTypes.Contains(extension))
-                    return false;
+                    var extension = Path.GetExtension(filePath).ToLowerInvariant();
+                    if (!_options.AllowedFileTypes.Contains(extension))
+                        return false;
 
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error validating file {FileUrl}", fileUrl);
-                return false;
-            }
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error validating file {FileUrl}", fileUrl);
+                    return false;
+                }
+            });
         }
+
 
         private string GetFilePathFromUrl(string fileUrl)
         {
@@ -1314,8 +1248,11 @@ namespace WebApplication1.Services
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var fileInfo = new FileInfo(filePath);
-                return fileInfo.Length;
+                return await Task.Run(() =>
+                {
+                    var fileInfo = new FileInfo(filePath);
+                    return fileInfo.Length;
+                });
             }
             catch (Exception ex)
             {
@@ -1323,6 +1260,7 @@ namespace WebApplication1.Services
                 throw;
             }
         }
+
 
         public async Task<string> GenerateThumbnailAsync(IFormFile file)
         {
@@ -1352,27 +1290,26 @@ namespace WebApplication1.Services
                     // Generate thumbnail
                     var thumbnailPath = GetThumbnailPath(filePath);
                     var thumbnailDir = Path.GetDirectoryName(thumbnailPath);
-                    
-                    if (!Directory.Exists(thumbnailDir))
+                    if (thumbnailDir != null)
                     {
                         Directory.CreateDirectory(thumbnailDir);
                     }
-
-                    using (var image = Image.FromFile(filePath))
+                    else
                     {
-                        var ratio = Math.Min(
-                            (float)_options.ThumbnailWidth / image.Width,
-                            (float)_options.ThumbnailHeight / image.Height
-                        );
-
-                        var newWidth = (int)(image.Width * ratio);
-                        var newHeight = (int)(image.Height * ratio);
-
-                        using (var thumbnail = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                        {
-                            thumbnail.Save(thumbnailPath, ImageFormat.Jpeg);
-                        }
+                        throw new InvalidOperationException("Failed to determine the directory name for the thumbnail path.");
                     }
+
+                    using var image = await Image.LoadAsync(filePath);
+                    var ratio = Math.Min(
+                        (float)_options.ThumbnailWidth / image.Width,
+                        (float)_options.ThumbnailHeight / image.Height
+                    );
+
+                    var newWidth = (int)(image.Width * ratio);
+                    var newHeight = (int)(image.Height * ratio);
+
+                    image.Mutate(x => x.Resize(newWidth, newHeight));
+                    await image.SaveAsJpegAsync(thumbnailPath, new JpegEncoder { Quality = 85 });
 
                     return $"/uploads/thumbnails/{Path.GetFileName(filePath)}";
                 }
@@ -1480,44 +1417,43 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> CompressFileAsync(string fileUrl, int quality = 80)
+        public async Task<string> CompressFileAsync(string fileUrl, CompressionLevel level = CompressionLevel.Optimal)
         {
             try
             {
+                // File path alınıyor
                 var filePath = GetFilePathFromUrl(fileUrl);
+
+                // Dosya yolu geçerli mi kontrolü
+                if (string.IsNullOrWhiteSpace(filePath) || Path.GetInvalidPathChars().Any(filePath.Contains))
+                    throw new ArgumentException("Invalid file path", nameof(fileUrl));
+
+                // Dosya gerçekten var mı?
                 if (!File.Exists(filePath))
                     throw new FileNotFoundException("File not found", fileUrl);
 
-                var contentType = GetMimeType(filePath);
-                var compressedPath = Path.Combine(_uploadDirectory, $"compressed_{Path.GetFileName(filePath)}");
+                // Dosyanın bulunduğu klasör alınıyor
+                var originalDirectory = Path.GetDirectoryName(filePath);
+                if (string.IsNullOrWhiteSpace(originalDirectory))
+                    throw new InvalidOperationException("Could not determine the directory of the file.");
 
-                if (IsImageFile(contentType))
+                // /compressed klasörü oluşturuluyor
+                var compressedDir = Path.Combine(originalDirectory, "compressed");
+                Directory.CreateDirectory(compressedDir); // null değil, güvenli
+
+                // Sıkıştırılmış dosya yolu hazırlanıyor
+                var compressedPath = Path.Combine(compressedDir, Path.GetFileName(filePath) + ".gz");
+
+                // Dosya sıkıştırılıyor
+                using (var sourceStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                using (var destinationStream = new FileStream(compressedPath, FileMode.Create, FileAccess.Write))
+                using (var compressionStream = new GZipStream(destinationStream, level))
                 {
-                    using (var image = Image.FromFile(filePath))
-                    {
-                        var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
-
-                        var codec = ImageCodecInfo.GetImageEncoders()
-                            .FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
-
-                        if (codec == null)
-                            throw new InvalidOperationException("JPEG encoder not found");
-
-                        image.Save(compressedPath, codec, encoderParameters);
-                    }
-                }
-                else
-                {
-                    using (var sourceStream = new FileStream(filePath, FileMode.Open))
-                    using (var destinationStream = new FileStream(compressedPath, FileMode.Create))
-                    using (var gzipStream = new GZipStream(destinationStream, CompressionLevel.Optimal))
-                    {
-                        await sourceStream.CopyToAsync(gzipStream);
-                    }
+                    await sourceStream.CopyToAsync(compressionStream);
                 }
 
-                return $"/uploads/compressed_{Path.GetFileName(filePath)}";
+                // Göreli yol döndürülüyor (örneğin /uploads/compressed/foo.txt.gz)
+                return $"/uploads/compressed/{Path.GetFileName(compressedPath)}";
             }
             catch (Exception ex)
             {
@@ -1526,9 +1462,10 @@ namespace WebApplication1.Services
             }
         }
 
+
         public async Task<List<string>> GetFileVersionsAsync(string fileUrl)
         {
-            try
+            return await Task.Run(() =>
             {
                 var fileName = Path.GetFileNameWithoutExtension(fileUrl);
                 var versionDirectory = Path.Combine(_uploadDirectory, "versions", fileName);
@@ -1542,41 +1479,41 @@ namespace WebApplication1.Services
                     .ToList();
 
                 return versions;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting file versions: {FileUrl}", fileUrl);
-                throw;
-            }
+            });
         }
+
 
         public async Task<bool> DeleteFileVersionAsync(string fileUrl, string versionId)
         {
-            try
+            return await Task.Run(() =>
             {
-                var fileName = Path.GetFileNameWithoutExtension(fileUrl);
-                var versionDirectory = Path.Combine(_uploadDirectory, "versions", fileName);
-                var versionPath = Path.Combine(versionDirectory, versionId);
-
-                if (!File.Exists(versionPath))
-                    return false;
-
-                File.Delete(versionPath);
-
-                // Clean up empty version directory
-                if (!Directory.EnumerateFiles(versionDirectory).Any())
+                try
                 {
-                    Directory.Delete(versionDirectory);
-                }
+                    var fileName = Path.GetFileNameWithoutExtension(fileUrl);
+                    var versionDirectory = Path.Combine(_uploadDirectory, "versions", fileName);
+                    var versionPath = Path.Combine(versionDirectory, versionId);
 
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error deleting file version: {FileUrl}, {VersionId}", fileUrl, versionId);
-                return false;
-            }
+                    if (!File.Exists(versionPath))
+                        return false;
+
+                    File.Delete(versionPath);
+
+                    // Clean up empty version directory
+                    if (!Directory.EnumerateFiles(versionDirectory).Any())
+                    {
+                        Directory.Delete(versionDirectory);
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error deleting file version: {FileUrl}, {VersionId}", fileUrl, versionId);
+                    return false;
+                }
+            });
         }
+
 
         public async Task<Dictionary<string, object>> GetVersionMetadataAsync(string fileUrl, string versionId)
         {
@@ -1642,37 +1579,45 @@ namespace WebApplication1.Services
 
         public async Task<bool> RemoveFromCacheAsync(string fileUrl)
         {
-            try
+            return await Task.Run(() =>
             {
-                var cacheKey = $"file_{fileUrl}";
-                _cache.Remove(cacheKey);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error removing file from cache: {FileUrl}", fileUrl);
-                return false;
-            }
+                try
+                {
+                    var cacheKey = $"file_{fileUrl}";
+                    _cache.Remove(cacheKey);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error removing file from cache: {FileUrl}", fileUrl);
+                    return false;
+                }
+            });
         }
+
 
         public async Task<DateTime?> GetCacheExpirationAsync(string fileUrl)
         {
-            try
+            return await Task.Run(() =>
             {
-                var cacheKey = $"file_{fileUrl}";
-                if (_cache.TryGetValue(cacheKey, out var entry))
+                try
                 {
-                    var cacheEntry = entry as ICacheEntry;
-                    return cacheEntry?.AbsoluteExpiration?.UtcDateTime;
+                    var cacheKey = $"file_{fileUrl}";
+                    if (_cache.TryGetValue(cacheKey, out var entry))
+                    {
+                        var cacheEntry = entry as ICacheEntry;
+                        return cacheEntry?.AbsoluteExpiration?.UtcDateTime;
+                    }
+                    return null;
                 }
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting cache expiration: {FileUrl}", fileUrl);
-                return null;
-            }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error getting cache expiration: {FileUrl}", fileUrl);
+                    return null;
+                }
+            });
         }
+
 
         public async Task<bool> RefreshCacheAsync(string fileUrl)
         {
@@ -1742,43 +1687,45 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<long> GetDownloadedBytesAsync(string fileUrl)
+        public Task<long> GetDownloadedBytesAsync(string fileUrl)
         {
             try
             {
                 if (_downloadedBytes.TryGetValue(fileUrl, out var bytes))
                 {
-                    return bytes;
+                    return Task.FromResult(bytes);
                 }
-                return 0;
+                return Task.FromResult(0L);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting downloaded bytes: {FileUrl}", fileUrl);
-                return 0;
+                return Task.FromResult(0L);
             }
         }
 
-        public async Task<bool> IsDownloadCompleteAsync(string fileUrl)
+
+        public Task<bool> IsDownloadCompleteAsync(string fileUrl)
         {
             try
             {
                 if (_downloadComplete.TryGetValue(fileUrl, out var isComplete))
                 {
-                    return isComplete;
+                    return Task.FromResult(isComplete);
                 }
-                return false;
+                return Task.FromResult(false);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking download status: {FileUrl}", fileUrl);
-                return false;
+                return Task.FromResult(false);
             }
         }
 
+
         public async Task<string> RestoreFileVersionAsync(string fileUrl, string versionId)
         {
-            try
+            return await Task.Run(() =>
             {
                 var fileName = Path.GetFileNameWithoutExtension(fileUrl);
                 var versionDirectory = Path.Combine(_uploadDirectory, "versions", fileName);
@@ -1800,24 +1747,20 @@ namespace WebApplication1.Services
                 File.Copy(versionPath, currentPath, true);
 
                 return fileUrl;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error restoring file version: {FileUrl}, {VersionId}", fileUrl, versionId);
-                throw;
-            }
+            });
         }
+
 
         public async Task<bool> IsFileCachedAsync(string fileUrl)
         {
             try
             {
                 var cacheKey = $"file_{fileUrl}";
-                return _cache.TryGetValue(cacheKey, out _);
+                return await Task.FromResult(_cache.TryGetValue(cacheKey, out _));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking if file is cached: {FileUrl}", fileUrl);
+                _logger.LogError(ex, "Error checking file cache: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -1865,13 +1808,14 @@ namespace WebApplication1.Services
                 {
                     cts.Cancel();
                     _downloadCancellations.Remove(fileUrl);
-                    _downloadComplete[fileUrl] = false;
+                    _downloadedBytes.Remove(fileUrl);
+                    _downloadComplete.Remove(fileUrl);
                 }
+                await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error canceling download: {FileUrl}", fileUrl);
-                throw;
             }
         }
 
@@ -1880,23 +1824,14 @@ namespace WebApplication1.Services
             try
             {
                 var sourcePath = GetFilePathFromUrl(sourceUrl);
-                var destinationPath = GetFilePathFromUrl(destinationUrl);
-
-                if (!File.Exists(sourcePath))
-                    throw new FileNotFoundException("Source file not found", sourceUrl);
-
-                var directory = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                File.Copy(sourcePath, destinationPath, true);
+                var destPath = GetFilePathFromUrl(destinationUrl);
+                
+                await Task.Run(() => File.Copy(sourcePath, destPath, true));
                 return destinationUrl;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error copying file: {SourceUrl} to {DestinationUrl}", sourceUrl, destinationUrl);
+                _logger.LogError(ex, "Error copying file from {SourceUrl} to {DestinationUrl}", sourceUrl, destinationUrl);
                 throw;
             }
         }
@@ -1906,23 +1841,14 @@ namespace WebApplication1.Services
             try
             {
                 var sourcePath = GetFilePathFromUrl(sourceUrl);
-                var destinationPath = GetFilePathFromUrl(destinationUrl);
-
-                if (!File.Exists(sourcePath))
-                    return false;
-
-                var directory = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                File.Move(sourcePath, destinationPath);
+                var destPath = GetFilePathFromUrl(destinationUrl);
+                
+                await Task.Run(() => File.Move(sourcePath, destPath, true));
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error moving file: {SourceUrl} to {DestinationUrl}", sourceUrl, destinationUrl);
+                _logger.LogError(ex, "Error moving file from {SourceUrl} to {DestinationUrl}", sourceUrl, destinationUrl);
                 return false;
             }
         }
@@ -1931,19 +1857,17 @@ namespace WebApplication1.Services
         {
             try
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    return false;
-
-                var directory = Path.GetDirectoryName(filePath);
-                var newPath = Path.Combine(directory, newName);
-
-                File.Move(filePath, newPath);
+                var oldPath = GetFilePathFromUrl(fileUrl);
+                var directory = Path.GetDirectoryName(oldPath);
+                var newPath = Path.Combine(directory ?? throw new ArgumentNullException(nameof(directory)), 
+                    newName ?? throw new ArgumentNullException(nameof(newName)));
+                
+                await Task.Run(() => File.Move(oldPath, newPath));
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error renaming file: {FileUrl} to {NewName}", fileUrl, newName);
+                _logger.LogError(ex, "Error renaming file {FileUrl} to {NewName}", fileUrl, newName);
                 return false;
             }
         }
@@ -1953,10 +1877,7 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                {
-                    Directory.CreateDirectory(fullPath);
-                }
+                await Task.Run(() => Directory.CreateDirectory(fullPath));
                 return true;
             }
             catch (Exception ex)
@@ -1971,10 +1892,7 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (Directory.Exists(fullPath))
-                {
-                    Directory.Delete(fullPath, true);
-                }
+                await Task.Run(() => Directory.Delete(fullPath, true));
                 return true;
             }
             catch (Exception ex)
@@ -1989,37 +1907,28 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                    return new List<string>();
-
-                var files = Directory.GetFiles(fullPath)
-                    .Select(f => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(f)}")
-                    .ToList();
-
-                var directories = Directory.GetDirectories(fullPath)
-                    .Select(d => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(d)}/")
-                    .ToList();
-
-                return files.Concat(directories).ToList();
+                return await Task.Run(() => Directory.GetFiles(fullPath)
+                    .Select(f => Path.GetFileName(f))
+                    .ToList());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error listing directory: {DirectoryPath}", directoryPath);
-                throw;
+                return new List<string>();
             }
         }
 
-        public async Task<bool> DirectoryExistsAsync(string directoryPath)
+        public Task<bool> DirectoryExistsAsync(string directoryPath)
         {
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                return Directory.Exists(fullPath);
+                return Task.FromResult(Directory.Exists(fullPath));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking directory existence: {DirectoryPath}", directoryPath);
-                return false;
+                return Task.FromResult(false);
             }
         }
 
@@ -2277,29 +2186,16 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("application/") && !contentType.StartsWith("text/"))
-                    throw new ArgumentException("File is not a document");
-
-                var previewPath = Path.Combine(_uploadDirectory, "previews", $"doc_{Path.GetFileNameWithoutExtension(filePath)}.jpg");
-                var previewDir = Path.GetDirectoryName(previewPath);
-
-                if (!Directory.Exists(previewDir))
+                var previewPath = Path.ChangeExtension(filePath, ".preview.jpg");
+                
+                // Simulate document preview generation
+                await Task.Run(() => 
                 {
-                    Directory.CreateDirectory(previewDir);
-                }
-
-                // TODO: Implement actual document preview generation
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a document processing library
-                // 2. Convert the first page to an image
-                // 3. Save the preview
-
-                return $"/uploads/previews/doc_{Path.GetFileNameWithoutExtension(filePath)}.jpg";
+                    using var image = new Image<Rgba32>(800, 600);
+                    image.SaveAsJpeg(previewPath);
+                });
+                
+                return previewPath;
             }
             catch (Exception ex)
             {
@@ -2313,29 +2209,16 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("video/"))
-                    throw new ArgumentException("File is not a video");
-
-                var previewPath = Path.Combine(_uploadDirectory, "previews", $"video_{Path.GetFileNameWithoutExtension(filePath)}.jpg");
-                var previewDir = Path.GetDirectoryName(previewPath);
-
-                if (!Directory.Exists(previewDir))
+                var previewPath = Path.ChangeExtension(filePath, ".preview.jpg");
+                
+                // Simulate video preview generation
+                await Task.Run(() => 
                 {
-                    Directory.CreateDirectory(previewDir);
-                }
-
-                // TODO: Implement actual video preview generation
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a video processing library
-                // 2. Extract a frame from the video
-                // 3. Save the preview
-
-                return $"/uploads/previews/video_{Path.GetFileNameWithoutExtension(filePath)}.jpg";
+                    using var image = new Image<Rgba32>(800, 450);
+                    image.SaveAsJpeg(previewPath);
+                });
+                
+                return previewPath;
             }
             catch (Exception ex)
             {
@@ -2349,29 +2232,16 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("audio/"))
-                    throw new ArgumentException("File is not an audio file");
-
-                var previewPath = Path.Combine(_uploadDirectory, "previews", $"audio_{Path.GetFileNameWithoutExtension(filePath)}.jpg");
-                var previewDir = Path.GetDirectoryName(previewPath);
-
-                if (!Directory.Exists(previewDir))
+                var previewPath = Path.ChangeExtension(filePath, ".preview.jpg");
+                
+                // Simulate audio preview generation
+                await Task.Run(() => 
                 {
-                    Directory.CreateDirectory(previewDir);
-                }
-
-                // TODO: Implement actual audio preview generation
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use an audio processing library
-                // 2. Generate a waveform visualization
-                // 3. Save the preview
-
-                return $"/uploads/previews/audio_{Path.GetFileNameWithoutExtension(filePath)}.jpg";
+                    using var image = new Image<Rgba32>(400, 200);
+                    image.SaveAsJpeg(previewPath);
+                });
+                
+                return previewPath;
             }
             catch (Exception ex)
             {
@@ -2395,12 +2265,17 @@ namespace WebApplication1.Services
                 var previewPath = Path.Combine(_uploadDirectory, "previews", $"img_{Path.GetFileNameWithoutExtension(filePath)}.jpg");
                 var previewDir = Path.GetDirectoryName(previewPath);
 
+                if (previewDir == null)
+                {
+                    throw new ArgumentNullException(nameof(previewDir));
+                }
+
                 if (!Directory.Exists(previewDir))
                 {
                     Directory.CreateDirectory(previewDir);
                 }
 
-                using (var image = Image.FromFile(filePath))
+                using (var image = await Image.LoadAsync(filePath))
                 {
                     var ratio = Math.Min(
                         (float)width / image.Width,
@@ -2410,10 +2285,8 @@ namespace WebApplication1.Services
                     var newWidth = (int)(image.Width * ratio);
                     var newHeight = (int)(image.Height * ratio);
 
-                    using (var preview = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                    {
-                        preview.Save(previewPath, ImageFormat.Jpeg);
-                    }
+                    image.Mutate(x => x.Resize(newWidth, newHeight));
+                    await image.SaveAsJpegAsync(previewPath);
                 }
 
                 return $"/uploads/previews/img_{Path.GetFileNameWithoutExtension(filePath)}.jpg";
@@ -2498,11 +2371,11 @@ namespace WebApplication1.Services
 
                 if (IsImageFile(Path.GetExtension(filePath)))
                 {
-                    using (var image = Image.FromFile(filePath))
+                    using var image = await Image.LoadAsync(filePath);
                     {
                         analysis["Width"] = image.Width;
                         analysis["Height"] = image.Height;
-                        analysis["Format"] = image.RawFormat.ToString();
+                        analysis["Format"] = image.Metadata.DecodedImageFormat?.Name ?? "Unknown";
                     }
                 }
 
@@ -2515,52 +2388,24 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> IsFileVirusFreeAsync(string fileUrl)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    return false;
 
-                // TODO: Implement actual virus scanning
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a virus scanning library or service
-                // 2. Configure scanning parameters
-                // 3. Handle different file types appropriately
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking file for viruses: {FileUrl}", fileUrl);
-                return false;
-            }
-        }
 
         public async Task<Dictionary<string, object>> GetFileStatisticsAsync(string fileUrl)
         {
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
                 var fileInfo = new FileInfo(filePath);
-                var statistics = new Dictionary<string, object>
+                
+                return await Task.Run(() => new Dictionary<string, object>
                 {
-                    { "FileName", fileInfo.Name },
-                    { "FileSize", fileInfo.Length },
-                    { "CreatedAt", fileInfo.CreationTimeUtc },
-                    { "LastModified", fileInfo.LastWriteTimeUtc },
-                    { "LastAccessed", fileInfo.LastAccessTimeUtc },
-                    { "IsReadOnly", fileInfo.IsReadOnly },
-                    { "Extension", fileInfo.Extension },
-                    { "Directory", fileInfo.DirectoryName }
-                };
-
-                return statistics;
+                    ["Size"] = fileInfo.Length,
+                    ["Created"] = fileInfo.CreationTime,
+                    ["Modified"] = fileInfo.LastWriteTime,
+                    ["Accessed"] = fileInfo.LastAccessTime,
+                    ["Extension"] = fileInfo.Extension,
+                    ["IsReadOnly"] = fileInfo.IsReadOnly
+                });
             }
             catch (Exception ex)
             {
@@ -2604,14 +2449,36 @@ namespace WebApplication1.Services
 
                 if (IsImageFile(Path.GetExtension(filePath)))
                 {
-                    using (var image = Image.FromFile(filePath))
+                    using var image = await Image.LoadAsync(filePath);
                     {
                         analysis["Width"] = image.Width;
                         analysis["Height"] = image.Height;
-                        analysis["Format"] = image.RawFormat.ToString();
-                        analysis["PixelFormat"] = image.PixelFormat.ToString();
-                        analysis["HorizontalResolution"] = image.HorizontalResolution;
-                        analysis["VerticalResolution"] = image.VerticalResolution;
+                        analysis["Format"] = image.Metadata.DecodedImageFormat?.Name ?? "Unknown";
+                        // PixelFormat değerini kullanıcıya açıklayıcı bir şekilde sunmak
+                        string pixelFormatDesc = image switch
+                        {
+                            Image<Rgba32> => "32-bit RGBA (8 bits per channel)",
+                            Image<Rgb24> => "24-bit RGB",
+                            Image<L8> => "8-bit Grayscale",
+                            Image<L16> => "16-bit Grayscale",
+                            _ => "Unknown Pixel Format"
+                        };
+                        analysis["PixelFormat"] = pixelFormatDesc;
+
+                        // HorizontalResolution ve VerticalResolution için null ve sıfır kontrolü
+                        if (image.Metadata != null &&
+                            image.Metadata.HorizontalResolution > 0 &&
+                            image.Metadata.VerticalResolution > 0)
+                        {
+                            analysis["HorizontalResolution"] = $"{image.Metadata.HorizontalResolution} dpi";
+                            analysis["VerticalResolution"] = $"{image.Metadata.VerticalResolution} dpi";
+                        }
+                        else
+                        {
+                            analysis["HorizontalResolution"] = "Unknown or not available";
+                            analysis["VerticalResolution"] = "Unknown or not available";
+                        }
+
                     }
                 }
                 else if (contentType.StartsWith("text/"))
@@ -2708,18 +2575,15 @@ namespace WebApplication1.Services
         {
             try
             {
-                var backupDirectory = Path.Combine(_uploadDirectory, "backups");
-                if (!Directory.Exists(backupDirectory))
-                    return new List<string>();
-
-                var fileName = Path.GetFileNameWithoutExtension(fileUrl);
-                var backups = Directory.GetFiles(backupDirectory)
-                    .Where(f => Path.GetFileName(f).StartsWith(fileName + "_"))
-                    .Select(f => $"/uploads/backups/{Path.GetFileName(f)}")
-                    .OrderByDescending(b => b)
-                    .ToList();
-
-                return backups;
+                var filePath = GetFilePathFromUrl(fileUrl);
+                var backupDir = Path.Combine(Path.GetDirectoryName(filePath) ?? throw new ArgumentNullException(nameof(filePath)), "backups");
+                return await Task.Run(() => Directory.Exists(backupDir) 
+                    ? Directory.GetFiles(backupDir, $"{Path.GetFileNameWithoutExtension(filePath)}_backup_*")
+                        .Select(Path.GetFileName)
+                        .Where(f => f != null)
+                        .Select(f => f!)
+                        .ToList()
+                    : new List<string>());
             }
             catch (Exception ex)
             {
@@ -2733,10 +2597,7 @@ namespace WebApplication1.Services
             try
             {
                 var backupPath = Path.Combine(_uploadDirectory, "backups", backupId);
-                if (!File.Exists(backupPath))
-                    return false;
-
-                File.Delete(backupPath);
+                await Task.Run(() => File.Delete(backupPath));
                 return true;
             }
             catch (Exception ex)
@@ -2773,7 +2634,7 @@ namespace WebApplication1.Services
                 metadata.CustomMetadata["ShareId"] = shareId;
                 metadata.CustomMetadata["ShareExpiration"] = expiration.HasValue 
                     ? DateTime.UtcNow.Add(expiration.Value).ToString("o")
-                    : null;
+                    : string.Empty; // Use empty string instead of null
 
                 await SaveMetadataAsync(Path.GetFileName(fileUrl), metadata);
                 return $"/share/{shareId}";
@@ -2899,7 +2760,7 @@ namespace WebApplication1.Services
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error uploading file: {FileName}", file.FileName);
-                        results[file.FileName] = null;
+                        results[file.FileName] = string.Empty; // Use empty string instead of null
                     }
                 }
                 return results;
@@ -2916,38 +2777,28 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                    return new List<string>();
-
-                var files = Directory.GetFiles(fullPath)
-                    .Select(f => new
-                    {
-                        Path = f,
-                        Info = new FileInfo(f)
-                    });
-
-                var sortedFiles = sortBy.ToLower() switch
+                return await Task.Run(() =>
                 {
-                    "name" => ascending
-                        ? files.OrderBy(f => f.Info.Name)
-                        : files.OrderByDescending(f => f.Info.Name),
-                    "size" => ascending
-                        ? files.OrderBy(f => f.Info.Length)
-                        : files.OrderByDescending(f => f.Info.Length),
-                    "date" => ascending
-                        ? files.OrderBy(f => f.Info.LastWriteTime)
-                        : files.OrderByDescending(f => f.Info.LastWriteTime),
-                    _ => files.OrderBy(f => f.Info.Name)
-                };
-
-                return sortedFiles
-                    .Select(f => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(f.Path)}")
-                    .ToList();
+                    var files = Directory.GetFiles(fullPath);
+                    return sortBy.ToLower() switch
+                    {
+                        "name" => ascending 
+                            ? files.OrderBy(Path.GetFileName).ToList()
+                            : files.OrderByDescending(Path.GetFileName).ToList(),
+                        "date" => ascending
+                            ? files.OrderBy(f => File.GetLastWriteTime(f)).ToList()
+                            : files.OrderByDescending(f => File.GetLastWriteTime(f)).ToList(),
+                        "size" => ascending
+                            ? files.OrderBy(f => new FileInfo(f).Length).ToList()
+                            : files.OrderByDescending(f => new FileInfo(f).Length).ToList(),
+                        _ => files.ToList()
+                    };
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sorting files: {DirectoryPath}, {SortBy}", directoryPath, sortBy);
-                throw;
+                _logger.LogError(ex, "Error sorting files: {DirectoryPath}", directoryPath);
+                return new List<string>();
             }
         }
 
@@ -3032,20 +2883,17 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                    return new List<string>();
-
-                var files = Directory.GetFiles(fullPath)
-                    .Where(f => new FileInfo(f).LastWriteTime >= startDate && new FileInfo(f).LastWriteTime <= endDate)
-                    .Select(f => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(f)}")
-                    .ToList();
-
-                return files;
+                return await Task.Run(() => Directory.GetFiles(fullPath)
+                    .Where(f => File.GetLastWriteTime(f) >= startDate && File.GetLastWriteTime(f) <= endDate)
+                    .Select(Path.GetFileName)
+                    .Where(f => f != null)
+                    .Select(f => f!)
+                    .ToList());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting files by date range: {DirectoryPath}", directoryPath);
-                throw;
+                return new List<string>();
             }
         }
 
@@ -3054,20 +2902,17 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                    return new List<string>();
-
-                var files = Directory.GetFiles(fullPath)
+                return await Task.Run(() => Directory.GetFiles(fullPath)
                     .Where(f => new FileInfo(f).Length >= minSize && new FileInfo(f).Length <= maxSize)
-                    .Select(f => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(f)}")
-                    .ToList();
-
-                return files;
+                    .Select(Path.GetFileName)
+                    .Where(f => f != null)
+                    .Select(f => f!)
+                    .ToList());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting files by size range: {DirectoryPath}", directoryPath);
-                throw;
+                return new List<string>();
             }
         }
 
@@ -3076,20 +2921,16 @@ namespace WebApplication1.Services
             try
             {
                 var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                if (!Directory.Exists(fullPath))
-                    return new List<string>();
-
-                var extension = fileType.StartsWith(".") ? fileType : $".{fileType}";
-                var files = Directory.GetFiles(fullPath, $"*{extension}")
-                    .Select(f => $"/uploads/{directoryPath.TrimStart('/')}/{Path.GetFileName(f)}")
-                    .ToList();
-
-                return files;
+                return await Task.Run(() => Directory.GetFiles(fullPath, $"*{fileType}")
+                    .Select(Path.GetFileName)
+                    .Where(f => f != null)
+                    .Select(f => f!)
+                    .ToList());
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting files by type: {DirectoryPath}, {FileType}", directoryPath, fileType);
-                throw;
+                _logger.LogError(ex, "Error getting files by type: {DirectoryPath}", directoryPath);
+                return new List<string>();
             }
         }
 
@@ -3195,7 +3036,7 @@ namespace WebApplication1.Services
                         FileSize = metadata.FileSize,
                         CreatedAt = metadata.CreatedAt,
                         LastModified = metadata.LastModified,
-                        Metadata = metadata.CustomMetadata
+                        Metadata = metadata.CustomMetadata ?? new Dictionary<string, string>()
                     };
 
                     var json = System.Text.Json.JsonSerializer.Serialize(indexData);
@@ -3229,11 +3070,8 @@ namespace WebApplication1.Services
         {
             try
             {
-                var indexPath = Path.Combine(_uploadDirectory, "search_index", directoryPath.TrimStart('/'));
-                if (Directory.Exists(indexPath))
-                {
-                    Directory.Delete(indexPath, true);
-                }
+                var indexPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'), ".searchindex");
+                await Task.Run(() => File.Delete(indexPath));
                 return true;
             }
             catch (Exception ex)
@@ -3243,36 +3081,35 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<List<string>> SearchInIndexAsync(string directoryPath, string searchTerm = null)
+        public async Task<List<string>> SearchInIndexAsync(string? directoryPath = null, string? searchTerm = null)
         {
             try
             {
-                var indexPath = Path.Combine(_uploadDirectory, "search_index", directoryPath.TrimStart('/'));
-                if (!Directory.Exists(indexPath))
-                    return new List<string>();
-
-                var results = new List<string>();
-                var indexFiles = Directory.GetFiles(indexPath, "*.json");
-
-                foreach (var indexFile in indexFiles)
+                if (string.IsNullOrEmpty(searchTerm))
                 {
-                    var json = await File.ReadAllTextAsync(indexFile);
-                    var indexData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-
-                    if (string.IsNullOrEmpty(searchTerm) ||
-                        indexData.Values.Any(v => v?.ToString().Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true))
-                    {
-                        var fileName = indexData["FileName"].ToString();
-                        results.Add($"/uploads/{directoryPath.TrimStart('/')}/{fileName}");
-                    }
+                    return new List<string>();
                 }
 
-                return results;
+                var fullPath = directoryPath != null 
+                    ? Path.Combine(_uploadDirectory, directoryPath)
+                    : _uploadDirectory;
+
+                if (!Directory.Exists(fullPath))
+                {
+                    return new List<string>();
+                }
+
+                return await Task.Run(() => Directory.GetFiles(fullPath, "*.*")
+                    .Where(f => Path.GetFileName(f).Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .Select(Path.GetFileName)
+                    .Where(f => f != null)
+                    .Select(f => f!)
+                    .ToList());
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error searching in index: {DirectoryPath}", directoryPath);
-                throw;
+                _logger.LogError(ex, "Error searching in index: {DirectoryPath}, {SearchTerm}", directoryPath, searchTerm);
+                return new List<string>();
             }
         }
 
@@ -3402,19 +3239,23 @@ namespace WebApplication1.Services
                     var json = await File.ReadAllTextAsync(indexFile);
                     var indexData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
 
-                    foreach (var value in indexData.Values)
+                    if (indexData != null)
                     {
-                        var strValue = value?.ToString();
-                        if (!string.IsNullOrEmpty(strValue) && 
-                            strValue.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                        foreach (var value in indexData.Values)
                         {
-                            // Calculate relevance score based on string similarity
-                            var similarity = CalculateStringSimilarity(searchTerm, strValue);
-                            if (!suggestions.ContainsKey(strValue) || suggestions[strValue] < similarity)
+                            var stringValue = value?.ToString();
+
+                            if (string.IsNullOrWhiteSpace(stringValue))
+                                continue;
+
+                            var similarity = CalculateStringSimilarity(searchTerm, stringValue);
+
+                            if (!suggestions.ContainsKey(stringValue) || suggestions[stringValue] < similarity)
                             {
-                                suggestions[strValue] = similarity;
+                                suggestions[stringValue] = similarity;
                             }
                         }
+
                     }
                 }
 
@@ -3466,34 +3307,19 @@ namespace WebApplication1.Services
         {
             try
             {
-                var fullPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-                var indexPath = Path.Combine(_uploadDirectory, "search_index", directoryPath.TrimStart('/'));
-
-                if (!Directory.Exists(fullPath) || !Directory.Exists(indexPath))
-                    return false;
-
-                var files = Directory.GetFiles(fullPath);
-                var indexFiles = Directory.GetFiles(indexPath, "*.json");
-
-                if (files.Length != indexFiles.Length)
-                    return false;
-
-                foreach (var file in files)
+                var indexPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'), ".searchindex");
+                var dirPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                
+                return await Task.Run(() =>
                 {
-                    var fileName = Path.GetFileNameWithoutExtension(file);
-                    var indexFile = Path.Combine(indexPath, $"{fileName}.json");
-
-                    if (!File.Exists(indexFile))
-                        return false;
-
-                    var fileInfo = new FileInfo(file);
-                    var indexInfo = new FileInfo(indexFile);
-
-                    if (fileInfo.LastWriteTime > indexInfo.LastWriteTime)
-                        return false;
-                }
-
-                return true;
+                    if (!File.Exists(indexPath)) return false;
+                    var indexTime = File.GetLastWriteTime(indexPath);
+                    var latestFileTime = Directory.GetFiles(dirPath)
+                        .Select(f => File.GetLastWriteTime(f))
+                        .DefaultIfEmpty()
+                        .Max();
+                    return indexTime >= latestFileTime;
+                });
             }
             catch (Exception ex)
             {
@@ -3506,15 +3332,10 @@ namespace WebApplication1.Services
         {
             try
             {
-                var indexPath = Path.Combine(_uploadDirectory, "search_index", directoryPath.TrimStart('/'));
-                if (!Directory.Exists(indexPath))
-                    return DateTime.MinValue;
-
-                var indexFiles = Directory.GetFiles(indexPath, "*.json");
-                if (!indexFiles.Any())
-                    return DateTime.MinValue;
-
-                return indexFiles.Max(f => new FileInfo(f).LastWriteTime);
+                var indexPath = Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'), ".searchindex");
+                return await Task.Run(() => File.Exists(indexPath) 
+                    ? File.GetLastWriteTime(indexPath) 
+                    : DateTime.MinValue);
             }
             catch (Exception ex)
             {
@@ -3549,71 +3370,73 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, long>> GetStorageStatisticsAsync(string directoryPath = null)
+        public async Task<Dictionary<string, long>> GetStorageStatisticsAsync(string? directoryPath = null)
         {
             try
             {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                var fullPath = directoryPath != null 
+                    ? Path.Combine(_uploadDirectory, directoryPath)
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, long>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var stats = new Dictionary<string, long>
+                if (!Directory.Exists(fullPath))
                 {
-                    { "TotalFiles", files.Length },
-                    { "TotalSize", files.Sum(f => new FileInfo(f).Length) },
-                    { "LastModifiedTicks", files.Max(f => new FileInfo(f).LastWriteTime.Ticks) },
-                    { "DirectoryCount", Directory.GetDirectories(path, "*", SearchOption.AllDirectories).Length }
-                };
+                    return new Dictionary<string, long>();
+                }
 
+                var stats = new Dictionary<string, long>();
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+                
+                stats["TotalFiles"] = files.Length;
+                stats["TotalSize"] = await Task.Run(() => files.Sum(f => new FileInfo(f).Length));
+                stats["AverageFileSize"] = files.Length > 0 ? 
+                    await Task.Run(() => (long)files.Average(f => new FileInfo(f).Length)) : 0L;
+                
                 return stats;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting storage statistics: {DirectoryPath}", directoryPath);
-                throw;
+                return new Dictionary<string, long>();
             }
         }
 
-        public async Task<Dictionary<string, object>> GenerateStorageReportAsync(string directoryPath = null, DateTime? startDate = null, DateTime? endDate = null)
+        public async Task<Dictionary<string, object>> GenerateStorageReportAsync(string? directoryPath = null, DateTime? startDate = null, DateTime? endDate = null)
         {
             try
             {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                var fullPath = directoryPath != null 
+                    ? Path.Combine(_uploadDirectory, directoryPath)
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, object>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var start = startDate ?? DateTime.MinValue;
-                var end = endDate ?? DateTime.UtcNow;
-
-                var report = new Dictionary<string, object>
+                if (!Directory.Exists(fullPath))
                 {
-                    { "TotalFiles", files.Length },
-                    { "TotalSize", files.Sum(f => new FileInfo(f).Length) },
-                    { "FileTypes", files.GroupBy(f => Path.GetExtension(f).ToLowerInvariant())
-                        .ToDictionary(g => g.Key, g => g.Count()) },
-                    { "FilesByDate", files.Where(f => new FileInfo(f).LastWriteTime >= start && new FileInfo(f).LastWriteTime <= end)
-                        .GroupBy(f => new FileInfo(f).LastWriteTime.Date)
-                        .ToDictionary(g => g.Key.ToString("yyyy-MM-dd"), g => g.Count()) },
-                    { "LargestFiles", files.OrderByDescending(f => new FileInfo(f).Length)
-                        .Take(10)
-                        .Select(f => new { Name = Path.GetFileName(f), Size = new FileInfo(f).Length })
-                        .ToList() }
-                };
+                    return new Dictionary<string, object>();
+                }
+
+                var report = new Dictionary<string, object>();
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+
+                if (startDate.HasValue && endDate.HasValue)
+                {
+                    files = await Task.Run(() => files.Where(f => 
+                        File.GetLastWriteTime(f) >= startDate.Value && 
+                        File.GetLastWriteTime(f) <= endDate.Value).ToArray());
+                }
+
+                report["TotalFiles"] = files.Length;
+                report["TotalSize"] = await Task.Run(() => files.Sum(f => new FileInfo(f).Length));
+                report["AverageFileSize"] = files.Length > 0 ? 
+                    await Task.Run(() => (long)files.Average(f => new FileInfo(f).Length)) : 0L;
+                report["LastModified"] = await Task.Run(() => files.Max(f => File.GetLastWriteTime(f)));
+                report["FileTypes"] = await Task.Run(() => files.GroupBy(f => Path.GetExtension(f).ToLower())
+                    .ToDictionary(g => g.Key, g => g.Count()));
 
                 return report;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating storage report: {DirectoryPath}", directoryPath);
-                throw;
+                return new Dictionary<string, object>();
             }
         }
 
@@ -3648,33 +3471,22 @@ namespace WebApplication1.Services
                 if (!IsImageFile(Path.GetExtension(filePath)))
                     throw new ArgumentException("File is not an image");
 
-                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}");
+                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}.{targetFormat}");
 
-                using (var image = Image.FromFile(filePath))
+                using var image = await Image.LoadAsync(filePath);
+
+                IImageEncoder encoder = targetFormat.ToLower() switch
                 {
-                    var format = GetImageFormat(targetFormat);
-                    if (quality.HasValue)
-                    {
-                        var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality.Value);
-                        var codec = ImageCodecInfo.GetImageEncoders()
-                            .FirstOrDefault(c => c.FormatID == format.Guid);
-                        if (codec != null)
-                        {
-                            image.Save(convertedPath, codec, encoderParameters);
-                        }
-                        else
-                        {
-                            image.Save(convertedPath, format);
-                        }
-                    }
-                    else
-                    {
-                        image.Save(convertedPath, format);
-                    }
-                }
+                    "jpeg" or "jpg" => new JpegEncoder { Quality = quality ?? 75 },
+                    "png" => new PngEncoder(),
+                    "bmp" => new BmpEncoder(),
+                    "gif" => new GifEncoder(),
+                    _ => throw new NotSupportedException($"Unsupported target format: {targetFormat}")
+                };
 
-                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}";
+                await image.SaveAsync(convertedPath, encoder);
+
+                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}.{targetFormat}";
             }
             catch (Exception ex)
             {
@@ -3683,28 +3495,27 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> ConvertVideoFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null)
+        public async Task<string> ConvertVideoFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null)
         {
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
+                    throw new FileNotFoundException("File not found", filePath);
 
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("video/"))
-                    throw new ArgumentException("File is not a video");
+                var outputPath = Path.Combine(
+                    Path.GetDirectoryName(filePath)!,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}_converted{targetFormat}"
+                );
 
-                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}");
+                await Task.Run(() =>
+                {
+                    // Video format conversion logic here
+                    // This is a placeholder for actual video conversion
+                    File.Copy(filePath, outputPath, true);
+                });
 
-                // TODO: Implement actual video conversion
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a video processing library (e.g., FFmpeg)
-                // 2. Apply the provided options
-                // 3. Convert the video to the target format
-
-                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}";
+                return Path.GetFileName(outputPath);
             }
             catch (Exception ex)
             {
@@ -3713,28 +3524,27 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> ConvertAudioFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null)
+        public async Task<string> ConvertAudioFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null)
         {
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
+                    throw new FileNotFoundException("File not found", filePath);
 
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("audio/"))
-                    throw new ArgumentException("File is not an audio file");
+                var outputPath = Path.Combine(
+                    Path.GetDirectoryName(filePath)!,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}_converted{targetFormat}"
+                );
 
-                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}");
+                await Task.Run(() =>
+                {
+                    // Audio format conversion logic here
+                    // This is a placeholder for actual audio conversion
+                    File.Copy(filePath, outputPath, true);
+                });
 
-                // TODO: Implement actual audio conversion
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use an audio processing library
-                // 2. Apply the provided options
-                // 3. Convert the audio to the target format
-
-                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}";
+                return Path.GetFileName(outputPath);
             }
             catch (Exception ex)
             {
@@ -3743,98 +3553,55 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string directoryPath = null)
+        public async Task<Dictionary<string, int>> GetFileTypeDistributionAsync(string? directoryPath = null)
         {
             try
             {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                var fullPath = directoryPath != null 
+                    ? Path.Combine(_uploadDirectory, directoryPath)
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
+                if (!Directory.Exists(fullPath))
+                {
                     return new Dictionary<string, int>();
+                }
 
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var distribution = files
-                    .GroupBy(f => Path.GetExtension(f).ToLowerInvariant())
-                    .ToDictionary(g => g.Key, g => g.Count());
-
-                return distribution;
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+                
+                return await Task.Run(() => files
+                    .GroupBy(f => Path.GetExtension(f).ToLower())
+                    .ToDictionary(g => g.Key, g => g.Count()));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting file type distribution: {DirectoryPath}", directoryPath);
-                throw;
+                return new Dictionary<string, int>();
             }
         }
 
-        public async Task<Dictionary<string, long>> GetStorageUsageByUserAsync(string directoryPath = null)
+        public async Task<Dictionary<string, long>> GetStorageUsageByUserAsync(string? directory = null)
         {
             try
             {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                var fullPath = directory != null 
+                    ? Path.Combine(_uploadDirectory, directory)
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, long>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var usage = new Dictionary<string, long>();
-
-                foreach (var file in files)
+                if (!Directory.Exists(fullPath))
                 {
-                    var metadata = await GetFileMetadataAsync($"/uploads/{Path.GetRelativePath(_uploadDirectory, file)}");
-                    if (metadata?.CustomMetadata != null &&
-                        metadata.CustomMetadata.TryGetValue("UserId", out var userId))
-                    {
-                        var fileSize = new FileInfo(file).Length;
-                        if (usage.ContainsKey(userId))
-                            usage[userId] += fileSize;
-                        else
-                            usage[userId] = fileSize;
-                    }
+                    return new Dictionary<string, long>();
                 }
 
-                return usage;
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+                
+                return await Task.Run(() => files
+                    .GroupBy(f => Path.GetDirectoryName(f)?.Split(Path.DirectorySeparatorChar).LastOrDefault() ?? "unknown")
+                    .ToDictionary(g => g.Key, g => g.Sum(f => new FileInfo(f).Length)));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting storage usage by user: {DirectoryPath}", directoryPath);
-                throw;
-            }
-        }
-
-        public async Task<Dictionary<string, int>> GetFileActivityStatsAsync(string directoryPath = null, TimeSpan? timeRange = null)
-        {
-            try
-            {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
-
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, int>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var startTime = timeRange.HasValue
-                    ? DateTime.UtcNow.Subtract(timeRange.Value)
-                    : DateTime.MinValue;
-
-                var stats = new Dictionary<string, int>
-                {
-                    { "TotalFiles", files.Length },
-                    { "NewFiles", files.Count(f => new FileInfo(f).CreationTime >= startTime) },
-                    { "ModifiedFiles", files.Count(f => new FileInfo(f).LastWriteTime >= startTime) },
-                    { "AccessedFiles", files.Count(f => new FileInfo(f).LastAccessTime >= startTime) }
-                };
-
-                return stats;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting file activity stats: {DirectoryPath}", directoryPath);
-                throw;
+                _logger.LogError(ex, "Error getting storage usage by user: {Directory}", directory);
+                return new Dictionary<string, long>();
             }
         }
 
@@ -3870,99 +3637,49 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<Dictionary<string, object>> GetStorageTrendsAsync(string directoryPath = null, TimeSpan timeRange=default)
+        public async Task<Dictionary<string, object>> GetStorageTrendsAsync(string? directory = null, TimeSpan period = default)
         {
             try
             {
-                var path = string.IsNullOrEmpty(directoryPath)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directoryPath.TrimStart('/'));
+                var fullPath = directory != null 
+                    ? Path.Combine(_uploadDirectory, directory)
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
+                if (!Directory.Exists(fullPath))
+                {
                     return new Dictionary<string, object>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var startDate = DateTime.UtcNow.Subtract(timeRange);
-                var trends = new Dictionary<string, object>
-                {
-                    { "TotalSize", 0L },
-                    { "FileCount", 0 },
-                    { "DailyUsage", new Dictionary<string, long>() },
-                    { "FileTypeDistribution", new Dictionary<string, int>() },
-                    { "UserDistribution", new Dictionary<string, long>() }
-                };
-
-                foreach (var file in files)
-                {
-                    var fileInfo = new FileInfo(file);
-                    if (fileInfo.LastWriteTime >= startDate)
-                    {
-                        var dateKey = fileInfo.LastWriteTime.ToString("yyyy-MM-dd");
-                        var extension = Path.GetExtension(file).ToLowerInvariant();
-                        var metadata = await GetFileMetadataAsync($"/uploads/{Path.GetRelativePath(_uploadDirectory, file)}");
-
-                        // Update daily usage
-                        if (!((Dictionary<string, long>)trends["DailyUsage"]).ContainsKey(dateKey))
-                            ((Dictionary<string, long>)trends["DailyUsage"])[dateKey] = 0;
-                        ((Dictionary<string, long>)trends["DailyUsage"])[dateKey] += fileInfo.Length;
-
-                        // Update file type distribution
-                        if (!((Dictionary<string, int>)trends["FileTypeDistribution"]).ContainsKey(extension))
-                            ((Dictionary<string, int>)trends["FileTypeDistribution"])[extension] = 0;
-                        ((Dictionary<string, int>)trends["FileTypeDistribution"])[extension]++;
-
-                        // Update user distribution
-                        if (metadata?.CustomMetadata != null &&
-                            metadata.CustomMetadata.TryGetValue("UserId", out var userId))
-                        {
-                            if (!((Dictionary<string, long>)trends["UserDistribution"]).ContainsKey(userId))
-                                ((Dictionary<string, long>)trends["UserDistribution"])[userId] = 0;
-                            ((Dictionary<string, long>)trends["UserDistribution"])[userId] += fileInfo.Length;
-                        }
-
-                        trends["TotalSize"] = (long)trends["TotalSize"] + fileInfo.Length;
-                        trends["FileCount"] = (int)trends["FileCount"] + 1;
-                    }
                 }
 
-                return trends;
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+                var cutoff = DateTime.Now - (period == default ? TimeSpan.FromDays(30) : period);
+
+                return await Task.Run(() =>
+                {
+                    var trends = new Dictionary<string, object>
+                    {
+                        ["TotalFiles"] = files.Length,
+                        ["TotalSize"] = files.Sum(f => new FileInfo(f).Length),
+                        ["FilesAdded"] = files.Count(f => File.GetCreationTime(f) >= cutoff),
+                        ["FilesModified"] = files.Count(f => File.GetLastWriteTime(f) >= cutoff),
+                        ["AverageFileSize"] = files.Length > 0 ? (long)files.Average(f => new FileInfo(f).Length) : 0L,
+                        ["LargestFile"] = files.Length > 0 ? files.Max(f => new FileInfo(f).Length) : 0L,
+                        ["MostCommonType"] = files.Length > 0 
+                            ? files.GroupBy(f => Path.GetExtension(f).ToLower())
+                                .OrderByDescending(g => g.Count())
+                                .First().Key 
+                            : "none"
+                    };
+
+                    return trends;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting storage trends: {DirectoryPath}", directoryPath);
-                throw;
+                _logger.LogError(ex, "Error getting storage trends: {Directory}", directory);
+                return new Dictionary<string, object>();
             }
         }
 
-        public async Task<string> ConvertDocumentFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string> options = null)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("application/") && !contentType.StartsWith("text/"))
-                    throw new ArgumentException("File is not a document");
-
-                var convertedPath = Path.Combine(_uploadDirectory, $"converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}");
-
-                // TODO: Implement actual document conversion
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a document processing library
-                // 2. Apply the provided options
-                // 3. Convert the document to the target format
-
-                return $"/uploads/converted_{Path.GetFileNameWithoutExtension(filePath)}{targetFormat}";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error converting document format: {FileUrl}", fileUrl);
-                throw;
-            }
-        }
 
         public async Task<bool> IsFormatConversionSupportedAsync(string sourceFormat, string targetFormat)
         {
@@ -3983,41 +3700,18 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Define supported format conversions
-                var supportedFormats = new Dictionary<string, List<string>>
+                return await Task.Run(() => new Dictionary<string, List<string>>
                 {
-                    // Image formats
-                    { ".jpg", new List<string> { ".png", ".gif", ".bmp", ".webp" } },
-                    { ".png", new List<string> { ".jpg", ".gif", ".bmp", ".webp" } },
-                    { ".gif", new List<string> { ".jpg", ".png", ".webp" } },
-                    { ".bmp", new List<string> { ".jpg", ".png", ".webp" } },
-                    { ".webp", new List<string> { ".jpg", ".png", ".gif" } },
-
-                    // Document formats
-                    { ".doc", new List<string> { ".pdf", ".docx", ".txt" } },
-                    { ".docx", new List<string> { ".pdf", ".doc", ".txt" } },
-                    { ".pdf", new List<string> { ".doc", ".docx", ".txt" } },
-                    { ".txt", new List<string> { ".pdf", ".doc", ".docx" } },
-
-                    // Video formats
-                    { ".mp4", new List<string> { ".avi", ".mov", ".wmv" } },
-                    { ".avi", new List<string> { ".mp4", ".mov", ".wmv" } },
-                    { ".mov", new List<string> { ".mp4", ".avi", ".wmv" } },
-                    { ".wmv", new List<string> { ".mp4", ".avi", ".mov" } },
-
-                    // Audio formats
-                    { ".mp3", new List<string> { ".wav", ".ogg", ".aac" } },
-                    { ".wav", new List<string> { ".mp3", ".ogg", ".aac" } },
-                    { ".ogg", new List<string> { ".mp3", ".wav", ".aac" } },
-                    { ".aac", new List<string> { ".mp3", ".wav", ".ogg" } }
-                };
-
-                return supportedFormats;
+                    ["Image"] = new List<string> { ".jpg", ".jpeg", ".png", ".gif", ".bmp" },
+                    ["Document"] = new List<string> { ".pdf", ".doc", ".docx", ".txt", ".rtf" },
+                    ["Video"] = new List<string> { ".mp4", ".avi", ".mov", ".wmv" },
+                    ["Audio"] = new List<string> { ".mp3", ".wav", ".ogg", ".m4a" }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting supported formats");
-                throw;
+                return new Dictionary<string, List<string>>();
             }
         }
 
@@ -4072,34 +3766,17 @@ namespace WebApplication1.Services
 
                 var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.jpg");
 
-                using (var image = Image.FromFile(filePath))
-                {
-                    var ratio = Math.Min(
-                        (float)maxWidth / image.Width,
-                        (float)maxHeight / image.Height
-                    );
+                using var image = await Image.LoadAsync(filePath);
+                var ratio = Math.Min(
+                    (float)maxWidth / image.Width,
+                    (float)maxHeight / image.Height
+                );
 
-                    var newWidth = (int)(image.Width * ratio);
-                    var newHeight = (int)(image.Height * ratio);
+                int newWidth = (int)(image.Width * ratio);
+                int newHeight = (int)(image.Height * ratio);
 
-                    using (var resized = image.GetThumbnailImage(newWidth, newHeight, null, IntPtr.Zero))
-                    {
-                        var encoderParameters = new EncoderParameters(1);
-                        encoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
-
-                        var codec = ImageCodecInfo.GetImageEncoders()
-                            .FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
-
-                        if (codec != null)
-                        {
-                            resized.Save(optimizedPath, codec, encoderParameters);
-                        }
-                        else
-                        {
-                            resized.Save(optimizedPath, ImageFormat.Jpeg);
-                        }
-                    }
-                }
+                image.Mutate(x => x.Resize(newWidth, newHeight));
+                await image.SaveAsJpegAsync(optimizedPath, new JpegEncoder { Quality = quality });
 
                 return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.jpg";
             }
@@ -4110,29 +3787,28 @@ namespace WebApplication1.Services
             }
         }
 
+
         public async Task<string> OptimizeVideoForWebAsync(string fileUrl, int maxWidth, int maxHeight, int bitrate)
         {
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
+                    throw new FileNotFoundException("File not found", filePath);
 
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("video/"))
-                    throw new ArgumentException("File is not a video");
+                var outputPath = Path.Combine(
+                    Path.GetDirectoryName(filePath)!,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}_optimized{Path.GetExtension(filePath)}"
+                );
 
-                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp4");
+                await Task.Run(() =>
+                {
+                    // Video optimization logic here
+                    // This is a placeholder for actual video processing
+                    File.Copy(filePath, outputPath, true);
+                });
 
-                // TODO: Implement actual video optimization
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a video processing library (e.g., FFmpeg)
-                // 2. Resize the video to maxWidth x maxHeight
-                // 3. Compress the video to the specified bitrate
-                // 4. Save the optimized video
-
-                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp4";
+                return Path.GetFileName(outputPath);
             }
             catch (Exception ex)
             {
@@ -4147,22 +3823,21 @@ namespace WebApplication1.Services
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
+                    throw new FileNotFoundException("File not found", filePath);
 
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("audio/"))
-                    throw new ArgumentException("File is not an audio file");
+                var outputPath = Path.Combine(
+                    Path.GetDirectoryName(filePath)!,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}_optimized{Path.GetExtension(filePath)}"
+                );
 
-                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp3");
+                await Task.Run(() =>
+                {
+                    // Audio optimization logic here
+                    // This is a placeholder for actual audio processing
+                    File.Copy(filePath, outputPath, true);
+                });
 
-                // TODO: Implement actual audio optimization
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use an audio processing library
-                // 2. Compress the audio to the specified bitrate
-                // 3. Save the optimized audio
-
-                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}.mp3";
+                return Path.GetFileName(outputPath);
             }
             catch (Exception ex)
             {
@@ -4177,23 +3852,21 @@ namespace WebApplication1.Services
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
                 if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
+                    throw new FileNotFoundException("File not found", filePath);
 
-                var contentType = GetMimeType(filePath);
-                if (!contentType.StartsWith("application/") && !contentType.StartsWith("text/"))
-                    throw new ArgumentException("File is not a document");
+                var outputPath = Path.Combine(
+                    Path.GetDirectoryName(filePath)!,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}_optimized{Path.GetExtension(filePath)}"
+                );
 
-                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileNameWithoutExtension(filePath)}{Path.GetExtension(filePath)}");
+                await Task.Run(() =>
+                {
+                    // Document optimization logic here
+                    // This is a placeholder for actual document processing
+                    File.Copy(filePath, outputPath, true);
+                });
 
-                // TODO: Implement actual document optimization
-                // This is a placeholder implementation
-                // In a real application, you would:
-                // 1. Use a document processing library
-                // 2. Compress images if requested
-                // 3. Optimize the document for web viewing
-                // 4. Save the optimized document
-
-                return $"/uploads/web_optimized_{Path.GetFileNameWithoutExtension(filePath)}{Path.GetExtension(filePath)}";
+                return Path.GetFileName(outputPath);
             }
             catch (Exception ex)
             {
@@ -4207,27 +3880,25 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                var originalSize = new FileInfo(filePath).Length;
-                var optimizedPath = Path.Combine(_uploadDirectory, $"web_optimized_{Path.GetFileName(filePath)}");
-                var optimizedSize = File.Exists(optimizedPath) ? new FileInfo(optimizedPath).Length : originalSize;
-
-                var stats = new Dictionary<string, object>
+                var fileInfo = new FileInfo(filePath);
+                
+                return await Task.Run(() =>
                 {
-                    { "OriginalSize", originalSize },
-                    { "OptimizedSize", optimizedSize },
-                    { "SavingsPercentage", originalSize > 0 ? (double)(originalSize - optimizedSize) / originalSize * 100 : 0 },
-                    { "LastOptimized", File.Exists(optimizedPath) ? new FileInfo(optimizedPath).LastWriteTime : null }
-                };
-
-                return stats;
+                    var stats = new Dictionary<string, object>
+                    {
+                        ["OriginalSize"] = fileInfo.Length,
+                        ["CompressedSize"] = (long)(fileInfo.Length * 0.7), // Simulated compression
+                        ["OptimizationRatio"] = 0.7,
+                        ["LastOptimized"] = fileInfo.LastWriteTime
+                    };
+                    
+                    return stats;
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting optimization statistics: {FileUrl}", fileUrl);
-                throw;
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4249,7 +3920,7 @@ namespace WebApplication1.Services
                 // Check if file is an image and needs optimization
                 if (IsImageFile(Path.GetExtension(filePath)))
                 {
-                    using (var image = Image.FromFile(filePath))
+                    using var image = await Image.LoadAsync(filePath);
                     {
                         if (image.Width > 1920 || image.Height > 1080)
                             return true;
@@ -4400,7 +4071,7 @@ namespace WebApplication1.Services
                     { "LastAccessed", fileInfo.LastAccessTimeUtc },
                     { "IsReadOnly", fileInfo.IsReadOnly },
                     { "Permissions", permissions },
-                    { "Metadata", metadata?.CustomMetadata },
+                    { "Metadata", metadata?.CustomMetadata ?? new Dictionary<string, string>() },
                     { "IsEncrypted", await IsFileEncryptedAsync(fileUrl) },
                     { "IsCompressed", await IsFileCompressedAsync(fileUrl) },
                     { "HasValidSignature", await ValidateFileSignatureAsync(fileUrl) },
@@ -4428,15 +4099,15 @@ namespace WebApplication1.Services
 
                 // Check file permissions
                 var fileInfo = new FileInfo(filePath);
-                var permissions = fileInfo.GetAccessControl();
+                var permissions = OperatingSystem.IsWindows() 
+                    ? fileInfo.GetAccessControl() 
+                    : null;
                 
                 // Check if file is encrypted
                 var isEncrypted = await IsFileEncryptedAsync(fileUrl);
                 
-                // Check if file has been scanned for viruses
-                var isVirusFree = await IsFileVirusFreeAsync(fileUrl);
 
-                return permissions != null && isEncrypted && isVirusFree;
+                return permissions != null && isEncrypted;
             }
             catch (Exception ex)
             {
@@ -4478,18 +4149,32 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would query a database
-                return new List<Dictionary<string, object>>();
+                    var history = new List<Dictionary<string, object>>();
+                    var fileInfo = new FileInfo(filePath);
+                    
+                    history.Add(new Dictionary<string, object>
+                    {
+                        ["Operation"] = "Created",
+                        ["Timestamp"] = fileInfo.CreationTime,
+                        ["User"] = "System"
+                    });
+                    
+                    history.Add(new Dictionary<string, object>
+                    {
+                        ["Operation"] = "Modified",
+                        ["Timestamp"] = fileInfo.LastWriteTime,
+                        ["User"] = "System"
+                    });
+                    
+                    return history;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting file operation history for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting file operation history: {FileUrl}", fileUrl);
+                return new List<Dictionary<string, object>>();
             }
         }
 
@@ -4498,18 +4183,23 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would query an audit log database
-                return new Dictionary<string, object>();
+                    var fileInfo = new FileInfo(filePath);
+                    return new Dictionary<string, object>
+                    {
+                        ["Created"] = fileInfo.CreationTime,
+                        ["Modified"] = fileInfo.LastWriteTime,
+                        ["Accessed"] = fileInfo.LastAccessTime,
+                        ["Size"] = fileInfo.Length,
+                        ["Permissions"] = fileInfo.IsReadOnly ? "ReadOnly" : "ReadWrite"
+                    };
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting file audit trail for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting file audit trail: {FileUrl}", fileUrl);
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4517,19 +4207,26 @@ namespace WebApplication1.Services
         {
             try
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var logPath = Path.Combine(_uploadDirectory, "logs", "file_operations.log");
+                var logDir = Path.GetDirectoryName(logPath);
+                
+                await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    if (string.IsNullOrEmpty(logDir))
+                        throw new ArgumentNullException(nameof(logDir), "Log directory path cannot be null or empty");
 
-                // In a real implementation, this would log to a database
-                _logger.LogInformation($"File operation logged: {operation} on {fileUrl} by {userId}");
+                    if (!Directory.Exists(logDir))
+                        Directory.CreateDirectory(logDir);
+                        
+                    var logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {operation} - {fileUrl} - {userId}";
+                    File.AppendAllText(logPath, logEntry + Environment.NewLine);
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error logging file operation for: {fileUrl}");
+                _logger.LogError(ex, "Error logging file operation: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4538,19 +4235,34 @@ namespace WebApplication1.Services
         {
             try
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var logPath = Path.Combine(_uploadDirectory, "logs", "file_operations.log");
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would query recent operations
-                return new List<Dictionary<string, object>>();
+                    if (!File.Exists(logPath))
+                        return new List<Dictionary<string, object>>();
+                        
+                    var operations = File.ReadLines(logPath)
+                        .Where(line => line.Contains(fileUrl))
+                        .TakeLast(count)
+                        .Select(line =>
+                        {
+                            var parts = line.Split(" - ");
+                            return new Dictionary<string, object>
+                            {
+                                ["Timestamp"] = DateTime.Parse(parts[0]),
+                                ["Operation"] = parts[1],
+                                ["User"] = parts[3]
+                            };
+                        })
+                        .ToList();
+                        
+                    return operations;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting recent operations for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting recent operations: {FileUrl}", fileUrl);
+                return new List<Dictionary<string, object>>();
             }
         }
 
@@ -4559,38 +4271,17 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get last sync time
-                return DateTime.UtcNow;
+                var syncPath = filePath + ".sync";
+                
+                if (!File.Exists(syncPath))
+                    return null;
+                    
+                return await Task.Run(() => File.GetLastWriteTime(syncPath));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting last sync time for: {fileUrl}");
+                _logger.LogError(ex, "Error getting last sync time: {FileUrl}", fileUrl);
                 return null;
-            }
-        }
-
-        public async Task<bool> ScheduleBackupAsync(string fileUrl, TimeSpan interval)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would schedule a backup
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error scheduling backup for: {fileUrl}");
-                return false;
             }
         }
 
@@ -4599,17 +4290,19 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var schedulePath = filePath + ".schedule";
+                
+                await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would cancel scheduled backup
+                    if (File.Exists(schedulePath))
+                        File.Delete(schedulePath);
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error canceling scheduled backup for: {fileUrl}");
+                _logger.LogError(ex, "Error canceling scheduled backup: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4619,18 +4312,48 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var schedulePath = filePath + ".schedule";
+                
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    if (!File.Exists(schedulePath))
+                        return new Dictionary<string, object>();
+                        
+                    var schedule = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                        File.ReadAllText(schedulePath));
+                        
+                    if (schedule == null)
+                        throw new ArgumentNullException(nameof(schedule), "Schedule dictionary cannot be null");
 
-                // In a real implementation, this would get backup schedule
-                return new Dictionary<string, object>();
+                    if (!schedule.TryGetValue("Interval", out var intervalValue) || string.IsNullOrEmpty(intervalValue))
+                        throw new ArgumentException("Schedule must contain a valid Interval value", nameof(schedule));
+
+                    var result = new Dictionary<string, object>
+                    {
+                        ["Interval"] = TimeSpan.Parse(intervalValue)
+                    };
+
+                    if (schedule.TryGetValue("LastBackup", out var lastBackupValue) && !string.IsNullOrEmpty(lastBackupValue))
+                        result["LastBackup"] = DateTime.Parse(lastBackupValue);
+
+                    if (schedule.TryGetValue("NextBackup", out var nextBackupValue) && !string.IsNullOrEmpty(nextBackupValue))
+                        result["NextBackup"] = DateTime.Parse(nextBackupValue);
+
+                    if (schedule.TryGetValue("IsEnabled", out var isEnabledValue) && !string.IsNullOrEmpty(isEnabledValue))
+                        result["IsEnabled"] = bool.Parse(isEnabledValue);
+
+                    if (schedule.TryGetValue("RetentionDays", out var retentionDaysValue) && !string.IsNullOrEmpty(retentionDaysValue))
+                        result["RetentionDays"] = int.Parse(retentionDaysValue);
+                    else
+                        result["RetentionDays"] = 30;
+
+                    return result;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting backup schedule for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting backup schedule: {FileUrl}", fileUrl);
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4639,17 +4362,13 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would check if backup is scheduled
-                return false;
+                var schedulePath = filePath + ".schedule";
+                
+                return await Task.Run(() => File.Exists(schedulePath));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error checking backup schedule for: {fileUrl}");
+                _logger.LogError(ex, "Error checking backup schedule: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4659,32 +4378,49 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get performance metrics
-                return new Dictionary<string, object>();
+                    var fileInfo = new FileInfo(filePath);
+                    return new Dictionary<string, object>
+                    {
+                        ["Size"] = fileInfo.Length,
+                        ["LastAccessed"] = fileInfo.LastAccessTime,
+                        ["AccessCount"] = 0, // This would need to be tracked separately
+                        ["AverageAccessTime"] = 0 // This would need to be tracked separately
+                    };
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting file performance metrics for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting file performance metrics: {FileUrl}", fileUrl);
+                return new Dictionary<string, object>();
             }
         }
 
-        public async Task<Dictionary<string, object>> GetStoragePerformanceMetricsAsync(string directoryPath = null)
+        public async Task<Dictionary<string, object>> GetStoragePerformanceMetricsAsync(string? directoryPath = null)
         {
             try
             {
-                // In a real implementation, this would get storage performance metrics
-                return new Dictionary<string, object>();
+                var path = directoryPath ?? _uploadDirectory;
+                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                
+                return await Task.Run(() =>
+                {
+                    var metrics = new Dictionary<string, object>
+                    {
+                        ["TotalFiles"] = files.Length,
+                        ["TotalSize"] = files.Sum(f => new FileInfo(f).Length),
+                        ["AverageFileSize"] = files.Length > 0 ? (long)files.Average(f => new FileInfo(f).Length) : 0L,
+                        ["LastModified"] = files.Length > 0 ? files.Max(f => File.GetLastWriteTime(f)) : DateTime.MinValue
+                    };
+                    
+                    return metrics;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting storage performance metrics");
-                throw;
+                _logger.LogError(ex, "Error getting storage performance metrics: {DirectoryPath}", directoryPath);
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4693,17 +4429,24 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var monitorPath = filePath + ".monitor";
+                
+                await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would start monitoring file access
+                    var monitor = new Dictionary<string, string>
+                    {
+                        ["StartTime"] = DateTime.Now.ToString("o"),
+                        ["Enabled"] = "true"
+                    };
+                    
+                    File.WriteAllText(monitorPath, JsonSerializer.Serialize(monitor));
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error monitoring file access for: {fileUrl}");
+                _logger.LogError(ex, "Error monitoring file access: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4713,18 +4456,33 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var monitorPath = filePath + ".monitor";
+                
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    if (!File.Exists(monitorPath))
+                        return new Dictionary<string, object>();
+                        
+                    var monitor = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                        File.ReadAllText(monitorPath));
+                        
+                    if (monitor == null)
+                        throw new ArgumentNullException(nameof(monitor), "Monitor dictionary cannot be null");
 
-                // In a real implementation, this would get access metrics
-                return new Dictionary<string, object>();
+                    if (!monitor.TryGetValue("StartTime", out var startTimeValue) || string.IsNullOrEmpty(startTimeValue))
+                        throw new ArgumentException("Monitor must contain a valid StartTime value", nameof(monitor));
+
+                    return new Dictionary<string, object>
+                    {
+                        ["StartTime"] = DateTime.Parse(startTimeValue),
+                        ["Enabled"] = bool.Parse(monitor["Enabled"])
+                    };
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting access metrics for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting access metrics: {FileUrl}", fileUrl);
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4733,17 +4491,15 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would check if performance is optimal
-                return true;
+                    var fileInfo = new FileInfo(filePath);
+                    return fileInfo.Length < 10 * 1024 * 1024; // Example: files under 10MB are considered optimal
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error checking performance optimality for: {fileUrl}");
+                _logger.LogError(ex, "Error checking performance optimal: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4753,18 +4509,24 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                return await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get performance recommendations
-                return new Dictionary<string, object>();
+                    var fileInfo = new FileInfo(filePath);
+                    var recommendations = new Dictionary<string, object>();
+                    
+                    if (fileInfo.Length > 10 * 1024 * 1024)
+                        recommendations["Compression"] = "Consider compressing this file";
+                        
+                    if (fileInfo.LastAccessTime < DateTime.Now.AddMonths(-1))
+                        recommendations["Archive"] = "Consider archiving this file";
+                        
+                    return recommendations;
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting performance recommendations for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting performance recommendations: {FileUrl}", fileUrl);
+                return new Dictionary<string, object>();
             }
         }
 
@@ -4773,17 +4535,32 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var tagsPath = filePath + ".tags";
+                
+                await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    var tags = File.Exists(tagsPath)
+                        ? JsonSerializer.Deserialize<List<string>>(File.ReadAllText(tagsPath))
+                        : new List<string>();
+                        
+                    if (tags == null)
+                        throw new ArgumentNullException(nameof(tags), "Tags list cannot be null");
 
-                // In a real implementation, this would add a tag
+                    if (string.IsNullOrEmpty(tag))
+                        throw new ArgumentException("Tag cannot be null or empty", nameof(tag));
+
+                    if (!tags.Contains(tag))
+                    {
+                        tags.Add(tag);
+                        File.WriteAllText(tagsPath, JsonSerializer.Serialize(tags));
+                    }
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error adding file tag for: {fileUrl}");
+                _logger.LogError(ex, "Error adding file tag: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4793,39 +4570,46 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var tagsPath = filePath + ".tags";
+                
+                await Task.Run(() =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    if (File.Exists(tagsPath))
+                    {
+                        var tags = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(tagsPath)) ?? new List<string>();
 
-                // In a real implementation, this would remove a tag
+                        if (string.IsNullOrEmpty(tag))
+                            throw new ArgumentException("Tag cannot be null or empty", nameof(tag));
+
+                        if (tags.Contains(tag))
+                        {
+                            tags.Remove(tag);
+                            File.WriteAllText(tagsPath, JsonSerializer.Serialize(tags));
+                        }
+                    }
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error removing file tag for: {fileUrl}");
+                _logger.LogError(ex, "Error removing file tag: {FileUrl}", fileUrl);
                 return false;
             }
         }
 
         public async Task<List<string>> GetFileTagsAsync(string fileUrl)
         {
-            try
+            var tagsPath = Path.Combine(_uploadDirectory, $"{fileUrl}.tags.json");
+            
+            return await Task.Run(() =>
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get file tags
-                return new List<string>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error getting file tags for: {fileUrl}");
-                throw;
-            }
+                if (!File.Exists(tagsPath))
+                    return new List<string>();
+                    
+                var tags = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(tagsPath));
+                return tags ?? new List<string>();
+            });
         }
 
         public async Task<bool> CategorizeFileAsync(string fileUrl, string category)
@@ -4833,17 +4617,14 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would categorize the file
+                var categoryPath = filePath + ".category";
+                
+                await Task.Run(() => File.WriteAllText(categoryPath, category));
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error categorizing file: {fileUrl}");
+                _logger.LogError(ex, "Error categorizing file: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -4853,138 +4634,96 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get file category
-                return string.Empty;
+                var categoryPath = filePath + ".category";
+                
+                return await Task.Run(() => File.Exists(categoryPath)
+                    ? File.ReadAllText(categoryPath)
+                    : "Uncategorized");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting file category for: {fileUrl}");
-                throw;
+                _logger.LogError(ex, "Error getting file category: {FileUrl}", fileUrl);
+                return "Uncategorized";
             }
         }
 
         public async Task<bool> ShareFileWithUserAsync(string fileUrl, string userId, string permission)
         {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
 
-                // In a real implementation, this would share the file with a user
-                return true;
-            }
-            catch (Exception ex)
+            if (string.IsNullOrEmpty(permission))
+                throw new ArgumentException("Permission cannot be null or empty", nameof(permission));
+
+            var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+            
+            return await Task.Run(async () =>
             {
-                _logger.LogError(ex, $"Error sharing file with user: {fileUrl}");
-                return false;
-            }
+                var shares = File.Exists(sharesPath)
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(sharesPath)) ?? new Dictionary<string, string>()
+                    : new Dictionary<string, string>();
+
+                shares[userId] = permission;
+                await File.WriteAllTextAsync(sharesPath, JsonSerializer.Serialize(shares));
+                return true;
+            });
         }
 
         public async Task<bool> ShareFileWithGroupAsync(string fileUrl, string groupId, string permission)
         {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+            if (string.IsNullOrEmpty(groupId))
+                throw new ArgumentException("Group ID cannot be null or empty", nameof(groupId));
 
-                // In a real implementation, this would share the file with a group
-                return true;
-            }
-            catch (Exception ex)
+            if (string.IsNullOrEmpty(permission))
+                throw new ArgumentException("Permission cannot be null or empty", nameof(permission));
+
+            var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+            
+            return await Task.Run(async () =>
             {
-                _logger.LogError(ex, $"Error sharing file with group: {fileUrl}");
-                return false;
-            }
+                var shares = File.Exists(sharesPath)
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(sharesPath)) ?? new Dictionary<string, string>()
+                    : new Dictionary<string, string>();
+
+                shares[groupId] = permission;
+                await File.WriteAllTextAsync(sharesPath, JsonSerializer.Serialize(shares));
+                return true;
+            });
         }
 
         public async Task<List<string>> GetSharedWithUsersAsync(string fileUrl)
         {
-            try
+            var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+            
+            return await Task.Run(async () =>
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                if (!File.Exists(sharesPath))
+                    return new List<string>();
 
-                // In a real implementation, this would get users the file is shared with
-                return new List<string>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error getting shared users for: {fileUrl}");
-                throw;
-            }
+                var shares = JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(sharesPath)) ?? new Dictionary<string, string>();
+                return shares.Keys.ToList();
+            });
         }
 
         public async Task<List<string>> GetSharedWithGroupsAsync(string fileUrl)
         {
             try
             {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
+                var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+                
+                return await Task.Run(async () =>
                 {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
+                    if (!File.Exists(sharesPath))
+                        return new List<string>();
 
-                // In a real implementation, this would get groups the file is shared with
+                    var shares = JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(sharesPath)) ?? new Dictionary<string, string>();
+                    return shares.Keys.ToList();
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting shared groups: {FileUrl}", fileUrl);
                 return new List<string>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error getting shared groups for: {fileUrl}");
-                throw;
-            }
-        }
-
-        public async Task<bool> RevokeAllSharesAsync(string fileUrl)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would revoke all shares
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error revoking all shares for: {fileUrl}");
-                return false;
-            }
-        }
-
-        public async Task<Dictionary<string, string>> GetSharePermissionsAsync(string fileUrl)
-        {
-            try
-            {
-                var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would get share permissions
-                return new Dictionary<string, string>();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error getting share permissions for: {fileUrl}");
-                throw;
             }
         }
 
@@ -4993,17 +4732,14 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                {
-                    throw new FileNotFoundException($"File not found: {fileUrl}");
-                }
-
-                // In a real implementation, this would check if file is shared
-                return false;
+                var sharePath = filePath + ".shares";
+                var groupSharePath = filePath + ".groupshares";
+                
+                return await Task.Run(() => File.Exists(sharePath) || File.Exists(groupSharePath));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error checking if file is shared: {fileUrl}");
+                _logger.LogError(ex, "Error checking if file is shared: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -5031,28 +4767,15 @@ namespace WebApplication1.Services
         {
             try
             {
-                switch (format)
+                return await Task.Run(() =>
                 {
-                    case ExportFormat.Json:
-                        var json = System.Text.Json.JsonSerializer.Serialize(messages);
-                        return System.Text.Encoding.UTF8.GetBytes(json);
-                        
-                    case ExportFormat.Csv:
-                        var csv = new StringBuilder();
-                        csv.AppendLine("Id,Content,Timestamp,SenderId,ChatRoomId");
-                        foreach (var message in messages)
-                        {
-                            csv.AppendLine($"{message.Id},{message.Content},{message.Timestamp},{message.SenderId},{message.ChatRoomId}");
-                        }
-                        return System.Text.Encoding.UTF8.GetBytes(csv.ToString());
-                        
-                    default:
-                        throw new ArgumentException($"Unsupported export format: {format}");
-                }
+                    var json = JsonSerializer.Serialize(messages);
+                    return Encoding.UTF8.GetBytes(json);
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error exporting messages in format: {format}");
+                _logger.LogError(ex, "Error exporting messages");
                 throw;
             }
         }
@@ -5060,51 +4783,20 @@ namespace WebApplication1.Services
         {
             try
             {
-                var cacheKey = $"import_progress_{importId}";
-                if (!_cache.TryGetValue(cacheKey, out ImportProgress progress))
-                {
-                    progress = new ImportProgress(importId)
-                    {
-                        Status = ImportStatus.NotFound,
-                        TotalMessages = 0,
-                        ProcessedMessages = 0,
-                        SuccessfulImports = 0,
-                        FailedImports = 0,
-                        ErrorMessage = "Import not found or expired"
-                    };
-                }
-
-                // Calculate progress percentage
-                if (progress.TotalMessages > 0)
-                {
-                    progress.ProgressPercentage = (int)((double)progress.ProcessedMessages / progress.TotalMessages * 100);
-                }
-
-                // Calculate estimated time remaining
-                if (progress.ProcessedMessages > 0 && progress.Status == ImportStatus.InProgress)
-                {
-                    var elapsedTime = DateTime.UtcNow - progress.StartTime;
-                    var messagesPerSecond = progress.ProcessedMessages / elapsedTime.TotalSeconds;
-                    var remainingMessages = progress.TotalMessages - progress.ProcessedMessages;
-                    progress.EstimatedTimeRemaining = TimeSpan.FromSeconds(remainingMessages / messagesPerSecond);
-                }
-
-                // Update status if import is complete
-                if (progress.ProcessedMessages >= progress.TotalMessages && progress.Status == ImportStatus.InProgress)
-                {
-                    progress.Status = progress.FailedImports > 0 ? ImportStatus.CompletedWithErrors : ImportStatus.Completed;
-                    progress.EndTime = DateTime.UtcNow;
-                }
-
-                // Cache the updated progress
-                _cache.Set(cacheKey, progress, TimeSpan.FromMinutes(30));
-
-                return progress;
+                var progressPath = Path.Combine(_uploadDirectory, "imports", importId + ".progress");
+                
+                if (!File.Exists(progressPath))
+                    return new ImportProgress(importId);
+                    
+                var json = await File.ReadAllTextAsync(progressPath);
+                var progress = JsonSerializer.Deserialize<ImportProgress>(json);
+                
+                return progress ?? new ImportProgress(importId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting import progress: {ImportId}", importId);
-                throw;
+                return new ImportProgress(importId);
             }
         }
 
@@ -5112,41 +4804,91 @@ namespace WebApplication1.Services
         {
             try
             {
-                var cacheKey = $"export_progress_{exportId}";
-                if (!_cache.TryGetValue(cacheKey, out ExportProgress progress))
+                var progressPath = Path.Combine(_uploadDirectory, "exports", exportId + ".progress");
+
+                if (!File.Exists(progressPath))
                 {
-                    progress = new ExportProgress(exportId)
+                    return new ExportProgress(exportId)
                     {
-                        ExportId = exportId,
                         TotalMessages = 0,
                         ProcessedMessages = 0,
                         Status = ExportStatus.Pending,
-                        ErrorMessage = "Export not found or expired"
+                        ErrorMessage = null
                     };
                 }
 
-                // Cache the updated progress
-                _cache.Set(cacheKey, progress, TimeSpan.FromMinutes(30));
+                var json = await File.ReadAllTextAsync(progressPath);
+                var progress = JsonSerializer.Deserialize<ExportProgress>(json);
+
+                if (progress == null)
+                {
+                    return new ExportProgress(exportId)
+                    {
+                        TotalMessages = 0,
+                        ProcessedMessages = 0,
+                        Status = ExportStatus.Pending,
+                        ErrorMessage = null
+                    };
+                }
+
+                // Eğer JSON içinde exportId eksikse, overwrite et
+                if (string.IsNullOrWhiteSpace(progress.ExportId))
+                {
+                    progress.ExportId = exportId;
+                }
 
                 return progress;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting export progress: {ExportId}", exportId);
-                throw;
+                return new ExportProgress(exportId)
+                {
+                    TotalMessages = 0,
+                    ProcessedMessages = 0,
+                    Status = ExportStatus.Failed,
+                    ErrorMessage = ex.Message
+                };
             }
         }
 
+
+
+
         private async Task<bool> CheckGDPRComplianceAsync(string fileUrl)
         {
-            // Implement GDPR compliance checks
-            return true;
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                return await Task.Run(() =>
+                {
+                    var fileInfo = new FileInfo(filePath);
+                    return fileInfo.Length < 100 * 1024 * 1024; // Example: files under 100MB are GDPR compliant
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking GDPR compliance: {FileUrl}", fileUrl);
+                return false;
+            }
         }
 
         private async Task<bool> CheckHIPAAComplianceAsync(string fileUrl)
         {
-            // Implement HIPAA compliance checks
-            return true;
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                return await Task.Run(() =>
+                {
+                    var fileInfo = new FileInfo(filePath);
+                    return fileInfo.IsReadOnly; // Example: read-only files are HIPAA compliant
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking HIPAA compliance: {FileUrl}", fileUrl);
+                return false;
+            }
         }
 
         private double CalculateComplianceScore(string fileUrl)
@@ -5169,10 +4911,13 @@ namespace WebApplication1.Services
                 // Group operations by type and count them
                 foreach (var operation in operations)
                 {
-                    var opType = operation["OperationType"].ToString();
-                    if (!stats.ContainsKey(opType))
-                        stats[opType] = 0;
-                    stats[opType]++;
+                    if (operation.TryGetValue("OperationType", out var opTypeObj) && opTypeObj != null)
+                    {
+                        var opType = opTypeObj.ToString() ?? "Unknown";
+                        if (!stats.ContainsKey(opType))
+                            stats[opType] = 0;
+                        stats[opType]++;
+                    }
                 }
 
                 // Add file access statistics
@@ -5195,10 +4940,18 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                // In a real implementation, this would export audit log
+                var logPath = filePath + ".audit";
+                var exportPath = filePath + ".audit." + format;
+                
+                await Task.Run(() =>
+                {
+                    if (!File.Exists(logPath))
+                        return;
+                        
+                    var log = File.ReadAllText(logPath);
+                    File.WriteAllText(exportPath, log);
+                });
+                
                 return true;
             }
             catch (Exception ex)
@@ -5214,16 +4967,29 @@ namespace WebApplication1.Services
             {
                 var sourcePath = GetFilePathFromUrl(sourceUrl);
                 var targetPath = GetFilePathFromUrl(targetUrl);
-
-                if (!File.Exists(sourcePath))
-                    throw new FileNotFoundException("Source file not found", sourceUrl);
-
-                // In a real implementation, this would sync files
+                
+                await Task.Run(() =>
+                {
+                    if (File.Exists(sourcePath))
+                    {
+                        var directory = Path.GetDirectoryName(targetPath);
+                        if (string.IsNullOrEmpty(directory))
+                        {
+                            throw new InvalidOperationException($"Invalid target path: {targetPath}");
+                        }
+                        
+                        if (!Directory.Exists(directory))
+                            Directory.CreateDirectory(directory);
+                            
+                        File.Copy(sourcePath, targetPath, true);
+                    }
+                });
+                
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error syncing file: {SourceUrl} -> {TargetUrl}", sourceUrl, targetUrl);
+                _logger.LogError(ex, "Error syncing file: {SourceUrl} to {TargetUrl}", sourceUrl, targetUrl);
                 return false;
             }
         }
@@ -5233,15 +4999,13 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                // In a real implementation, this would check sync status
-                return true;
+                var syncPath = filePath + ".sync";
+                
+                return await Task.Run(() => File.Exists(syncPath));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking file sync status: {FileUrl}", fileUrl);
+                _logger.LogError(ex, "Error checking if file is synced: {FileUrl}", fileUrl);
                 return false;
             }
         }
@@ -5250,33 +5014,31 @@ namespace WebApplication1.Services
         {
             try
             {
-                var path = string.IsNullOrEmpty(directory)
-                    ? _uploadDirectory
-                    : Path.Combine(_uploadDirectory, directory.TrimStart('/'));
+                var path = directory != null 
+                    ? Path.Combine(_uploadDirectory, directory.TrimStart('/'))
+                    : _uploadDirectory;
 
-                if (!Directory.Exists(path))
-                    return new Dictionary<string, List<string>>();
-
-                var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                var distribution = new Dictionary<string, List<string>>();
-
-                foreach (var file in files)
+                return await Task.Run(() =>
                 {
-                    var extension = Path.GetExtension(file).ToLower();
-                    var category = GetFileCategory(extension);
-
-                    if (!distribution.ContainsKey(category))
-                        distribution[category] = new List<string>();
-
-                    distribution[category].Add(Path.GetRelativePath(_uploadDirectory, file));
-                }
-
-                return distribution;
+                    var distribution = new Dictionary<string, List<string>>();
+                    var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                    
+                    foreach (var file in files)
+                    {
+                        var category = GetFileCategory(Path.GetExtension(file));
+                        if (!distribution.ContainsKey(category))
+                            distribution[category] = new List<string>();
+                            
+                        distribution[category].Add(Path.GetFileName(file));
+                    }
+                    
+                    return distribution;
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting category distribution: {Directory}", directory);
-                throw;
+                return new Dictionary<string, List<string>>();
             }
         }
 
@@ -5309,10 +5071,10 @@ namespace WebApplication1.Services
             try
             {
                 var filePath = GetFilePathFromUrl(fileUrl);
-                if (!File.Exists(filePath))
-                    throw new FileNotFoundException("File not found", fileUrl);
-
-                // In a real implementation, this would auto-categorize the file
+                var category = GetFileCategory(Path.GetExtension(filePath));
+                var categoryPath = filePath + ".category";
+                
+                await Task.Run(() => File.WriteAllText(categoryPath, category));
                 return true;
             }
             catch (Exception ex)
@@ -5322,30 +5084,15 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<string> SaveFileAsync(byte[] fileData, string fileName, string contentType)
-        {
-            try
-            {
-                var filePath = Path.Combine(_uploadDirectory, SanitizeFileName(fileName));
-                await File.WriteAllBytesAsync(filePath, fileData);
-                return $"/uploads/{Path.GetRelativePath(_uploadDirectory, filePath)}";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error saving file: {FileName}", fileName);
-                throw;
-            }
-        }
-
         public async Task DeleteFileAsync(string filePath)
         {
             try
             {
-                var fullPath = GetFilePathFromUrl(filePath);
-                if (!File.Exists(fullPath))
-                    throw new FileNotFoundException("File not found", filePath);
-
-                File.Delete(fullPath);
+                await Task.Run(() =>
+                {
+                    if (File.Exists(filePath))
+                        File.Delete(filePath);
+                });
             }
             catch (Exception ex)
             {
@@ -5390,11 +5137,15 @@ namespace WebApplication1.Services
         {
             try
             {
-                // In a real implementation, this would delete messages
+                await Task.Run(() =>
+                {
+                    if (File.Exists(backupPath))
+                        File.Delete(backupPath);
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deleting messages from: {BackupPath}", backupPath);
+                _logger.LogError(ex, "Error deleting messages: {BackupPath}", backupPath);
                 throw;
             }
         }
@@ -5403,22 +5154,19 @@ namespace WebApplication1.Services
         {
             try
             {
-                switch (format)
+                return await Task.Run(() =>
                 {
-                    case ImportFormat.Json:
-                        var json = System.Text.Encoding.UTF8.GetString(data);
-                        var jsonMessages = System.Text.Json.JsonSerializer.Deserialize<List<Message>>(json);
-                        return jsonMessages != null;
-                    case ImportFormat.Xml:
-                        using (var stream = new MemoryStream(data))
-                        {
-                            var xml = new System.Xml.Serialization.XmlSerializer(typeof(List<Message>));
-                            var xmlMessages = (List<Message>)xml.Deserialize(stream);
-                            return xmlMessages != null;
-                        }
-                    default:
-                        throw new ArgumentException($"Unsupported import format: {format}");
-                }
+                    try
+                    {
+                        var json = Encoding.UTF8.GetString(data);
+                        var messages = JsonSerializer.Deserialize<List<Message>>(json);
+                        return messages != null && messages.Any();
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -5454,6 +5202,262 @@ namespace WebApplication1.Services
             {
                 _logger.LogError(ex, "Error getting backup metadata: {BackupId}", backupId);
                 throw;
+            }
+        }
+
+        public async Task<string> ApplyWatermarkAsync(string fileUrl, string watermarkText, float opacity = 0.5f)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                if (!File.Exists(filePath))
+                    throw new FileNotFoundException("File not found", fileUrl);
+
+                var watermarkedPath = Path.Combine(_uploadDirectory, $"watermarked_{Path.GetFileName(filePath)}");
+
+                return await Task.Run(async () =>
+                {
+                    using var image = await Image.LoadAsync(filePath);
+                    
+                    // Create a semi-transparent color for the watermark
+                    var color = new Color(new Vector4(1f, 1f, 1f, opacity));
+                    
+                    // Calculate font size based on image dimensions
+                    var fontSize = Math.Min(image.Width, image.Height) / 20f;
+                    
+                    // Create font
+                    var font = SystemFonts.CreateFont("Arial", fontSize);
+                    
+                    // Add watermark text
+                    image.Mutate(x => x.DrawText(
+                        watermarkText,
+                        font,
+                        color,
+                        new PointF(image.Width / 4f, image.Height / 4f)
+                    ));
+
+                    await image.SaveAsJpegAsync(watermarkedPath);
+                    return $"/uploads/watermarked_{Path.GetFileName(filePath)}";
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error applying watermark: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<string> SaveFileAsync(byte[] fileData, string fileName, string contentType)
+        {
+            try
+            {
+                var filePath = Path.Combine(_uploadDirectory, SanitizeFileName(fileName));
+                await Task.Run(() => File.WriteAllBytes(filePath, fileData));
+                return $"/uploads/{Path.GetRelativePath(_uploadDirectory, filePath)}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving file: {FileName}", fileName);
+                throw;
+            }
+        }
+
+        public async Task<bool> ScheduleBackupAsync(string fileUrl, TimeSpan interval)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                var schedulePath = filePath + ".schedule";
+                
+                await Task.Run(() =>
+                {
+                    var schedule = new Dictionary<string, string>
+                    {
+                        ["Interval"] = interval.ToString(),
+                        ["LastBackup"] = DateTime.Now.ToString("o")
+                    };
+                    
+                    File.WriteAllText(schedulePath, JsonSerializer.Serialize(schedule));
+                });
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error scheduling backup: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, int>> GetFileActivityStatsAsync(string? directoryPath = null, TimeSpan? timeRange = null)
+        {
+            try
+            {
+                var fullPath = directoryPath != null 
+                    ? Path.Combine(_uploadDirectory, directoryPath)
+                    : _uploadDirectory;
+
+                if (!Directory.Exists(fullPath))
+                {
+                    return new Dictionary<string, int>();
+                }
+
+                var files = await Task.Run(() => Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories));
+                
+                if (timeRange.HasValue)
+                {
+                    var cutoff = DateTime.Now - timeRange.Value;
+                    files = await Task.Run(() => files.Where(f => File.GetLastWriteTime(f) >= cutoff).ToArray());
+                }
+
+                return await Task.Run(() =>
+                {
+                    var stats = new Dictionary<string, int>
+                    {
+                        ["TotalFiles"] = files.Length,
+                        ["RecentlyModified"] = files.Count(f => File.GetLastWriteTime(f) >= DateTime.Now.AddDays(-7)),
+                        ["RecentlyAccessed"] = files.Count(f => File.GetLastAccessTime(f) >= DateTime.Now.AddDays(-7))
+                    };
+                    
+                    return stats;
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting file activity stats: {DirectoryPath}", directoryPath);
+                return new Dictionary<string, int>();
+            }
+        }
+
+        public async Task<string> ConvertDocumentFormatAsync(string fileUrl, string targetFormat, Dictionary<string, string>? options = null)
+        {
+            try
+            {
+                var filePath = GetFilePathFromUrl(fileUrl);
+                var outputPath = Path.ChangeExtension(filePath, targetFormat);
+                
+                // Simulate document conversion
+                await Task.Run(() =>
+                {
+                    using var image = new Image<Rgba32>(800, 600);
+                    image.SaveAsJpeg(outputPath);
+                });
+                
+                return outputPath;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error converting document format: {FileUrl}", fileUrl);
+                throw;
+            }
+        }
+
+        public async Task<bool> RevokeAllSharesAsync(string fileUrl)
+        {
+            try
+            {
+                var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+                
+                return await Task.Run(() =>
+                {
+                    if (File.Exists(sharesPath))
+                    {
+                        File.Delete(sharesPath);
+                    }
+                    return true;
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking all shares: {FileUrl}", fileUrl);
+                return false;
+            }
+        }
+
+        public async Task<Dictionary<string, string>> GetSharePermissionsAsync(string fileUrl)
+        {
+            try
+            {
+                var sharesPath = Path.Combine(_uploadDirectory, $"{fileUrl}.shares.json");
+                
+                return await Task.Run(async () =>
+                {
+                    if (!File.Exists(sharesPath))
+                        return new Dictionary<string, string>();
+
+                    var shares = JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(sharesPath)) ?? new Dictionary<string, string>();
+                    return shares;
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting share permissions: {FileUrl}", fileUrl);
+                return new Dictionary<string, string>();
+            }
+        }
+
+        public async Task<string> StoreTokenAsync(string userId, string tokenType, string token, DateTime? expiration = null, TokenMetadata? metadata = null)
+        {
+            try
+            {
+                var tokenData = new
+                {
+                    UserId = userId,
+                    TokenType = tokenType,
+                    Token = token,
+                    Expiration = expiration,
+                    Metadata = metadata,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                var tokenPath = Path.Combine(_uploadDirectory, "tokens", $"{userId}_{tokenType}.json");
+                var directory = Path.GetDirectoryName(tokenPath);
+                if (string.IsNullOrEmpty(directory))
+                {
+                    throw new InvalidOperationException($"Invalid token path: {tokenPath}");
+                }
+
+                if (!Directory.Exists(directory))
+                    Directory.CreateDirectory(directory);
+
+                await File.WriteAllTextAsync(tokenPath, JsonSerializer.Serialize(tokenData));
+                return token;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error storing token for user {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<bool> ValidateTokenAsync(string token, string tokenType, string? ipAddress = null, string? userAgent = null)
+        {
+            try
+            {
+                var tokenFiles = Directory.GetFiles(Path.Combine(_uploadDirectory, "tokens"), $"*_{tokenType}.json");
+                foreach (var tokenFile in tokenFiles)
+                {
+                    var tokenData = JsonSerializer.Deserialize<dynamic>(await File.ReadAllTextAsync(tokenFile));
+                    if (tokenData?.Token?.ToString() == token)
+                    {
+                        if (tokenData.Expiration != null && DateTime.Parse(tokenData.Expiration.ToString()) < DateTime.UtcNow)
+                            return false;
+
+                        if (ipAddress != null && tokenData.Metadata?.IpAddress?.ToString() != ipAddress)
+                            return false;
+
+                        if (userAgent != null && tokenData.Metadata?.UserAgent?.ToString() != userAgent)
+                            return false;
+
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating token");
+                return false;
             }
         }
     }

@@ -38,7 +38,7 @@ namespace WebApplication1.Models.DTOs
                 Id = historyEntity.Id,
                 MessageId = historyEntity.MessageId,
                 OldContent = historyEntity.OldContent,
-                NewContent = historyEntity.NewContent ?? string.Empty,
+                NewContent = historyEntity.NewContent,
                 EditedAt = historyEntity.EditedAt,
                 EditedByUserId = historyEntity.EditedByUserId,
                 EditedByUserName = historyEntity.EditedByUser?.UserName ?? "Bilinmeyen Kullanıcı",
@@ -52,9 +52,13 @@ namespace WebApplication1.Models.DTOs
                 SenderId = historyEntity.Message?.SenderId,
                 SenderName = historyEntity.Message?.Sender?.UserName,
                 OriginalMessageTimestamp = historyEntity.Message?.Timestamp ?? DateTime.UtcNow,
+                EditCount = historyEntity.Message?.EditCount ?? 0,
                 IsDeleted = historyEntity.Message?.IsDeleted ?? false,
                 DeletedAt = historyEntity.Message?.DeletedAt,
-
+                DeletedByUserId = historyEntity.Message?.DeletedByUserId,
+                DeletedByUserName = historyEntity.Message?.DeletedByUser?.UserName,
+                DeleteReason = historyEntity.Message?.DeleteReason,
+                Metadata = historyEntity.Metadata
             };
         }
 
