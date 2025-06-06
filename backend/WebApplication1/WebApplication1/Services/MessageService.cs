@@ -12,6 +12,7 @@ using WebApplication1.Models.Enums;
 using WebApplication1.Models.Notifications;
 using WebApplication1.Repositories;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using System.IO;
 
 namespace WebApplication1.Services
 {
@@ -128,7 +129,7 @@ namespace WebApplication1.Services
                 if (!chatRoom.Participants.Any(p => p.Id == senderId))
                     throw new UnauthorizedAccessException("User is not a participant in this chat room");
 
-                // Create message
+                // First create the message without attachments
                 var message = new Message
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -140,14 +141,25 @@ namespace WebApplication1.Services
                     Timestamp = DateTime.UtcNow,
                     IsEdited = false,
                     IsDeleted = false,
-                    Attachments = attachmentUrls == null ? new List<Attachment>() : attachmentUrls.Select(url => new Attachment
+                    Attachments = new List<Attachment>() // Initialize empty list
+                };
+
+                // Then create and add attachments if any
+                if (attachmentUrls != null)
+                {
+                    message.Attachments = attachmentUrls.Select(url => new Attachment(_storageService)
                     {
                         Id = Guid.NewGuid().ToString(),
-                        MessageId = Guid.NewGuid().ToString(),
+                        MessageId = message.Id,
                         Url = url,
-                        UploadedAt = DateTime.UtcNow
-                    }).ToList()
-                };
+                        UploadedAt = DateTime.UtcNow,
+                        UploadedBy = senderId,
+                        FileName = Path.GetFileName(url) ?? "defaultFileName",
+                        FileType = Path.GetExtension(url) ?? "defaultFileType",
+                        MimeType = "application/octet-stream",
+                        Message = message
+                    }).ToList();
+                }
 
                 _context.Messages.Add(message);
                 await _context.SaveChangesAsync();
@@ -159,6 +171,7 @@ namespace WebApplication1.Services
                     MessageId = message.Id,
                     Message = message,
                     OldContent = content,
+                    NewContent = content,
                     EditedAt = DateTime.UtcNow,
                     EditedByUserId = senderId,
                     EditedByUser = sender,
@@ -205,6 +218,7 @@ namespace WebApplication1.Services
                     MessageId = message.Id,
                     Message = message,
                     OldContent = message.Content,
+                    NewContent = content,
                     EditedAt = DateTime.UtcNow,
                     EditedByUserId = userId,
                     EditedByUser = editedByUser,
@@ -252,6 +266,7 @@ namespace WebApplication1.Services
                     MessageId = message.Id,
                     Message = message,
                     OldContent = message.Content,
+                    NewContent = "[Message Deleted]",
                     EditedAt = DateTime.UtcNow,
                     EditedByUserId = userId,
                     EditedByUser = editedByUser,
@@ -516,6 +531,7 @@ namespace WebApplication1.Services
                 if (sender == null)
                     throw new ArgumentException("Sender not found");
 
+                // First create the message without attachments
                 var forwardedMessage = new Message
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -525,14 +541,25 @@ namespace WebApplication1.Services
                     ChatRoom = targetChatRoom,
                     Content = originalMessage.Content,
                     Timestamp = DateTime.UtcNow,
-                    Attachments = originalMessage.Attachments == null ? new List<Attachment>() : originalMessage.Attachments.Select(a => new Attachment
+                    Attachments = new List<Attachment>() // Initialize empty list
+                };
+
+                // Then create and add attachments
+                if (originalMessage.Attachments != null)
+                {
+                    forwardedMessage.Attachments = originalMessage.Attachments.Select(a => new Attachment(_storageService)
                     {
                         Id = Guid.NewGuid().ToString(),
-                        MessageId = Guid.NewGuid().ToString(),
+                        MessageId = forwardedMessage.Id,
                         Url = a.Url,
-                        UploadedAt = DateTime.UtcNow
-                    }).ToList()
-                };
+                        UploadedAt = DateTime.UtcNow,
+                        FileName = a.FileName,
+                        FileType = a.FileType,
+                        MimeType = a.MimeType,
+                        UploadedBy = userId,
+                        Message = forwardedMessage
+                    }).ToList();
+                }
 
                 _context.Messages.Add(forwardedMessage);
                 await _context.SaveChangesAsync();

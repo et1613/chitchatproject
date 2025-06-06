@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using WebApplication1.Models.Users;
+using WebApplication1.Models.Enums;
 
 namespace WebApplication1.Models.Notifications
 {
@@ -116,5 +118,14 @@ namespace WebApplication1.Models.Notifications
                 _ => true
             };
         }
+
+        public Dictionary<NotificationType, bool> EnabledTypes { get; set; } = new();
+        public Dictionary<NotificationChannel, bool> EnabledChannels { get; set; } = new();
+        public bool EnableSound { get; set; } = true;
+        public bool EnableVibration { get; set; } = true;
+        public bool EnableDesktopNotifications { get; set; } = true;
+        public TimeSpan QuietHoursStart { get; set; } = new TimeSpan(22, 0, 0); // 22:00
+        public TimeSpan QuietHoursEnd { get; set; } = new TimeSpan(8, 0, 0); // 08:00
+        public List<string> BlockedSenders { get; set; } = new();
     }
 } 

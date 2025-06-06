@@ -66,7 +66,7 @@ namespace WebApplication1.Services
         Task<Attachment> DecryptFileAsync(string fileId, string encryptionKey);
         Task<string> UploadFileAsync(Stream fileStream, string fileName);
         Task DeleteFileAsync(string fileUrl);
-        Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId);
+        Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId, string messageId);
         Task DeleteAttachmentAsync(Attachment attachment);
     }
 
@@ -117,9 +117,10 @@ namespace WebApplication1.Services
                 }
 
                 // Attachment oluşturma
-                var attachment = new Attachment
+                var attachment = new Attachment(_storageService)
                 {
                     MessageId = messageId,
+                    Message = await _context.Messages.FindAsync(messageId) ?? throw new ArgumentException("Message not found"),
                     Url = fileUrl,
                     FileName = file.FileName,
                     FileType = file.ContentType,
@@ -167,7 +168,10 @@ namespace WebApplication1.Services
                     throw new UnauthorizedAccessException("Bu dosyayı silme yetkiniz yok");
 
                 // Dosyayı depolama servisinden silme
-                await _storageService.DeleteFileAsync(attachment.Url);
+                if (!string.IsNullOrEmpty(attachment.Url))
+                {
+                    await _storageService.DeleteFileAsync(attachment.Url);
+                }
                 if (!string.IsNullOrEmpty(attachment.ThumbnailUrl))
                 {
                     await _storageService.DeleteFileAsync(attachment.ThumbnailUrl);
@@ -211,6 +215,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 return attachment.Url;
             }
             catch (Exception ex)
@@ -250,6 +257,9 @@ namespace WebApplication1.Services
                 var attachment = await _context.Attachments.FindAsync(fileId);
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
+
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
 
                 if (!attachment.IsImage() && !attachment.IsVideo())
                     throw new InvalidOperationException("Sadece görsel ve video dosyaları için thumbnail oluşturulabilir");
@@ -343,6 +353,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 if (!attachment.IsImage() && !attachment.IsVideo())
                     throw new InvalidOperationException("Sadece görsel ve video dosyaları sıkıştırılabilir");
 
@@ -357,9 +370,10 @@ namespace WebApplication1.Services
 
                 var compressedUrl = await _storageService.CompressFileAsync(attachment.Url, compressionLevel);
                 
-                var compressedAttachment = new Attachment
+                var compressedAttachment = new Attachment(_storageService)
                 {
                     MessageId = attachment.MessageId,
+                    Message = attachment.Message,
                     Url = compressedUrl,
                     FileName = $"compressed_{attachment.FileName}",
                     FileType = attachment.FileType,
@@ -394,14 +408,18 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 if (!attachment.IsImage())
                     throw new InvalidOperationException("Sadece görsel dosyaları optimize edilebilir");
 
                 var optimizedUrl = await _storageService.OptimizeImageAsync(attachment.Url, maxWidth, maxHeight);
                 
-                var optimizedAttachment = new Attachment
+                var optimizedAttachment = new Attachment(_storageService)
                 {
                     MessageId = attachment.MessageId,
+                    Message = attachment.Message,
                     Url = optimizedUrl,
                     FileName = $"optimized_{attachment.FileName}",
                     FileType = attachment.FileType,
@@ -566,6 +584,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 if (attachment.IsImage())
                 {
                     return attachment.Url; // Görseller için orijinal URL
@@ -615,6 +636,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 var fileStream = await _storageService.DownloadFileAsync(attachment.Url);
                 var encryptedStream = new MemoryStream();
                 
@@ -648,6 +672,9 @@ namespace WebApplication1.Services
                 var attachment = await _context.Attachments.FindAsync(fileId);
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
+
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
 
                 if (!attachment.Metadata.ContainsKey("Encrypted"))
                     throw new InvalidOperationException("Dosya şifrelenmemiş");
@@ -686,13 +713,18 @@ namespace WebApplication1.Services
                 if (originalAttachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
-                var version = new Attachment
+                if (string.IsNullOrEmpty(originalAttachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
+                var version = new Attachment(_storageService)
                 {
                     MessageId = originalAttachment.MessageId,
+                    Message = originalAttachment.Message,
                     FileType = originalAttachment.FileType,
                     FileSize = originalAttachment.FileSize,
                     FileName = $"{originalAttachment.FileName}.v{DateTime.UtcNow.Ticks}",
                     UploadedBy = originalAttachment.UploadedBy,
+                    MimeType = originalAttachment.MimeType,
                     Metadata = new Dictionary<string, string>
                     {
                         { "VersionOf", fileId },
@@ -748,6 +780,9 @@ namespace WebApplication1.Services
                 var attachment = await _context.Attachments.FindAsync(fileId);
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
+
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
 
                 var analysis = new Dictionary<string, object>
                 {
@@ -838,6 +873,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 // Download the file to a temporary location
                 var tempFilePath = Path.GetTempFileName();
                 using (var fileStream = await _storageService.DownloadFileAsync(attachment.Url))
@@ -850,13 +888,15 @@ namespace WebApplication1.Services
                 var convertedFilePath = await _storageService.ConvertFileFormatAsync(tempFilePath, targetFormat);
                 
                 // Create new attachment for the converted file
-                var convertedAttachment = new Attachment
+                var convertedAttachment = new Attachment(_storageService)
                 {
                     MessageId = attachment.MessageId,
+                    Message = attachment.Message,
                     FileName = $"{Path.GetFileNameWithoutExtension(attachment.FileName)}.{targetFormat}",
                     FileType = targetFormat,
                     FileSize = new FileInfo(convertedFilePath).Length,
                     UploadedBy = attachment.UploadedBy,
+                    MimeType = GetMimeType($".{targetFormat}"),
                     Metadata = new Dictionary<string, string>
                     {
                         { "OriginalFileId", fileId },
@@ -902,6 +942,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 var fileStream = await _storageService.DownloadFileAsync(attachment.Url);
                 return await _storageService.ScanFileForVirusesAsync(fileStream);
             }
@@ -938,18 +981,23 @@ namespace WebApplication1.Services
                     version.Metadata["VersionOf"] != fileId)
                     throw new ArgumentException("Geçersiz versiyon");
 
+                if (string.IsNullOrEmpty(version.Url))
+                    throw new InvalidOperationException("Versiyon dosyası URL'si bulunamadı");
+
                 var original = await _context.Attachments.FindAsync(fileId);
                 if (original == null)
                     throw new ArgumentException("Orijinal dosya bulunamadı");
 
                 // Versiyonu yeni bir dosya olarak kopyala
-                var restoredAttachment = new Attachment
+                var restoredAttachment = new Attachment(_storageService)
                 {
                     MessageId = original.MessageId,
+                    Message = original.Message,
                     FileName = $"restored_{original.FileName}",
                     FileType = original.FileType,
                     FileSize = version.FileSize,
                     UploadedBy = original.UploadedBy,
+                    MimeType = original.MimeType,
                     Metadata = new Dictionary<string, string>
                     {
                         { "RestoredFromVersion", versionId },
@@ -1078,6 +1126,9 @@ namespace WebApplication1.Services
                 if (attachment == null)
                     throw new ArgumentException("Dosya bulunamadı");
 
+                if (string.IsNullOrEmpty(attachment.Url))
+                    throw new InvalidOperationException("Dosya URL'si bulunamadı");
+
                 var fileStream = await _storageService.DownloadFileAsync(attachment.Url);
                 var backupUrl = await _storageService.CreateBackupAsync(fileStream, attachment.FileName);
 
@@ -1152,7 +1203,7 @@ namespace WebApplication1.Services
             await _storageService.DeleteFileAsync(fileUrl);
         }
 
-        public async Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId)
+        public async Task<Attachment> UploadAttachmentAsync(Stream fileStream, string fileName, string userId, string messageId)
         {
             if (fileStream == null || string.IsNullOrEmpty(fileName))
                 throw new ArgumentException("File stream and file name are required");
@@ -1170,8 +1221,10 @@ namespace WebApplication1.Services
             if (fileSize > maxSize)
                 throw new ArgumentException("File size exceeds limit");
 
-            var attachment = new Attachment
+            var attachment = new Attachment(_storageService)
             {
+                MessageId = messageId,
+                Message = await _context.Messages.FindAsync(messageId) ?? throw new ArgumentException("Message not found"),
                 FileName = fileName,
                 FileType = fileType,
                 FileSize = fileSize,
@@ -1194,7 +1247,12 @@ namespace WebApplication1.Services
                 await DeleteFileAsync(attachment.Url);
             }
 
-            attachment.Delete(attachment.DeletedBy);
+            if (!string.IsNullOrEmpty(attachment.ThumbnailUrl))
+            {
+                await DeleteFileAsync(attachment.ThumbnailUrl);
+            }
+
+            attachment.Delete(attachment.UploadedBy ?? throw new InvalidOperationException("UploadedBy cannot be null"));
         }
 
         private string GetMimeType(string fileName)

@@ -35,6 +35,7 @@ namespace WebApplication1.Data
         public DbSet<NotificationTemplate> NotificationTemplates { get; set; }
         public DbSet<NotificationGroup> NotificationGroups { get; set; }
         public DbSet<ScheduledNotification> ScheduledNotifications { get; set; }
+        public DbSet<NotificationPreferences> NotificationPreferences { get; set; }
         public DbSet<SecurityEvent> SecurityEvents { get; set; }
         public DbSet<BlockedIpAddress> BlockedIpAddresses { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -245,8 +246,8 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.MessageId).IsRequired();
-                entity.Property(e => e.OriginalContent).IsRequired();
-                entity.Property(e => e.EditedContent).IsRequired();
+                entity.Property(e => e.OldContent).IsRequired();
+                entity.Property(e => e.NewContent).IsRequired();
                 entity.Property(e => e.EditedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(e => e.Metadata).HasColumnType("jsonb");
 
@@ -372,6 +373,24 @@ namespace WebApplication1.Data
                 entity.Property(e => e.IsRecurring).HasDefaultValue(false);
                 entity.Property(e => e.RecurrencePattern).HasMaxLength(100);
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
+
+            // NotificationPreferences configurations
+            modelBuilder.Entity<NotificationPreferences>(entity =>
+            {
+                entity.HasKey(e => e.UserId);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.EnabledTypes).HasColumnType("jsonb");
+                entity.Property(e => e.EnabledChannels).HasColumnType("jsonb");
+                entity.Property(e => e.BlockedSenders).HasColumnType("jsonb");
+                entity.Property(e => e.QuietHoursStart).IsRequired();
+                entity.Property(e => e.QuietHoursEnd).IsRequired();
+
+                // Relationship
+                entity.HasOne(np => np.User)
+                    .WithOne()
+                    .HasForeignKey<NotificationPreferences>(np => np.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // SecurityEvent configurations

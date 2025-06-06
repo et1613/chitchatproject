@@ -4,6 +4,9 @@ using WebApplication1.Services;
 using WebApplication1.Models.Users;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
+using WebApplication1.Repositories;
+using WebApplication1.Models.Enums;
+using WebApplication1.Models.Auth;
 
 namespace WebApplication1.Controllers
 {
@@ -13,11 +16,15 @@ namespace WebApplication1.Controllers
     {
         private readonly IAuthService _authService;
         private readonly ILogger<AuthController> _logger;
+        private readonly IUserRepository _userRepository;
+        private readonly IStorageService _storageService;
 
-        public AuthController(IAuthService authService, ILogger<AuthController> logger)
+        public AuthController(IAuthService authService, ILogger<AuthController> logger, IUserRepository userRepository, IStorageService storageService)
         {
             _authService = authService;
             _logger = logger;
+            _userRepository = userRepository;
+            _storageService = storageService;
         }
 
         [HttpPost("login")]
@@ -25,10 +32,21 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                request.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-                request.DeviceInfo = HttpContext.Request.Headers["User-Agent"].ToString();
+                var (accessToken, refreshToken) = await _authService.LoginAsync(request.Email, request.Password);
+                
+                // Log the login event with IP and device info
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+                var deviceInfo = HttpContext.Request.Headers["User-Agent"].ToString();
+                
+                // Create a response object that includes the tokens and user info
+                var response = new
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshToken,
+                    IpAddress = ipAddress,
+                    DeviceInfo = deviceInfo
+                };
 
-                var response = await _authService.LoginAsync(request);
                 return Ok(response);
             }
             catch (AuthException ex)
@@ -44,11 +62,41 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] WebApplication1.Services.RegisterRequest request)
         {
             try
             {
-                var response = await _authService.RegisterAsync(request);
+                // Validate the request
+                if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+                {
+                    return BadRequest("Email and password are required");
+                }
+
+                // Register user and get tokens
+                (string accessToken, string refreshToken) = await _authService.RegisterAsync(
+                    request.Username,
+                    request.Email,
+                    request.Password,
+                    request.DisplayName
+                );
+
+                // Create response
+                var response = new
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshToken,
+                    User = new
+                    {
+                        Username = request.Username,
+                        Email = request.Email,
+                        DisplayName = request.DisplayName ?? request.Username,
+                        Role = UserRole.Member,
+                        IsVerified = false,
+                        Status = UserStatus.Offline,
+                        CreatedAt = DateTime.UtcNow
+                    }
+                };
+
                 return Ok(response);
             }
             catch (AuthException ex)
@@ -64,7 +112,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("refresh-token")]
-        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+        public async Task<IActionResult> RefreshToken([FromBody] WebApplication1.Services.RefreshTokenRequest request)
         {
             try
             {
@@ -251,10 +299,10 @@ namespace WebApplication1.Controllers
         }
     }
 
-    public class RefreshTokenRequest
+    public class RevokeSessionRequest
     {
         [Required]
-        public required string RefreshToken { get; set; }
+        public required string SessionId { get; set; }
     }
 
     public class ResetPasswordRequest
@@ -290,11 +338,5 @@ namespace WebApplication1.Controllers
         [Required]
         [StringLength(6, MinimumLength = 6)]
         public required string Code { get; set; }
-    }
-
-    public class RevokeSessionRequest
-    {
-        [Required]
-        public required string SessionId { get; set; }
     }
 } 

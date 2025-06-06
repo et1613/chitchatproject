@@ -1,4 +1,4 @@
-await CreateSessionAsync(user.Id, refreshToken, request.DeviceInfo, request.IpAddress);using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -186,7 +186,6 @@ namespace WebApplication1.Services
                     EmailNotificationsEnabled = true,
                     PushNotificationsEnabled = true,
                     SoundEnabled = true,
-                    TwoFactorEnabled = false,
                     RememberMe = true,
                     SessionTimeout = 30, // minutes
                     ShowOnlineStatus = true,

@@ -12,6 +12,9 @@ using WebApplication1.Services;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace WebApplication1.Services
 {

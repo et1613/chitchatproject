@@ -19,6 +19,8 @@ namespace WebApplication1.Services
         Task SendEmailVerificationAsync(string to, string verificationLink);
         Task SendPasswordChangeNotificationAsync(string to, string username);
         Task SendFriendRequestNotificationAsync(string to, string fromUsername);
+        Task SendAccountLockedNotificationAsync(string to);
+        Task SendAccountUnlockedNotificationAsync(string to);
         string CreateJwtToken(string email, string secret, TimeSpan expiresIn);
         ClaimsPrincipal ValidateToken(string token, string secret);
     }
@@ -227,6 +229,47 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Arkadaşlık isteği bildirimi gönderilirken hata oluştu: {To}, {FromUsername}", to, fromUsername);
+                throw;
+            }
+        }
+
+        public async Task SendAccountLockedNotificationAsync(string to)
+        {
+            try
+            {
+                var subject = "Hesabınız Kilitlendi";
+                var body = $@"
+                    <h2>Hesabınız Geçici Olarak Kilitlendi</h2>
+                    <p>Güvenlik nedeniyle hesabınız geçici olarak kilitlenmiştir.</p>
+                    <p>Lütfen bir süre sonra tekrar giriş yapmayı deneyin veya destek ekibimizle iletişime geçin.</p>
+                    <p>İyi günler,<br>ChitChat Destek Ekibi</p>";
+
+                await SendEmailAsync(to, subject, body);
+                _logger.LogInformation("Hesap kilitlenme bildirimi gönderildi: {To}", to);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Hesap kilitlenme bildirimi gönderilirken hata oluştu: {To}", to);
+                throw;
+            }
+        }
+
+        public async Task SendAccountUnlockedNotificationAsync(string to)
+        {
+            try
+            {
+                var subject = "Hesabınızın Kilidi Açıldı";
+                var body = $@"
+                    <h2>Hesabınızın Kilidi Açıldı</h2>
+                    <p>Hesabınızın kilidi kaldırılmıştır. Artık tekrar giriş yapabilirsiniz.</p>
+                    <p>İyi günler,<br>ChitChat Destek Ekibi</p>";
+
+                await SendEmailAsync(to, subject, body);
+                _logger.LogInformation("Hesap kilidi açılma bildirimi gönderildi: {To}", to);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Hesap kilidi açılma bildirimi gönderilirken hata oluştu: {To}", to);
                 throw;
             }
         }

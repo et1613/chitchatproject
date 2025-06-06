@@ -196,16 +196,16 @@ namespace WebApplication1.Controllers
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var result = await _connectionManager.RevokeAllSessionsAsync(userId);
-                return Ok(result);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    _connectionManager.RemoveClient(userId);
+                }
+                return Ok(new { message = "All connections removed successfully" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error revoking all sessions");
-                return StatusCode(500, "Error revoking all sessions");
+                _logger.LogError(ex, "Error removing all connections");
+                return StatusCode(500, new { error = "Internal server error" });
             }
         }
 

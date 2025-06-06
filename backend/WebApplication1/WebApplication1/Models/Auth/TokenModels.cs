@@ -83,6 +83,11 @@ namespace WebApplication1.Models.Auth
         public required string Token { get; set; }
 
         public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+
+        [Required]
+        public DateTime ExpiresAt { get; set; }
+
+        public bool IsExpired => ExpiresAt < DateTime.UtcNow;
     }
 
     public class TokenMetadata

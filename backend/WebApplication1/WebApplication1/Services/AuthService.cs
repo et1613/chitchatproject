@@ -14,6 +14,7 @@ using System.ComponentModel.DataAnnotations;
 using WebApplication1.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using WebApplication1.Models.Auth;
 
 namespace WebApplication1.Services
 {
@@ -104,6 +105,7 @@ namespace WebApplication1.Services
     public interface IAuthService
     {
         Task<(string accessToken, string refreshToken)> LoginAsync(string email, string password);
+        Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null);
         Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshToken);
         Task LogoutAsync(string refreshToken);
         Task<bool> ValidateTokenAsync(string token);
@@ -177,11 +179,17 @@ namespace WebApplication1.Services
                 }
 
                 // Verify password
+                if (string.IsNullOrEmpty(user.PasswordHash))
+                {
+                    _logger.LogError($"User {user.Id} has no password hash set");
+                    throw new AuthException("Account security error", AuthErrorType.InvalidCredentials);
+                }
+
                 if (!_hashingService.VerifyHash(password, user.PasswordHash))
                 {
                     await IncrementFailedLoginAttemptsAsync(user.Id);
                     _logger.LogWarning($"Login attempt failed: Invalid password for user {user.Id}");
-                    throw new Exception("Invalid email or password");
+                    throw new AuthException("Invalid email or password", AuthErrorType.InvalidCredentials);
                 }
 
                 // Check if account is active
@@ -210,6 +218,56 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error during login for email {email}");
+                throw;
+            }
+        }
+
+        public async Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null)
+        {
+            try
+            {
+                // Check if email is already in use
+                var existingUser = await _userRepository.GetByEmailAsync(email);
+                if (existingUser != null)
+                {
+                    throw new AuthException("Email is already in use", AuthErrorType.InvalidCredentials);
+                }
+
+                // Check if username is already in use
+                var existingUsername = await _userRepository.GetByUsernameAsync(username);
+                if (existingUsername != null)
+                {
+                    throw new AuthException("Username is already in use", AuthErrorType.InvalidCredentials);
+                }
+
+                // Create user
+                var newUser = new User
+                {
+                    UserName = username,
+                    Email = email,
+                    DisplayName = displayName ?? username,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true,
+                    Role = UserRole.Member
+                };
+
+                // Hash password
+                newUser.PasswordHash = _hashingService.HashPassword(password);
+
+                // Save user
+                await _userRepository.AddAsync(newUser);
+
+                // Generate tokens
+                var accessToken = GenerateJwtToken(newUser);
+                var refreshToken = await _tokenService.GenerateRefreshTokenAsync(newUser.Id);
+
+                _logger.LogInformation($"User {newUser.Id} registered successfully");
+
+                return (accessToken, refreshToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error during registration for email {email}");
                 throw;
             }
         }
@@ -292,8 +350,15 @@ namespace WebApplication1.Services
                 if (await IsTokenBlacklistedAsync(token))
                     return false;
 
+                var jwtKey = _configuration["Jwt:Key"];
+                if (string.IsNullOrEmpty(jwtKey))
+                {
+                    _logger.LogError("JWT key is not configured");
+                    throw new InvalidOperationException("JWT key is not configured in application settings");
+                }
+
                 var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]);
+                var key = Encoding.ASCII.GetBytes(jwtKey);
                 
                 tokenHandler.ValidateToken(token, new TokenValidationParameters
                 {
@@ -391,8 +456,15 @@ namespace WebApplication1.Services
 
         private string GenerateJwtToken(User user)
         {
+            var jwtKey = _configuration["Jwt:Key"];
+            if (string.IsNullOrEmpty(jwtKey))
+            {
+                _logger.LogError("JWT key is not configured");
+                throw new InvalidOperationException("JWT key is not configured in application settings");
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]);
+            var key = Encoding.ASCII.GetBytes(jwtKey);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]

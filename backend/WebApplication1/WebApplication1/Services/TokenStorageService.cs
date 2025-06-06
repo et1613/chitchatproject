@@ -356,7 +356,8 @@ namespace WebApplication1.Services
                 var blacklistEntry = new TokenBlacklist
                 {
                     Token = token,
-                    AddedAt = DateTime.UtcNow
+                    AddedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7) // Token'lar 7 gün boyunca blacklist'te kalacak
                 };
 
                 _context.TokenBlacklist.Add(blacklistEntry);
@@ -377,7 +378,7 @@ namespace WebApplication1.Services
             try
             {
                 var oldEntries = await _context.TokenBlacklist
-                    .Where(b => b.AddedAt < DateTime.UtcNow.AddDays(-7))
+                    .Where(b => b.ExpiresAt < DateTime.UtcNow)
                     .Take(BATCH_SIZE)
                     .ToListAsync();
 
@@ -434,5 +435,6 @@ namespace WebApplication1.Services
         public int Id { get; set; }
         public required string Token { get; set; }
         public DateTime AddedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
     }
 } 

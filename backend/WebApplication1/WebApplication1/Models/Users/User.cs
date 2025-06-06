@@ -8,6 +8,7 @@ using WebApplication1.Models.Chat;
 using WebApplication1.Models.Notifications;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.AspNetCore.Identity;
+using WebApplication1.Models.Auth;
 
 namespace WebApplication1.Models.Users
 {
@@ -25,10 +26,10 @@ namespace WebApplication1.Models.Users
         public new string UserName { get; set; } = null!;
         public new string Email { get; set; } = null!;
         public new string? PasswordHash { get; set; }
-        public string? PhoneNumber { get; set; }
-        public DateTime? LockoutEnd { get; set; }
-        public bool LockoutEnabled { get; set; }
-        public int AccessFailedCount { get; set; }
+        public override string? PhoneNumber { get; set; }
+        public override DateTimeOffset? LockoutEnd { get; set; }
+        public override bool LockoutEnabled { get; set; }
+        public override int AccessFailedCount { get; set; }
         public int FailedLoginAttempts { get; set; }
 
         public string? ProfilePictureUrl { get; set; }
@@ -65,6 +66,8 @@ namespace WebApplication1.Models.Users
         public virtual ICollection<FriendRequest> ReceivedFriendRequests { get; set; } = new List<FriendRequest>();
 
         public virtual ICollection<BlockedUser> BlockedByUsers { get; set; } = new List<BlockedUser>();
+
+        public virtual ICollection<StoredToken> RefreshTokens { get; set; } = new List<StoredToken>();
 
         public string GetFullName()
         {

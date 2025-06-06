@@ -5,6 +5,7 @@ using WebApplication1.Models.Chat;
 using WebApplication1.Models.Messages;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using WebApplication1.Data;
 
 namespace WebApplication1.Controllers
 {

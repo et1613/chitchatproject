@@ -14,7 +14,7 @@ namespace WebApplication1.Services
             _logger = logger;
         }
 
-        public async Task AddClientAsync(string userId, string connectionId)
+        public void AddClient(string userId, string connectionId)
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
@@ -33,7 +33,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task RemoveClientAsync(string userId)
+        public void RemoveClient(string userId)
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));

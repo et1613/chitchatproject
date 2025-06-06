@@ -4786,17 +4786,17 @@ namespace WebApplication1.Services
                 var progressPath = Path.Combine(_uploadDirectory, "imports", importId + ".progress");
                 
                 if (!File.Exists(progressPath))
-                    return new ImportProgress(importId);
+                    return ImportProgress.CreateWithId(importId);
                     
                 var json = await File.ReadAllTextAsync(progressPath);
                 var progress = JsonSerializer.Deserialize<ImportProgress>(json);
                 
-                return progress ?? new ImportProgress(importId);
+                return progress ?? ImportProgress.CreateWithId(importId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting import progress: {ImportId}", importId);
-                return new ImportProgress(importId);
+                return ImportProgress.CreateWithId(importId);
             }
         }
 

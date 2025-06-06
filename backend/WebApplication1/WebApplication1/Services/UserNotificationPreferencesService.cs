@@ -5,6 +5,7 @@ using WebApplication1.Models.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Services
 {
@@ -39,10 +40,12 @@ namespace WebApplication1.Services
                     preferences = new NotificationPreferences
                     {
                         UserId = userId,
+                        User = new User { Id = userId }, 
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
                         LastModifiedBy = userId
                     };
+
                     _context.NotificationPreferences.Add(preferences);
                     await _context.SaveChangesAsync();
                 }

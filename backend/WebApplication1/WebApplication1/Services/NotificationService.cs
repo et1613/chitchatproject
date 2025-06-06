@@ -75,19 +75,6 @@ namespace WebApplication1.Services
         Task NotifyUserAsync(string userId, string message);
     }
 
-    public class NotificationPreferences
-    {
-        public string UserId { get; set; } = null!;
-        public Dictionary<NotificationType, bool> EnabledTypes { get; set; } = new();
-        public Dictionary<NotificationChannel, bool> EnabledChannels { get; set; } = new();
-        public bool EnableSound { get; set; }
-        public bool EnableVibration { get; set; }
-        public bool EnableDesktopNotifications { get; set; }
-        public TimeSpan QuietHoursStart { get; set; }
-        public TimeSpan QuietHoursEnd { get; set; }
-        public List<string> BlockedSenders { get; set; } = new();
-    }
-
     public class NotificationStats
     {
         public int TotalNotifications { get; set; }
@@ -345,13 +332,19 @@ namespace WebApplication1.Services
             try
             {
                 var preferences = await _context.NotificationPreferences
+                    .Include(p => p.User)
                     .FirstOrDefaultAsync(p => p.UserId == userId);
 
                 if (preferences == null)
                 {
+                    var user = await _context.Users.FindAsync(userId);
+                    if (user == null)
+                        throw new ArgumentException($"User with ID {userId} not found");
+
                     preferences = new NotificationPreferences
                     {
                         UserId = userId,
+                        User = user,
                         EnabledTypes = new Dictionary<NotificationType, bool>
                         {
                             { NotificationType.NewMessage, true },
@@ -370,7 +363,8 @@ namespace WebApplication1.Services
                         EnableDesktopNotifications = true,
                         QuietHoursStart = new TimeSpan(22, 0, 0),
                         QuietHoursEnd = new TimeSpan(8, 0, 0),
-                        BlockedSenders = new List<string>()
+                        BlockedSenders = new List<string>(),
+                        LastModifiedBy = userId
                     };
 
                     _context.NotificationPreferences.Add(preferences);
@@ -391,11 +385,18 @@ namespace WebApplication1.Services
             try
             {
                 var existingPreferences = await _context.NotificationPreferences
+                    .Include(p => p.User)
                     .FirstOrDefaultAsync(p => p.UserId == userId);
 
                 if (existingPreferences == null)
                 {
+                    var user = await _context.Users.FindAsync(userId);
+                    if (user == null)
+                        throw new ArgumentException($"User with ID {userId} not found");
+
                     preferences.UserId = userId;
+                    preferences.User = user;
+                    preferences.LastModifiedBy = userId;
                     _context.NotificationPreferences.Add(preferences);
                 }
                 else
@@ -408,6 +409,8 @@ namespace WebApplication1.Services
                     existingPreferences.QuietHoursStart = preferences.QuietHoursStart;
                     existingPreferences.QuietHoursEnd = preferences.QuietHoursEnd;
                     existingPreferences.BlockedSenders = preferences.BlockedSenders;
+                    existingPreferences.LastModifiedBy = userId;
+                    existingPreferences.UpdatedAt = DateTime.UtcNow;
                 }
 
                 await _context.SaveChangesAsync();

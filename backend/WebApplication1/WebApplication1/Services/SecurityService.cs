@@ -478,17 +478,28 @@ namespace WebApplication1.Services
         {
             try
             {
-                return await _context.Sessions
-                    .Where(s => s.UserId == userId && s.IsActive)
-                    .Select(s => new SessionInfo
-                    {
-                        SessionId = s.Id,
-                        IpAddress = s.IpAddress,
-                        UserAgent = s.UserAgent,
-                        LastActivity = s.LastActivity,
-                        CreatedAt = s.CreatedAt
-                    })
+                // Son 24 saat içindeki login olaylarını al
+                var loginEvents = await _context.SecurityEvents
+                    .Where(e => e.UserId == userId && 
+                           e.EventType == "Login" && 
+                           e.Timestamp >= DateTime.UtcNow.AddHours(-24))
+                    .OrderByDescending(e => e.Timestamp)
                     .ToListAsync();
+
+                // Her benzersiz IP ve UserAgent kombinasyonu için bir oturum oluştur
+                var sessions = loginEvents
+                    .GroupBy(e => new { e.IpAddress, e.UserAgent })
+                    .Select(g => new SessionInfo
+                    {
+                        SessionId = $"{g.Key.IpAddress}_{g.Key.UserAgent}",
+                        IpAddress = g.Key.IpAddress ?? "Unknown",
+                        UserAgent = g.Key.UserAgent ?? "Unknown",
+                        LastActivity = g.Max(e => e.Timestamp),
+                        CreatedAt = g.Min(e => e.Timestamp)
+                    })
+                    .ToList();
+
+                return sessions;
             }
             catch (Exception ex)
             {
@@ -501,15 +512,37 @@ namespace WebApplication1.Services
         {
             try
             {
-                var session = await _context.Sessions
-                    .FirstOrDefaultAsync(s => s.Id == sessionId);
-
-                if (session == null)
+                var parts = sessionId.Split('_');
+                if (parts.Length != 2)
                     return false;
 
-                session.IsActive = false;
-                session.TerminatedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
+                var ipAddress = parts[0];
+                var userAgent = parts[1];
+
+                // Oturum sonlandırma olayını kaydet
+                await LogSecurityEventAsync(
+                    "system",
+                    "SessionTerminated",
+                    $"Session terminated for IP: {ipAddress}, UserAgent: {userAgent}"
+                );
+
+                // İlgili IP ve UserAgent'a sahip son login olayını bul
+                var lastLoginEvent = await _context.SecurityEvents
+                    .Where(e => e.EventType == "Login" && 
+                           e.IpAddress == ipAddress && 
+                           e.UserAgent == userAgent)
+                    .OrderByDescending(e => e.Timestamp)
+                    .FirstOrDefaultAsync();
+
+                if (lastLoginEvent != null)
+                {
+                    // Oturum sonlandırma olayını kullanıcıya bağla
+                    await LogSecurityEventAsync(
+                        lastLoginEvent.UserId,
+                        "SessionTerminated",
+                        $"User session terminated from IP: {ipAddress}, UserAgent: {userAgent}"
+                    );
+                }
 
                 return true;
             }
@@ -829,7 +862,12 @@ namespace WebApplication1.Services
                 var metrics = new SecurityMetrics
                 {
                     TotalUsers = await _context.Users.CountAsync(),
-                    ActiveSessions = await _context.Sessions.CountAsync(s => s.IsActive),
+                    ActiveSessions = await _context.SecurityEvents
+                        .Where(e => e.EventType == "Login" && 
+                               e.Timestamp >= DateTime.UtcNow.AddHours(-24))
+                        .Select(e => new { e.UserId, e.IpAddress, e.UserAgent })
+                        .Distinct()
+                        .CountAsync(),
                     BlockedIpAddresses = await _context.BlockedIpAddresses.CountAsync(b => b.ExpiresAt > DateTime.UtcNow),
                     FailedLoginAttempts = await _context.SecurityEvents.CountAsync(e => e.EventType == "FailedLogin" && e.Timestamp >= DateTime.UtcNow.AddHours(-1)),
                     SuspiciousActivities = await _context.SecurityEvents.CountAsync(e => e.EventType == "SuspiciousActivity" && e.Timestamp >= DateTime.UtcNow.AddHours(-1))
@@ -864,15 +902,17 @@ namespace WebApplication1.Services
 
                 vulnerabilities.AddRange(weakPasswords);
 
-                // Eski oturumlar kontrolü
-                var oldSessions = await _context.Sessions
-                    .Where(s => s.IsActive && s.LastActivity < DateTime.UtcNow.AddDays(-30))
-                    .Select(s => new SecurityVulnerability
+                // Eski oturumlar kontrolü - SecurityEvents üzerinden
+                var oldSessions = await _context.SecurityEvents
+                    .Where(e => e.EventType == "Login" && 
+                           e.Timestamp < DateTime.UtcNow.AddDays(-30))
+                    .GroupBy(e => new { e.UserId, e.IpAddress, e.UserAgent })
+                    .Select(g => new SecurityVulnerability
                     {
                         Type = "OldSession",
                         Severity = "Medium",
-                        Description = $"User {s.UserId} has an old active session",
-                        AffectedResource = s.Id
+                        Description = $"User {g.Key.UserId} has an old session from IP {g.Key.IpAddress} using {g.Key.UserAgent}",
+                        AffectedResource = g.Key.UserId
                     })
                     .ToListAsync();
 
@@ -1026,6 +1066,7 @@ namespace WebApplication1.Services
         public required string EventType { get; set; }
         public required string Description { get; set; }
         public string? IpAddress { get; set; }
+        public string? UserAgent { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 

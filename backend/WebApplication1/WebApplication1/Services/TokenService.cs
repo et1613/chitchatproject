@@ -9,6 +9,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Repositories;
 using Microsoft.Extensions.Logging;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Services
 {
@@ -18,10 +19,10 @@ namespace WebApplication1.Services
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
         [Required]
-        public string Token { get; set; }
+        public required string Token { get; set; }
 
         [Required]
-        public string UserId { get; set; }
+        public required string UserId { get; set; }
 
         [Required]
         public DateTime ExpiryDate { get; set; }
@@ -31,7 +32,7 @@ namespace WebApplication1.Services
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         [ForeignKey("UserId")]
-        public virtual User User { get; set; }
+        public virtual User? User { get; set; }
     }
 
     public interface ITokenService
