@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using WebApplication1.Models.Notifications;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Services
 {
@@ -16,12 +17,13 @@ namespace WebApplication1.Services
         public required WebSocket Socket { get; set; }
         public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
         public string? IpAddress { get; set; }
+        public string? DeviceInfo { get; set; }
         public DateTime LastActivity { get; set; } = DateTime.UtcNow;
         public int MessagesSent { get; set; } = 0;
         public int MessagesReceived { get; set; } = 0;
     }
 
-    public class ConnectionManager
+    public class ConnectionManager : IConnectionManager
     {
         private readonly ConcurrentDictionary<string, ConnectionInfo> _connections = new();
         private readonly ILogger<ConnectionManager> _logger;
@@ -35,96 +37,48 @@ namespace WebApplication1.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task AddClientAsync(string userId, WebSocket socket)
+        public bool AddClient(string userId, WebSocket webSocket, string? ipAddress)
         {
             if (string.IsNullOrEmpty(userId))
-            {
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
-            }
-            if (socket == null)
-            {
-                throw new ArgumentNullException(nameof(socket));
-            }
+            if (webSocket == null)
+                throw new ArgumentNullException(nameof(webSocket));
 
             try
             {
-                await _semaphore.WaitAsync();
-                try
+                var connectionInfo = new ConnectionInfo
                 {
-                    if (_connections.TryGetValue(userId, out var existingConnection))
-                    {
-                        try
-                        {
-                            if (existingConnection.Socket.State == WebSocketState.Open)
-                            {
-                                await existingConnection.Socket.CloseAsync(
-                                    WebSocketCloseStatus.NormalClosure,
-                                    "New connection established",
-                                    CancellationToken.None);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error closing existing connection for user {UserId}", userId);
-                        }
-                    }
+                    Socket = webSocket,
+                    IpAddress = ipAddress,
+                    ConnectedAt = DateTime.UtcNow,
+                    LastActivity = DateTime.UtcNow
+                };
 
-                    var connectionInfo = new ConnectionInfo
-                    {
-                        Socket = socket,
-                        ConnectedAt = DateTime.UtcNow,
-                        LastActivity = DateTime.UtcNow
-                    };
-
-                    _connections.AddOrUpdate(userId, connectionInfo, (_, _) => connectionInfo);
-                    _logger.LogInformation("New WebSocket connection added for user {UserId}", userId);
-                }
-                finally
-                {
-                    _semaphore.Release();
-                }
+                return _connections.TryAdd(userId, connectionInfo);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error adding WebSocket connection for user {UserId}", userId);
-                throw;
+                return false;
             }
         }
 
         public async Task RemoveClientAsync(string userId)
         {
             if (string.IsNullOrEmpty(userId))
-            {
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
-            }
 
             try
             {
-                await _semaphore.WaitAsync();
-                try
+                if (_connections.TryRemove(userId, out var connectionInfo))
                 {
-                    if (_connections.TryRemove(userId, out var connectionInfo))
+                    if (connectionInfo.Socket.State == WebSocketState.Open)
                     {
-                        try
-                        {
-                            if (connectionInfo.Socket.State == WebSocketState.Open)
-                            {
-                                await connectionInfo.Socket.CloseAsync(
-                                    WebSocketCloseStatus.NormalClosure,
-                                    "Connection removed",
-                                    CancellationToken.None);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error closing WebSocket connection for user {UserId}", userId);
-                        }
+                        await connectionInfo.Socket.CloseAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            "Connection removed",
+                            CancellationToken.None);
                     }
-                    _logger.LogInformation("WebSocket connection removed for user {UserId}", userId);
-                }
-                finally
-                {
-                    _semaphore.Release();
                 }
             }
             catch (Exception ex)
@@ -134,114 +88,185 @@ namespace WebApplication1.Services
             }
         }
 
-        public WebSocket? GetClient(string userId)
+        public void RemoveClient(string userId)
         {
             if (string.IsNullOrEmpty(userId))
-            {
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+
+            try
+            {
+                _connections.TryRemove(userId, out _);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing WebSocket connection for user {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<ConnectionStatus> GetConnectionStatusAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
 
             try
             {
                 if (_connections.TryGetValue(userId, out var connectionInfo))
                 {
-                    if (connectionInfo.Socket.State == WebSocketState.Open)
+                    return new ConnectionStatus
                     {
-                        connectionInfo.LastActivity = DateTime.UtcNow;
-                        return connectionInfo.Socket;
-                    }
-                    else
-                    {
-                        _connections.TryRemove(userId, out _);
-                        return null;
-                    }
+                        IsConnected = connectionInfo.Socket.State == WebSocketState.Open,
+                        IpAddress = connectionInfo.IpAddress,
+                        LastActivity = connectionInfo.LastActivity,
+                        DeviceInfo = connectionInfo.DeviceInfo
+                    };
                 }
-                return null;
+
+                return new ConnectionStatus { IsConnected = false };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting WebSocket connection for user {UserId}", userId);
-                return null;
-            }
-        }
-
-        public bool IsUserConnected(string userId)
-        {
-            if (string.IsNullOrEmpty(userId))
-            {
-                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
-            }
-
-            try
-            {
-                return _connections.TryGetValue(userId, out var connectionInfo) && 
-                       connectionInfo.Socket.State == WebSocketState.Open;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking user connection status for user {UserId}", userId);
-                return false;
-            }
-        }
-
-        public async Task SendNotificationAsync(Notification notification)
-        {
-            if (notification == null)
-            {
-                throw new ArgumentNullException(nameof(notification));
-            }
-            if (string.IsNullOrEmpty(notification.UserId))
-            {
-                throw new ArgumentException("Notification user ID cannot be null or empty");
-            }
-
-            try
-            {
-                if (_connections.TryGetValue(notification.UserId, out var connectionInfo))
-                {
-                    if (connectionInfo.Socket.State == WebSocketState.Open)
-                    {
-                        var notificationJson = System.Text.Json.JsonSerializer.Serialize(notification);
-                        var notificationBytes = Encoding.UTF8.GetBytes(notificationJson);
-
-                        if (notificationBytes.Length > MaxMessageSize)
-                        {
-                            _logger.LogWarning("Notification message too large for user {UserId}", notification.UserId);
-                            return;
-                        }
-
-                        await connectionInfo.Socket.SendAsync(
-                            new ArraySegment<byte>(notificationBytes),
-                            WebSocketMessageType.Text,
-                            true,
-                            CancellationToken.None);
-
-                        connectionInfo.LastActivity = DateTime.UtcNow;
-                        connectionInfo.MessagesSent++;
-                    }
-                    else
-                    {
-                        _connections.TryRemove(notification.UserId, out _);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error sending notification to user {UserId}", notification.UserId);
+                _logger.LogError(ex, "Error getting connection status for user {UserId}", userId);
                 throw;
             }
         }
 
-        public async Task BroadcastToAllAsync(string message)
+        public async Task<IEnumerable<ActiveUser>> GetActiveUsersAsync()
         {
-            if (string.IsNullOrEmpty(message))
+            try
             {
-                throw new ArgumentException("Message cannot be null or empty", nameof(message));
+                var activeUsers = _connections
+                    .Where(kvp => kvp.Value.Socket.State == WebSocketState.Open)
+                    .Select(kvp => new ActiveUser
+                    {
+                        UserId = kvp.Key,
+                        IsOnline = true,
+                        LastSeen = kvp.Value.LastActivity,
+                        IpAddress = kvp.Value.IpAddress,
+                        DeviceInfo = kvp.Value.DeviceInfo
+                    })
+                    .ToList();
+
+                return activeUsers;
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting active users");
+                throw;
+            }
+        }
+
+        public async Task<UserStatus> GetUserStatusAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
 
             try
             {
-                var messageBytes = Encoding.UTF8.GetBytes(message);
+                if (_connections.TryGetValue(userId, out var connectionInfo))
+                {
+                    return new UserStatus
+                    {
+                        UserId = userId,
+                        IsOnline = connectionInfo.Socket.State == WebSocketState.Open,
+                        LastSeen = connectionInfo.LastActivity,
+                        Status = connectionInfo.Socket.State.ToString()
+                    };
+                }
+
+                return new UserStatus
+                {
+                    UserId = userId,
+                    IsOnline = false,
+                    LastSeen = DateTime.UtcNow,
+                    Status = "Offline"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user status for user {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<UserSession>> GetUserSessionsAsync(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+
+            try
+            {
+                if (_connections.TryGetValue(userId, out var connectionInfo))
+                {
+                    return new List<UserSession>
+                    {
+                        new UserSession
+                        {
+                            SessionId = Guid.NewGuid().ToString(),
+                            UserId = userId,
+                            IpAddress = connectionInfo.IpAddress,
+                            DeviceInfo = connectionInfo.DeviceInfo,
+                            CreatedAt = connectionInfo.ConnectedAt,
+                            LastActivity = connectionInfo.LastActivity,
+                            IsActive = connectionInfo.Socket.State == WebSocketState.Open
+                        }
+                    };
+                }
+
+                return Enumerable.Empty<UserSession>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user sessions for user {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<bool> RevokeSessionAsync(string sessionId, string userId)
+        {
+            if (string.IsNullOrEmpty(sessionId))
+                throw new ArgumentException("Session ID cannot be null or empty", nameof(sessionId));
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+
+            try
+            {
+                if (_connections.TryGetValue(userId, out var connectionInfo))
+                {
+                    await RemoveClientAsync(userId);
+                    return true;
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking session {SessionId} for user {UserId}", sessionId, userId);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<UserSession>> GetActiveSessionsAsync(string userId)
+        {
+            return await GetUserSessionsAsync(userId);
+        }
+
+        public async Task BroadcastMessageAsync(string message, string? type)
+        {
+            if (string.IsNullOrEmpty(message))
+                throw new ArgumentException("Message cannot be null or empty", nameof(message));
+
+            try
+            {
+                var messageData = new
+                {
+                    type = type ?? "broadcast",
+                    message = message,
+                    timestamp = DateTime.UtcNow
+                };
+
+                var messageJson = System.Text.Json.JsonSerializer.Serialize(messageData);
+                var messageBytes = Encoding.UTF8.GetBytes(messageJson);
+
                 if (messageBytes.Length > MaxMessageSize)
                 {
                     _logger.LogWarning("Broadcast message too large");
@@ -274,61 +299,148 @@ namespace WebApplication1.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error broadcasting message to all clients");
+                _logger.LogError(ex, "Error broadcasting message");
                 throw;
             }
         }
 
-        public async Task BroadcastToGroupAsync(IEnumerable<string> userIds, string message)
+        public async Task SendNotificationAsync(string userId, string message, string? type)
         {
-            if (userIds == null)
-            {
-                throw new ArgumentNullException(nameof(userIds));
-            }
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
             if (string.IsNullOrEmpty(message))
-            {
                 throw new ArgumentException("Message cannot be null or empty", nameof(message));
-            }
 
             try
             {
-                var messageBytes = Encoding.UTF8.GetBytes(message);
-                if (messageBytes.Length > MaxMessageSize)
+                if (_connections.TryGetValue(userId, out var connectionInfo))
                 {
-                    _logger.LogWarning("Group broadcast message too large");
-                    return;
-                }
-
-                var tasks = userIds
-                    .Where(userId => !string.IsNullOrEmpty(userId))
-                    .Where(userId => _connections.TryGetValue(userId, out var connectionInfo) && 
-                                   connectionInfo.Socket.State == WebSocketState.Open)
-                    .Select(userId => _connections[userId])
-                    .Select(async connectionInfo =>
+                    if (connectionInfo.Socket.State == WebSocketState.Open)
                     {
-                        try
+                        var notificationData = new
                         {
-                            await connectionInfo.Socket.SendAsync(
-                                new ArraySegment<byte>(messageBytes),
-                                WebSocketMessageType.Text,
-                                true,
-                                CancellationToken.None);
+                            type = type ?? "notification",
+                            message = message,
+                            timestamp = DateTime.UtcNow
+                        };
 
-                            connectionInfo.LastActivity = DateTime.UtcNow;
-                            connectionInfo.MessagesSent++;
-                        }
-                        catch (Exception ex)
+                        var notificationJson = System.Text.Json.JsonSerializer.Serialize(notificationData);
+                        var notificationBytes = Encoding.UTF8.GetBytes(notificationJson);
+
+                        if (notificationBytes.Length > MaxMessageSize)
                         {
-                            _logger.LogError(ex, "Error broadcasting message to a client in group");
+                            _logger.LogWarning("Notification message too large for user {UserId}", userId);
+                            return;
                         }
-                    });
 
-                await Task.WhenAll(tasks);
+                        await connectionInfo.Socket.SendAsync(
+                            new ArraySegment<byte>(notificationBytes),
+                            WebSocketMessageType.Text,
+                            true,
+                            CancellationToken.None);
+
+                        connectionInfo.LastActivity = DateTime.UtcNow;
+                        connectionInfo.MessagesSent++;
+                    }
+                    else
+                    {
+                        _connections.TryRemove(userId, out _);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error broadcasting message to group");
+                _logger.LogError(ex, "Error sending notification to user {UserId}", userId);
                 throw;
+            }
+        }
+
+        public async Task SendMessageToClient(string userId, string message)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+            if (string.IsNullOrEmpty(message))
+                throw new ArgumentException("Message cannot be null or empty", nameof(message));
+
+            try
+            {
+                if (_connections.TryGetValue(userId, out var connectionInfo))
+                {
+                    if (connectionInfo.Socket.State == WebSocketState.Open)
+                    {
+                        var messageBytes = Encoding.UTF8.GetBytes(message);
+
+                        if (messageBytes.Length > MaxMessageSize)
+                        {
+                            _logger.LogWarning("Message too large for user {UserId}", userId);
+                            return;
+                        }
+
+                        await connectionInfo.Socket.SendAsync(
+                            new ArraySegment<byte>(messageBytes),
+                            WebSocketMessageType.Text,
+                            true,
+                            CancellationToken.None);
+
+                        connectionInfo.LastActivity = DateTime.UtcNow;
+                        connectionInfo.MessagesSent++;
+                    }
+                    else
+                    {
+                        _connections.TryRemove(userId, out _);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending message to user {UserId}", userId);
+                throw;
+            }
+        }
+
+        public WebSocket? GetClient(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+
+            try
+            {
+                if (_connections.TryGetValue(userId, out var connectionInfo))
+                {
+                    if (connectionInfo.Socket.State == WebSocketState.Open)
+                    {
+                        connectionInfo.LastActivity = DateTime.UtcNow;
+                        return connectionInfo.Socket;
+                    }
+                    else
+                    {
+                        _connections.TryRemove(userId, out _);
+                        return null;
+                    }
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting WebSocket connection for user {UserId}", userId);
+                return null;
+            }
+        }
+
+        public bool IsUserConnected(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
+
+            try
+            {
+                return _connections.TryGetValue(userId, out var connectionInfo) && 
+                       connectionInfo.Socket.State == WebSocketState.Open;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking user connection status for user {UserId}", userId);
+                return false;
             }
         }
 

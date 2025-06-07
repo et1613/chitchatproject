@@ -6,6 +6,9 @@ using WebApplication1.Models.Messages;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using WebApplication1.Data;
+using WebApplication1.Models.Requests;
+using WebApplication1.Models.Users;
+using WebApplication1.Repositories;
 
 namespace WebApplication1.Controllers
 {
@@ -18,17 +21,20 @@ namespace WebApplication1.Controllers
         private readonly IFileService _fileService;
         private readonly ILogger<ChatController> _logger;
         private readonly ApplicationDbContext _context;
+        private readonly IUserRepository _userRepository;
 
         public ChatController(
             IChatService chatService,
             IFileService fileService,
             ILogger<ChatController> logger,
-            ApplicationDbContext context)
+            ApplicationDbContext context,
+            IUserRepository userRepository)
         {
             _chatService = chatService;
             _fileService = fileService;
             _logger = logger;
             _context = context;
+            _userRepository = userRepository;
         }
 
         [HttpPost("messages")]
@@ -59,7 +65,10 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var user = await _chatService.GetUserByIdAsync(userId);
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                    return NotFound("User not found");
+
                 await _chatService.SendDirectMessage(user, request.ReceiverId, request.Content);
                 return Ok();
             }

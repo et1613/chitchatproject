@@ -588,7 +588,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId)
+        public async Task<ChatRoom> CreateChatRoomAsync(string name, string? description, string creatorId)
         {
             if (string.IsNullOrEmpty(name))
             {

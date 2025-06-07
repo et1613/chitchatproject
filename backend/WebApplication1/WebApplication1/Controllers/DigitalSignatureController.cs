@@ -6,7 +6,6 @@ using WebApplication1.Services;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using WebApplication1.Models.DigitalSignature;
 
 namespace WebApplication1.Controllers
 {

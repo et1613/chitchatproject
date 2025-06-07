@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using WebApplication1.Models.Security;
+using WebApplication1.Models.Requests;
 
 namespace WebApplication1.Controllers
 {

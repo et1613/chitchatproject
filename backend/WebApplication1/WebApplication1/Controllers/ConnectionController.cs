@@ -198,7 +198,7 @@ namespace WebApplication1.Controllers
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (!string.IsNullOrEmpty(userId))
                 {
-                    _connectionManager.RemoveClient(userId);
+                    await _connectionManager.RemoveClientAsync(userId);
                 }
                 return Ok(new { message = "All connections removed successfully" });
             }
@@ -329,8 +329,8 @@ namespace WebApplication1.Controllers
 
     public class WebSocketMessage
     {
-        public string Type { get; set; }
-        public string Content { get; set; }
+        public required string Type { get; set; }
+        public required string Content { get; set; }
     }
 
     public class BroadcastMessageRequest

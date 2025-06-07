@@ -7,6 +7,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using WebApplication1.Models.Requests;
 
 namespace WebApplication1.Controllers
 {
@@ -712,97 +713,5 @@ namespace WebApplication1.Controllers
                 _ => "bin"
             };
         }
-    }
-
-    public class SendMessageRequest
-    {
-        [Required]
-        public string ChatRoomId { get; set; }
-
-        [Required]
-        public string Content { get; set; }
-
-        public List<string> AttachmentUrls { get; set; }
-    }
-
-    public class EditMessageRequest
-    {
-        [Required]
-        public string Content { get; set; }
-    }
-
-    public class ForwardMessageRequest
-    {
-        [Required]
-        public string TargetChatRoomId { get; set; }
-    }
-
-    public class ReactToMessageRequest
-    {
-        [Required]
-        public string Reaction { get; set; }
-    }
-
-    public class SearchMessagesRequest
-    {
-        public string Query { get; set; }
-        public string ChatRoomId { get; set; }
-        public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
-    }
-
-    public class FilterByTypeRequest
-    {
-        public string ChatRoomId { get; set; }
-        public MessageType Type { get; set; }
-    }
-
-    public class FilterByUserRequest
-    {
-        public string ChatRoomId { get; set; }
-        public string TargetUserId { get; set; }
-    }
-
-    public class FilterByContentRequest
-    {
-        public string ChatRoomId { get; set; }
-        public string Content { get; set; }
-    }
-
-    public class DateRangeRequest
-    {
-        public string ChatRoomId { get; set; }
-        public DateTime StartDate { get; set; }
-        public DateTime EndDate { get; set; }
-    }
-
-    public class BackupMessagesRequest
-    {
-        public string ChatRoomId { get; set; }
-    }
-
-    public class RestoreMessagesRequest
-    {
-        public string ChatRoomId { get; set; }
-        public string BackupId { get; set; }
-    }
-
-    public class ExportMessagesRequest
-    {
-        public string ChatRoomId { get; set; }
-        public ExportFormat Format { get; set; }
-    }
-
-    public class ImportMessagesRequest
-    {
-        public string ChatRoomId { get; set; }
-        public ImportFormat Format { get; set; }
-        public IFormFile File { get; set; }
-    }
-
-    public class ValidateImportRequest
-    {
-        public ImportFormat Format { get; set; }
-        public IFormFile File { get; set; }
     }
 } 

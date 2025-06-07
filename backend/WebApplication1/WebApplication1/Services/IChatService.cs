@@ -16,7 +16,7 @@ namespace WebApplication1.Services
         Task<bool> EditMessageAsync(string messageId, string userId, string newContent);
         Task HandleWebSocketConnection(WebSocket webSocket, string userId);
         Task BroadcastMessageToRoom(string chatRoomId, string message, string senderId);
-        Task<ChatRoom> CreateChatRoomAsync(string name, string description, string creatorId);
+        Task<ChatRoom> CreateChatRoomAsync(string name, string? description, string creatorId);
         Task<ChatRoom?> GetChatRoomAsync(string chatRoomId);
         Task<IEnumerable<ChatRoom>> GetUserChatRoomsAsync(string userId);
         Task<bool> AddUserToChatRoomAsync(string userId, string chatRoomId);

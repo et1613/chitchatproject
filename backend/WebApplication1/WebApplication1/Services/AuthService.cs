@@ -115,6 +115,11 @@ namespace WebApplication1.Services
         Task<bool> IsAccountLockedAsync(string userId);
         Task LockAccountAsync(string userId);
         Task UnlockAccountAsync(string userId);
+        Task<bool> ResetPasswordAsync(string email);
+        Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword);
+        Task<bool> VerifyEmailAsync(string userId, string token);
+        Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId);
+        Task RevokeSessionAsync(string userId, string sessionId);
     }
 
     public class ActiveSession
@@ -486,6 +491,157 @@ namespace WebApplication1.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
+        }
+
+        public async Task<bool> ResetPasswordAsync(string email)
+        {
+            try
+            {
+                var user = await _userRepository.GetByEmailAsync(email);
+                if (user == null)
+                {
+                    _logger.LogWarning($"Password reset requested for non-existent email: {email}");
+                    return false;
+                }
+
+                // Generate a password reset token
+                var resetToken = await _tokenService.GenerateRefreshTokenAsync(user.Id);
+                
+                // Create reset link
+                var resetLink = $"{_configuration["FrontendUrl"]}/reset-password?token={resetToken}&email={Uri.EscapeDataString(email)}";
+                
+                // Send reset email
+                await _emailService.SendPasswordResetEmailAsync(email, resetLink);
+                
+                _logger.LogInformation($"Password reset email sent to {email}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error during password reset for email {email}");
+                throw;
+            }
+        }
+
+        public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword)
+        {
+            try
+            {
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning($"Password change failed: User not found with ID {userId}");
+                    return false;
+                }
+
+                // Verify current password
+                if (!_hashingService.VerifyHash(currentPassword, user.PasswordHash))
+                {
+                    _logger.LogWarning($"Password change failed: Invalid current password for user {userId}");
+                    return false;
+                }
+
+                // Hash and update new password
+                user.PasswordHash = _hashingService.HashPassword(newPassword);
+                await _userRepository.UpdateAsync(user);
+
+                // Send notification email
+                await _emailService.SendPasswordChangeNotificationAsync(user.Email, user.UserName);
+
+                _logger.LogInformation($"Password changed successfully for user {userId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error changing password for user {userId}");
+                throw;
+            }
+        }
+
+        public async Task<bool> VerifyEmailAsync(string userId, string token)
+        {
+            try
+            {
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning($"Email verification failed: User not found with ID {userId}");
+                    return false;
+                }
+
+                // Validate token
+                if (!await _tokenService.ValidateRefreshTokenAsync(token, userId))
+                {
+                    _logger.LogWarning($"Email verification failed: Invalid token for user {userId}");
+                    return false;
+                }
+
+                // Update user verification status
+                user.IsVerified = true;
+                await _userRepository.UpdateAsync(user);
+
+                // Revoke the verification token
+                await _tokenService.RevokeRefreshTokenAsync(token);
+
+                _logger.LogInformation($"Email verified successfully for user {userId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error verifying email for user {userId}");
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId)
+        {
+            try
+            {
+                var sessions = await _context.RefreshTokens
+                    .Where(rt => rt.UserId == userId && rt.IsValid)
+                    .Select(rt => new ActiveSession
+                    {
+                        SessionId = rt.Id,
+                        DeviceInfo = rt.DeviceInfo ?? "Unknown",
+                        IpAddress = rt.IpAddress ?? "Unknown",
+                        LastActivity = rt.CreatedAt,
+                        CreatedAt = rt.CreatedAt,
+                        IsCurrentSession = rt.Token == Request.Headers["Refresh-Token"].ToString()
+                    })
+                    .ToListAsync();
+
+                return sessions;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting active sessions for user {userId}");
+                throw;
+            }
+        }
+
+        public async Task RevokeSessionAsync(string userId, string sessionId)
+        {
+            try
+            {
+                var session = await _context.RefreshTokens
+                    .FirstOrDefaultAsync(rt => rt.Id == sessionId && rt.UserId == userId);
+
+                if (session != null)
+                {
+                    session.IsValid = false;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation($"Session {sessionId} revoked for user {userId}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Session {sessionId} not found for user {userId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error revoking session {sessionId} for user {userId}");
+                throw;
+            }
         }
     }
 } 

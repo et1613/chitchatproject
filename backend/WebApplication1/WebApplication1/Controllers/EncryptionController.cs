@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using System.Security.Claims;
-using WebApplication1.Models.Encryption;
 
 namespace WebApplication1.Controllers
 {

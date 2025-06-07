@@ -75,7 +75,7 @@ namespace WebApplication1.Services
         public Dictionary<string, int> ErrorTypes { get; set; } = new();
     }
 
-    public class DigitalSignatureService
+    public class DigitalSignatureService : IDigitalSignatureService
     {
         private readonly ILogger<DigitalSignatureService> _logger;
         private readonly DigitalSignatureOptions _options;
@@ -508,6 +508,233 @@ namespace WebApplication1.Services
 
         private string GenerateKeyId(string key) => 
             Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+
+        public async Task<DigitalSignature> SignDataAsync(string data, string certificateId, string? signatureAlgorithm = null, string? hashAlgorithm = null)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    throw new DigitalSignatureException("Certificate not found");
+
+                var signature = await SignMessageAsync(data, certificate.Id, signatureAlgorithm);
+                return new DigitalSignature
+                {
+                    Signature = signature.Signature,
+                    CertificateId = certificateId,
+                    SignedAt = signature.Timestamp,
+                    Algorithm = signature.Algorithm
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error signing data");
+                throw new DigitalSignatureException("Failed to sign data", ex);
+            }
+        }
+
+        public async Task<bool> VerifySignatureAsync(string data, string signature, string certificateId)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    throw new DigitalSignatureException("Certificate not found");
+
+                var signatureResult = new SignatureResult
+                {
+                    Signature = signature,
+                    Timestamp = DateTime.UtcNow,
+                    Algorithm = "RSA" // Default algorithm
+                };
+
+                return await VerifySignatureAsync(data, signatureResult, certificate.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying signature");
+                return false;
+            }
+        }
+
+        public async Task<Certificate> CreateCertificateAsync(string subjectName, DateTime validFrom, DateTime validTo, int keySize = 2048, string? password = null)
+        {
+            try
+            {
+                using var rsa = RSA.Create(keySize);
+                var request = new CertificateRequest(
+                    $"CN={subjectName}",
+                    rsa,
+                    HashAlgorithmName.SHA256,
+                    RSASignaturePadding.Pkcs1);
+
+                var certificate = request.CreateSelfSigned(validFrom, validTo);
+                var certificateId = Guid.NewGuid().ToString();
+
+                var cert = new Certificate
+                {
+                    Id = certificateId,
+                    SubjectName = subjectName,
+                    IssuerName = subjectName, // Self-signed
+                    ValidFrom = validFrom,
+                    ValidTo = validTo,
+                    SerialNumber = certificate.SerialNumber,
+                    Thumbprint = certificate.Thumbprint,
+                    HasPrivateKey = true,
+                    Status = CertificateStatus.Valid
+                };
+
+                // Store certificate securely
+                await StoreCertificateAsync(certificate, cert, password);
+                return cert;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating certificate");
+                throw new DigitalSignatureException("Failed to create certificate", ex);
+            }
+        }
+
+        public async Task<IEnumerable<Certificate>> GetUserCertificatesAsync(string userId)
+        {
+            try
+            {
+                // Implement certificate retrieval from storage
+                return new List<Certificate>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user certificates");
+                throw new DigitalSignatureException("Failed to get user certificates", ex);
+            }
+        }
+
+        public async Task<Certificate?> GetCertificateAsync(string certificateId)
+        {
+            try
+            {
+                // Implement certificate retrieval from storage
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting certificate");
+                throw new DigitalSignatureException("Failed to get certificate", ex);
+            }
+        }
+
+        public async Task<bool> RevokeCertificateAsync(string certificateId, string userId)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    return false;
+
+                certificate.Status = CertificateStatus.Revoked;
+                // Update certificate in storage
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error revoking certificate");
+                throw new DigitalSignatureException("Failed to revoke certificate", ex);
+            }
+        }
+
+        public async Task<byte[]> ExportCertificateAsync(string certificateId, string format, bool includePrivateKey, string? password = null)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    throw new DigitalSignatureException("Certificate not found");
+
+                // Implement certificate export logic
+                return Array.Empty<byte>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting certificate");
+                throw new DigitalSignatureException("Failed to export certificate", ex);
+            }
+        }
+
+        public async Task<Certificate> ImportCertificateAsync(string certificateData, string? password, string format)
+        {
+            try
+            {
+                // Implement certificate import logic
+                return new Certificate
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    SubjectName = "Imported Certificate",
+                    IssuerName = "Unknown",
+                    ValidFrom = DateTime.UtcNow,
+                    ValidTo = DateTime.UtcNow.AddYears(1),
+                    SerialNumber = "0",
+                    Thumbprint = "0",
+                    HasPrivateKey = false,
+                    Status = CertificateStatus.Valid
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error importing certificate");
+                throw new DigitalSignatureException("Failed to import certificate", ex);
+            }
+        }
+
+        public async Task<Certificate> RenewCertificateAsync(string certificateId, DateTime validTo, string? password = null)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    throw new DigitalSignatureException("Certificate not found");
+
+                return await CreateCertificateAsync(
+                    certificate.SubjectName,
+                    DateTime.UtcNow,
+                    validTo,
+                    _options.KeySize,
+                    password);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error renewing certificate");
+                throw new DigitalSignatureException("Failed to renew certificate", ex);
+            }
+        }
+
+        public async Task<CertificateStatus> GetCertificateStatusAsync(string certificateId)
+        {
+            try
+            {
+                var certificate = await GetCertificateAsync(certificateId);
+                if (certificate == null)
+                    return CertificateStatus.Invalid;
+
+                if (certificate.Status == CertificateStatus.Revoked)
+                    return CertificateStatus.Revoked;
+
+                if (DateTime.UtcNow > certificate.ValidTo)
+                    return CertificateStatus.Expired;
+
+                return CertificateStatus.Valid;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting certificate status");
+                throw new DigitalSignatureException("Failed to get certificate status", ex);
+            }
+        }
+
+        private async Task StoreCertificateAsync(X509Certificate2 certificate, Certificate cert, string? password)
+        {
+            // Implement secure certificate storage
+            await Task.CompletedTask;
+        }
     }
 
     public class HsmSignResponse

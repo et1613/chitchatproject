@@ -8,12 +8,13 @@ using System.Text;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
+using System.Collections.Generic;
 
 namespace WebApplication1.Services
 {
     public interface IEmailService
     {
-        Task SendEmailAsync(string to, string subject, string body, bool isHtml = true);
+        Task<bool> SendEmailAsync(string to, string subject, string body, bool isHtml = true, List<EmailAttachment>? attachments = null);
         Task SendWelcomeEmailAsync(string to, string username);
         Task SendPasswordResetEmailAsync(string to, string resetLink);
         Task SendEmailVerificationAsync(string to, string verificationLink);
@@ -23,6 +24,15 @@ namespace WebApplication1.Services
         Task SendAccountUnlockedNotificationAsync(string to);
         string CreateJwtToken(string email, string secret, TimeSpan expiresIn);
         ClaimsPrincipal ValidateToken(string token, string secret);
+    }
+
+    public class EmailAttachment
+    {
+        public required string FileName { get; set; }
+        public required string FilePath { get; set; }
+        public string? ContentType { get; set; }
+        public long FileSize { get; set; }
+        public string? Description { get; set; }
     }
 
     public class EmailService : IEmailService
@@ -97,7 +107,7 @@ namespace WebApplication1.Services
             return principal;
         }
 
-        public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true)
+        public async Task<bool> SendEmailAsync(string to, string subject, string body, bool isHtml = true, List<EmailAttachment>? attachments = null)
         {
             try
             {
@@ -112,8 +122,17 @@ namespace WebApplication1.Services
                 };
                 message.To.Add(to);
 
+                if (attachments != null)
+                {
+                    foreach (var attachment in attachments)
+                    {
+                        message.Attachments.Add(new Attachment(attachment.FilePath));
+                    }
+                }
+
                 await _smtpClient.SendMailAsync(message);
                 _logger.LogInformation("Email başarıyla gönderildi: {To}", to);
+                return true;
             }
             catch (Exception ex)
             {

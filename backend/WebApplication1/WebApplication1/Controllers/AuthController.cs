@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using WebApplication1.Repositories;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models.Auth;
+using WebApplication1.Models.Requests;
 
 namespace WebApplication1.Controllers
 {
@@ -112,7 +113,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("refresh-token")]
-        public async Task<IActionResult> RefreshToken([FromBody] WebApplication1.Services.RefreshTokenRequest request)
+        public async Task<IActionResult> RefreshToken([FromBody] WebApplication1.Models.Requests.RefreshTokenRequest request)
         {
             try
             {
@@ -140,10 +141,10 @@ namespace WebApplication1.Controllers
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 var refreshToken = Request.Headers["Refresh-Token"].ToString();
 
-                if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(refreshToken))
-                    return BadRequest("Invalid request");
+                if (string.IsNullOrEmpty(refreshToken))
+                    return BadRequest("Refresh token is required");
 
-                await _authService.LogoutAsync(userId, refreshToken);
+                await _authService.LogoutAsync(refreshToken);
                 return Ok();
             }
             catch (Exception ex)
@@ -154,23 +155,30 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ResetPassword([FromBody] WebApplication1.Models.Requests.ResetPasswordRequest request)
         {
             try
             {
                 var result = await _authService.ResetPasswordAsync(request.Email);
-                return Ok(new { success = result });
+                if (!result)
+                {
+                    return BadRequest(new { message = "Failed to process password reset request" });
+                }
+                return Ok(new { message = "Password reset instructions have been sent to your email" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Password reset error");
-                return StatusCode(500, "An error occurred during password reset");
+                _logger.LogError(ex, "Error during password reset");
+                return StatusCode(500, new { message = "An error occurred while processing your request" });
             }
         }
 
         [Authorize]
         [HttpPost("change-password")]
-        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        public async Task<IActionResult> ChangePassword([FromBody] WebApplication1.Models.Requests.ChangePasswordRequest request)
         {
             try
             {
@@ -194,7 +202,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("verify-email")]
-        public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
+        public async Task<IActionResult> VerifyEmail([FromBody] WebApplication1.Models.Requests.VerifyEmailRequest request)
         {
             try
             {
@@ -205,56 +213,6 @@ namespace WebApplication1.Controllers
             {
                 _logger.LogError(ex, "Email verification error");
                 return StatusCode(500, "An error occurred during email verification");
-            }
-        }
-
-        [Authorize]
-        [HttpPost("enable-2fa")]
-        public async Task<IActionResult> EnableTwoFactor()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var result = await _authService.EnableTwoFactorAsync(userId);
-                return Ok(new { success = result });
-            }
-            catch (AuthException ex)
-            {
-                _logger.LogWarning(ex, "2FA enable failed: {Message}", ex.Message);
-                return StatusCode(400, new { error = ex.Message, errorType = ex.ErrorType });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "2FA enable error");
-                return StatusCode(500, "An error occurred while enabling 2FA");
-            }
-        }
-
-        [Authorize]
-        [HttpPost("disable-2fa")]
-        public async Task<IActionResult> DisableTwoFactor([FromBody] TwoFactorRequest request)
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
-
-                var result = await _authService.DisableTwoFactorAsync(userId, request.Code);
-                return Ok(new { success = result });
-            }
-            catch (AuthException ex)
-            {
-                _logger.LogWarning(ex, "2FA disable failed: {Message}", ex.Message);
-                return StatusCode(400, new { error = ex.Message, errorType = ex.ErrorType });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "2FA disable error");
-                return StatusCode(500, "An error occurred while disabling 2FA");
             }
         }
 
@@ -280,7 +238,7 @@ namespace WebApplication1.Controllers
 
         [Authorize]
         [HttpPost("sessions/revoke")]
-        public async Task<IActionResult> RevokeSession([FromBody] RevokeSessionRequest request)
+        public async Task<IActionResult> RevokeSession([FromBody] WebApplication1.Models.Requests.RevokeSessionRequest request)
         {
             try
             {
@@ -297,46 +255,5 @@ namespace WebApplication1.Controllers
                 return StatusCode(500, "An error occurred while revoking session");
             }
         }
-    }
-
-    public class RevokeSessionRequest
-    {
-        [Required]
-        public required string SessionId { get; set; }
-    }
-
-    public class ResetPasswordRequest
-    {
-        [Required]
-        [EmailAddress]
-        public required string Email { get; set; }
-    }
-
-    public class ChangePasswordRequest
-    {
-        [Required]
-        public required string CurrentPassword { get; set; }
-
-        [Required]
-        [MinLength(8)]
-        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
-            ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character")]
-        public required string NewPassword { get; set; }
-    }
-
-    public class VerifyEmailRequest
-    {
-        [Required]
-        public required string UserId { get; set; }
-
-        [Required]
-        public required string Token { get; set; }
-    }
-
-    public class TwoFactorRequest
-    {
-        [Required]
-        [StringLength(6, MinimumLength = 6)]
-        public required string Code { get; set; }
     }
 } 
