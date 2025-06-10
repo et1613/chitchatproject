@@ -14,7 +14,7 @@ namespace WebApplication1.Models.Users
 {
     public class User : IdentityUser
     {
-        public new string Id { get; set; } = null!;
+        // public new string Id { get; set; } = null!;
         [StringLength(100)]
         public string? DisplayName { get; set; }
         public string? ProfilePicture { get; set; }
@@ -23,9 +23,9 @@ namespace WebApplication1.Models.Users
         public DateTime? LastLoginAt { get; set; }
         public bool IsOnline { get; set; }
         public UserStatus Status { get; set; }
-        public new string UserName { get; set; } = null!;
-        public new string Email { get; set; } = null!;
-        public new string? PasswordHash { get; set; }
+        public override string UserName { get; set; } = string.Empty;
+        public override string Email { get; set; } = string.Empty;
+        public override string PasswordHash { get; set; } = string.Empty;
         public override string? PhoneNumber { get; set; }
         public override DateTimeOffset? LockoutEnd { get; set; }
         public override bool LockoutEnabled { get; set; }
@@ -49,6 +49,8 @@ namespace WebApplication1.Models.Users
         public virtual UserSettings? UserSettings { get; set; }
 
         public virtual UserPreferences? UserPreferences { get; set; }
+
+        public virtual NotificationPreferences? NotificationPreferences { get; set; }
 
         public virtual ICollection<User> Friends { get; set; } = new List<User>();
 

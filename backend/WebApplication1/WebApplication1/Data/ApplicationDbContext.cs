@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WebApplication1.Services;
 using WebApplication1.Models.Enums;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Text.Json;
 
 namespace WebApplication1.Data
 {
@@ -17,7 +19,7 @@ namespace WebApplication1.Data
         {
         }
 
-        public new DbSet<User> Users { get; set; }
+        public override DbSet<User> Users { get; set; }
         public DbSet<Message> Messages { get; set; }
         public DbSet<ChatRoom> ChatRooms { get; set; }
         public DbSet<FriendRequest> FriendRequests { get; set; }
@@ -43,6 +45,26 @@ namespace WebApplication1.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Value converter for Attachment.Metadata
+            var dictionaryConverter = new ValueConverter<Dictionary<string, string>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions)null!) ?? new Dictionary<string, string>()
+            );
+
+            // Value converter for enum-keyed dictionary (NotificationType, NotificationChannel)
+            var notificationTypeBoolDictConverter = new ValueConverter<Dictionary<WebApplication1.Models.Enums.NotificationType, bool>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<WebApplication1.Models.Enums.NotificationType, bool>>(v, (JsonSerializerOptions)null!) ?? new Dictionary<WebApplication1.Models.Enums.NotificationType, bool>()
+            );
+            var notificationChannelBoolDictConverter = new ValueConverter<Dictionary<WebApplication1.Models.Enums.NotificationChannel, bool>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<WebApplication1.Models.Enums.NotificationChannel, bool>>(v, (JsonSerializerOptions)null!) ?? new Dictionary<WebApplication1.Models.Enums.NotificationChannel, bool>()
+            );
+            var stringListConverter = new ValueConverter<List<string>, string>(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions)null!) ?? new List<string>()
+            );
 
             // User configurations
             modelBuilder.Entity<User>(entity =>
@@ -204,7 +226,7 @@ namespace WebApplication1.Data
             // NotificationSettings configurations
             modelBuilder.Entity<NotificationSettings>(entity =>
             {
-                entity.HasKey(e => e.Id);
+                entity.HasKey(e => e.UserId);
                 entity.Property(e => e.UserId).IsRequired();
                 entity.Property(e => e.EmailNotifications).HasDefaultValue(true);
                 entity.Property(e => e.PushNotifications).HasDefaultValue(true);
@@ -231,8 +253,9 @@ namespace WebApplication1.Data
                 entity.Property(e => e.UploadedBy).IsRequired();
                 entity.Property(e => e.MimeType).IsRequired();
                 entity.Property(e => e.UploadedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.Metadata).HasColumnType("jsonb");
-
+                entity.Property(e => e.Metadata)
+                    .HasConversion(dictionaryConverter)
+                    .HasColumnType("jsonb");
 
                 // Relationship
                 entity.HasOne(a => a.Message)
@@ -249,7 +272,9 @@ namespace WebApplication1.Data
                 entity.Property(e => e.OldContent).IsRequired();
                 entity.Property(e => e.NewContent).IsRequired();
                 entity.Property(e => e.EditedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.Metadata).HasColumnType("jsonb");
+                entity.Property(e => e.Metadata)
+                    .HasConversion(dictionaryConverter)
+                    .HasColumnType("jsonb");
 
                 // Relationship
                 entity.HasOne(mh => mh.Message)
@@ -294,7 +319,7 @@ namespace WebApplication1.Data
             // UserSettings configurations
             modelBuilder.Entity<UserSettings>(entity =>
             {
-                entity.HasKey(e => e.Id);
+                entity.HasKey(e => e.UserId);
                 entity.Property(e => e.UserId).IsRequired();
                 entity.Property(e => e.Theme).HasDefaultValue("light");
                 entity.Property(e => e.Language).HasDefaultValue("en");
@@ -312,7 +337,7 @@ namespace WebApplication1.Data
             // UserPreferences configurations
             modelBuilder.Entity<UserPreferences>(entity =>
             {
-                entity.HasKey(e => e.Id);
+                entity.HasKey(e => e.UserId);
                 entity.Property(e => e.UserId).IsRequired();
                 entity.Property(e => e.DisplayName).IsRequired();
                 entity.Property(e => e.IsEmailPublic).HasDefaultValue(true);
@@ -380,15 +405,21 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.UserId);
                 entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.EnabledTypes).HasColumnType("jsonb");
-                entity.Property(e => e.EnabledChannels).HasColumnType("jsonb");
-                entity.Property(e => e.BlockedSenders).HasColumnType("jsonb");
+                entity.Property(e => e.EnabledTypes)
+                    .HasConversion(notificationTypeBoolDictConverter)
+                    .HasColumnType("jsonb");
+                entity.Property(e => e.EnabledChannels)
+                    .HasConversion(notificationChannelBoolDictConverter)
+                    .HasColumnType("jsonb");
+                entity.Property(e => e.BlockedSenders)
+                    .HasConversion(stringListConverter)
+                    .HasColumnType("jsonb");
                 entity.Property(e => e.QuietHoursStart).IsRequired();
                 entity.Property(e => e.QuietHoursEnd).IsRequired();
 
                 // Relationship
                 entity.HasOne(np => np.User)
-                    .WithOne()
+                    .WithOne(u => u.NotificationPreferences)
                     .HasForeignKey<NotificationPreferences>(np => np.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
             });

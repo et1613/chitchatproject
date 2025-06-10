@@ -117,7 +117,7 @@ namespace WebApplication1.Services
                 }
 
                 // Attachment oluşturma
-                var attachment = new Attachment(_storageService)
+                var attachment = new Attachment
                 {
                     MessageId = messageId,
                     Message = await _context.Messages.FindAsync(messageId) ?? throw new ArgumentException("Message not found"),
@@ -370,7 +370,7 @@ namespace WebApplication1.Services
 
                 var compressedUrl = await _storageService.CompressFileAsync(attachment.Url, compressionLevel);
                 
-                var compressedAttachment = new Attachment(_storageService)
+                var compressedAttachment = new Attachment
                 {
                     MessageId = attachment.MessageId,
                     Message = attachment.Message,
@@ -416,7 +416,7 @@ namespace WebApplication1.Services
 
                 var optimizedUrl = await _storageService.OptimizeImageAsync(attachment.Url, maxWidth, maxHeight);
                 
-                var optimizedAttachment = new Attachment(_storageService)
+                var optimizedAttachment = new Attachment
                 {
                     MessageId = attachment.MessageId,
                     Message = attachment.Message,
@@ -716,7 +716,7 @@ namespace WebApplication1.Services
                 if (string.IsNullOrEmpty(originalAttachment.Url))
                     throw new InvalidOperationException("Dosya URL'si bulunamadı");
 
-                var version = new Attachment(_storageService)
+                var version = new Attachment
                 {
                     MessageId = originalAttachment.MessageId,
                     Message = originalAttachment.Message,
@@ -888,7 +888,7 @@ namespace WebApplication1.Services
                 var convertedFilePath = await _storageService.ConvertFileFormatAsync(tempFilePath, targetFormat);
                 
                 // Create new attachment for the converted file
-                var convertedAttachment = new Attachment(_storageService)
+                var convertedAttachment = new Attachment
                 {
                     MessageId = attachment.MessageId,
                     Message = attachment.Message,
@@ -989,7 +989,7 @@ namespace WebApplication1.Services
                     throw new ArgumentException("Orijinal dosya bulunamadı");
 
                 // Versiyonu yeni bir dosya olarak kopyala
-                var restoredAttachment = new Attachment(_storageService)
+                var restoredAttachment = new Attachment
                 {
                     MessageId = original.MessageId,
                     Message = original.Message,
@@ -1221,7 +1221,7 @@ namespace WebApplication1.Services
             if (fileSize > maxSize)
                 throw new ArgumentException("File size exceeds limit");
 
-            var attachment = new Attachment(_storageService)
+            var attachment = new Attachment
             {
                 MessageId = messageId,
                 Message = await _context.Messages.FindAsync(messageId) ?? throw new ArgumentException("Message not found"),
@@ -1235,6 +1235,9 @@ namespace WebApplication1.Services
             var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
             attachment.Url = await _storageService.UploadFileAsync(fileStream, uniqueFileName);
 
+            _context.Attachments.Add(attachment);
+            await _context.SaveChangesAsync();
+
             return attachment;
         }
 
@@ -1244,15 +1247,16 @@ namespace WebApplication1.Services
 
             if (!string.IsNullOrEmpty(attachment.Url))
             {
-                await DeleteFileAsync(attachment.Url);
+                await _storageService.DeleteFileAsync(attachment.Url);
             }
 
             if (!string.IsNullOrEmpty(attachment.ThumbnailUrl))
             {
-                await DeleteFileAsync(attachment.ThumbnailUrl);
+                await _storageService.DeleteFileAsync(attachment.ThumbnailUrl);
             }
 
             attachment.Delete(attachment.UploadedBy ?? throw new InvalidOperationException("UploadedBy cannot be null"));
+            await _context.SaveChangesAsync();
         }
 
         private string GetMimeType(string fileName)

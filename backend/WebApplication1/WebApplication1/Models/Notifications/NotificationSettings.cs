@@ -9,10 +9,7 @@ namespace WebApplication1.Models.Notifications
 {
     public class NotificationSettings
     {
-        [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-
-        [Required]
+        [Key, ForeignKey("User")]
         public required string UserId { get; set; }
         public required virtual User User { get; set; }
 

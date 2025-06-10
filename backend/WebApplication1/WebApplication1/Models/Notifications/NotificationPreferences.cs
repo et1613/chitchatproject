@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Models.Users;
 using WebApplication1.Models.Enums;
 
@@ -8,10 +9,7 @@ namespace WebApplication1.Models.Notifications
 {
     public class NotificationPreferences
     {
-        [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-
-        [Required]
+        [Key, ForeignKey("User")]
         public required string UserId { get; set; }
         public required virtual User User { get; set; }
 

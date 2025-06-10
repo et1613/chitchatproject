@@ -6,14 +6,9 @@ namespace WebApplication1.Models.Users
 {
     public class UserPreferences
     {
-        [Key]
-        public int Id { get; set; }
-
-        [Required]
+        [Key, ForeignKey("User")]
         public required string UserId { get; set; }
-
-        [ForeignKey("UserId")]
-        public virtual required User User { get; set; }
+        public required virtual User User { get; set; }
 
         [Required]
         public required string DisplayName { get; set; }

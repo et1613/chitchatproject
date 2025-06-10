@@ -28,7 +28,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("send")]
-        public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request)
+        public async Task<IActionResult> SendMessage([FromBody] WebApplication1.Models.Requests.SendMessageRequest request)
         {
             try
             {
@@ -63,7 +63,7 @@ namespace WebApplication1.Controllers
 
                 var message = await _messageService.EditMessageAsync(
                     messageId: messageId,
-                    content: request.Content,
+                    content: request.NewContent,
                     userId: userId
                 );
 
@@ -349,6 +349,9 @@ namespace WebApplication1.Controllers
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
+
+                if (string.IsNullOrEmpty(request.Query))
+                    return BadRequest("Search query cannot be empty");
 
                 var messages = await _messageService.SearchMessagesAsync(
                     query: request.Query,

@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using WebApplication1.Models.Messages;
 using Microsoft.AspNetCore.Http;
+using WebApplication1.Models.Enums;
+using WebApplication1.Services;
 
 namespace WebApplication1.Models.Requests
 {

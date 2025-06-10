@@ -220,20 +220,13 @@ namespace WebApplication1.Controllers
         [HttpGet("sessions")]
         public async Task<IActionResult> GetActiveSessions()
         {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return BadRequest("Invalid request");
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return BadRequest("Invalid request");
 
-                var sessions = await _authService.GetActiveSessionsAsync(userId);
-                return Ok(sessions);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Get sessions error");
-                return StatusCode(500, "An error occurred while retrieving sessions");
-            }
+            var currentRefreshToken = Request.Headers["Refresh-Token"].ToString();
+            var sessions = await _authService.GetActiveSessionsAsync(userId, currentRefreshToken);
+            return Ok(sessions);
         }
 
         [Authorize]

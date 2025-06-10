@@ -118,7 +118,7 @@ namespace WebApplication1.Services
         Task<bool> ResetPasswordAsync(string email);
         Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword);
         Task<bool> VerifyEmailAsync(string userId, string token);
-        Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId);
+        Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId, string? currentRefreshToken);
         Task RevokeSessionAsync(string userId, string sessionId);
     }
 
@@ -184,7 +184,7 @@ namespace WebApplication1.Services
                 }
 
                 // Verify password
-                if (string.IsNullOrEmpty(user.PasswordHash))
+                if (user.PasswordHash == null)
                 {
                     _logger.LogError($"User {user.Id} has no password hash set");
                     throw new AuthException("Account security error", AuthErrorType.InvalidCredentials);
@@ -535,10 +535,17 @@ namespace WebApplication1.Services
                 }
 
                 // Verify current password
+                if (user.PasswordHash == null)
+                {
+                    _logger.LogError($"User {user.Id} has no password hash set");
+                    throw new AuthException("Account security error", AuthErrorType.InvalidCredentials);
+                }
+
                 if (!_hashingService.VerifyHash(currentPassword, user.PasswordHash))
                 {
-                    _logger.LogWarning($"Password change failed: Invalid current password for user {userId}");
-                    return false;
+                    await IncrementFailedLoginAttemptsAsync(user.Id);
+                    _logger.LogWarning($"Login attempt failed: Invalid current password for user {userId}");
+                    throw new AuthException("Invalid email or password", AuthErrorType.InvalidCredentials);
                 }
 
                 // Hash and update new password
@@ -593,7 +600,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId)
+        public async Task<IEnumerable<ActiveSession>> GetActiveSessionsAsync(string userId, string? currentRefreshToken)
         {
             try
             {
@@ -602,11 +609,11 @@ namespace WebApplication1.Services
                     .Select(rt => new ActiveSession
                     {
                         SessionId = rt.Id,
-                        DeviceInfo = rt.DeviceInfo ?? "Unknown",
-                        IpAddress = rt.IpAddress ?? "Unknown",
+                        DeviceInfo = "Unknown",
+                        IpAddress = "Unknown",
                         LastActivity = rt.CreatedAt,
                         CreatedAt = rt.CreatedAt,
-                        IsCurrentSession = rt.Token == Request.Headers["Refresh-Token"].ToString()
+                        IsCurrentSession = currentRefreshToken != null && rt.Token == currentRefreshToken
                     })
                     .ToListAsync();
 

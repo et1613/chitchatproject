@@ -35,7 +35,6 @@ namespace WebApplication1.Models.Users
 
             var attribute = Attribute.GetCustomAttribute(field, typeof(DescriptionAttribute)) as DescriptionAttribute;
             return attribute?.Description ?? status.ToString();
-
         }
 
         public static string GetStatusMessage(this UserStatus status)

@@ -147,7 +147,7 @@ namespace WebApplication1.Services
                 // Then create and add attachments if any
                 if (attachmentUrls != null)
                 {
-                    message.Attachments = attachmentUrls.Select(url => new Attachment(_storageService)
+                    message.Attachments = attachmentUrls.Select(url => new Attachment
                     {
                         Id = Guid.NewGuid().ToString(),
                         MessageId = message.Id,
@@ -547,7 +547,7 @@ namespace WebApplication1.Services
                 // Then create and add attachments
                 if (originalMessage.Attachments != null)
                 {
-                    forwardedMessage.Attachments = originalMessage.Attachments.Select(a => new Attachment(_storageService)
+                    forwardedMessage.Attachments = originalMessage.Attachments.Select(a => new Attachment
                     {
                         Id = Guid.NewGuid().ToString(),
                         MessageId = forwardedMessage.Id,

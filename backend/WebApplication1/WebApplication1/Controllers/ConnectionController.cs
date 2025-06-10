@@ -61,7 +61,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpGet("status")]
-        public async Task<IActionResult> GetConnectionStatus()
+        public IActionResult GetConnectionStatus()
         {
             try
             {
@@ -69,51 +69,43 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var status = await _connectionManager.GetConnectionStatusAsync(userId);
-                return Ok(status);
+                var status = _connectionManager.GetConnectionStatusAsync(userId);
+                return Ok(new { Status = status });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting connection status");
-                return StatusCode(500, "Error getting connection status");
+                return StatusCode(500, "An error occurred while getting connection status");
             }
         }
 
         [HttpGet("active-users")]
-        public async Task<IActionResult> GetActiveUsers()
+        public IActionResult GetActiveUsers()
         {
             try
             {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                    return Unauthorized();
-
-                var activeUsers = await _connectionManager.GetActiveUsersAsync();
+                var activeUsers = _connectionManager.GetActiveUsersAsync();
                 return Ok(activeUsers);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting active users");
-                return StatusCode(500, "Error getting active users");
+                return StatusCode(500, "An error occurred while getting active users");
             }
         }
 
         [HttpGet("user-status/{userId}")]
-        public async Task<IActionResult> GetUserStatus(string userId)
+        public IActionResult GetUserStatus(string userId)
         {
             try
             {
-                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(currentUserId))
-                    return Unauthorized();
-
-                var status = await _connectionManager.GetUserStatusAsync(userId);
-                return Ok(status);
+                var status = _connectionManager.GetUserStatusAsync(userId);
+                return Ok(new { Status = status });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting user status");
-                return StatusCode(500, "Error getting user status");
+                return StatusCode(500, "An error occurred while getting user status");
             }
         }
 
@@ -152,8 +144,8 @@ namespace WebApplication1.Controllers
             }
         }
 
-        [HttpGet("sessions")]
-        public async Task<IActionResult> GetUserSessions()
+        [HttpGet("user-sessions")]
+        public IActionResult GetUserSessions()
         {
             try
             {
@@ -161,18 +153,18 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var sessions = await _connectionManager.GetUserSessionsAsync(userId);
+                var sessions = _connectionManager.GetUserSessionsAsync(userId);
                 return Ok(sessions);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting user sessions");
-                return StatusCode(500, "Error getting user sessions");
+                return StatusCode(500, "An error occurred while getting user sessions");
             }
         }
 
-        [HttpDelete("sessions/{sessionId}")]
-        public async Task<IActionResult> RevokeSession(string sessionId)
+        [HttpPost("revoke-session/{sessionId}")]
+        public IActionResult RevokeSession(string sessionId)
         {
             try
             {
@@ -180,13 +172,13 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _connectionManager.RevokeSessionAsync(sessionId, userId);
-                return Ok(result);
+                _connectionManager.RevokeSessionAsync(userId, sessionId);
+                return Ok(new { Message = "Session revoked successfully" });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error revoking session");
-                return StatusCode(500, "Error revoking session");
+                return StatusCode(500, "An error occurred while revoking session");
             }
         }
 
@@ -209,8 +201,8 @@ namespace WebApplication1.Controllers
             }
         }
 
-        [HttpGet("sessions/active")]
-        public async Task<IActionResult> GetActiveSessions()
+        [HttpGet("active-sessions")]
+        public IActionResult GetActiveSessions()
         {
             try
             {
@@ -218,13 +210,13 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var sessions = await _connectionManager.GetActiveSessionsAsync(userId);
+                var sessions = _connectionManager.GetActiveSessionsAsync(userId);
                 return Ok(sessions);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting active sessions");
-                return StatusCode(500, "Error getting active sessions");
+                return StatusCode(500, "An error occurred while getting active sessions");
             }
         }
 

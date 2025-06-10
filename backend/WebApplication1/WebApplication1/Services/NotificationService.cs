@@ -1200,7 +1200,10 @@ namespace WebApplication1.Services
                             break;
 
                         case NotificationChannel.WebSocket:
-                            await _connectionManager.SendNotificationAsync(notification);
+                            await _connectionManager.SendNotificationAsync(
+                                notification.UserId,
+                                notification.Content ?? "No content available",
+                                notification.Type.ToString());
                             break;
                     }
                 }

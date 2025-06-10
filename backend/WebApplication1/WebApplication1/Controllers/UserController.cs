@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using WebApplication1.Models.Users;
 using System.Security.Claims;
+using System.Linq;
 
 namespace WebApplication1.Controllers
 {
@@ -15,13 +16,25 @@ namespace WebApplication1.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IAuthService _authService;
+        private readonly IEmailService _emailService;
+        private readonly ITokenService _tokenService;
+        private readonly ISecurityService _securityService;
         private readonly ILogger<UserController> _logger;
 
         public UserController(
             IUserService userService,
+            IAuthService authService,
+            IEmailService emailService,
+            ITokenService tokenService,
+            ISecurityService securityService,
             ILogger<UserController> logger)
         {
             _userService = userService;
+            _authService = authService;
+            _emailService = emailService;
+            _tokenService = tokenService;
+            _securityService = securityService;
             _logger = logger;
         }
 
@@ -31,13 +44,15 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.RegisterAsync(
-                    request.Username,
-                    request.Email,
-                    request.Password,
-                    request.FirstName,
-                    request.LastName);
+                var userDto = new UserCreateDto
+                {
+                    UserName = request.Username,
+                    Email = request.Email,
+                    Password = request.Password,
+                    DisplayName = $"{request.FirstName} {request.LastName}"
+                };
 
+                var result = await _userService.CreateUserAsync(userDto);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -53,8 +68,22 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.LoginAsync(request.Email, request.Password);
-                return Ok(result);
+                var isValid = await _userService.ValidateUserCredentialsAsync(request.Email, request.Password);
+                if (!isValid)
+                    return Unauthorized(new { error = "Invalid email or password" });
+
+                var user = await _userService.GetUserByEmailAsync(request.Email);
+                if (user == null)
+                    return Unauthorized(new { error = "User not found" });
+
+                return Ok(new
+                {
+                    UserId = user.Id,
+                    Username = user.UserName,
+                    Email = user.Email,
+                    DisplayName = user.DisplayName,
+                    Role = user.Role
+                });
             }
             catch (Exception ex)
             {
@@ -72,7 +101,7 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var profile = await _userService.GetUserProfileAsync(userId);
+                var profile = await _userService.GetUserByIdAsync(userId);
                 return Ok(profile);
             }
             catch (Exception ex)
@@ -91,13 +120,14 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _userService.UpdateProfileAsync(
-                    userId,
-                    request.FirstName,
-                    request.LastName,
-                    request.PhoneNumber,
-                    request.Address);
+                var userDto = new UserUpdateDto
+                {
+                    DisplayName = $"{request.FirstName} {request.LastName}".Trim(),
+                    Bio = null,
+                    ProfilePictureUrl = null
+                };
 
+                var result = await _userService.UpdateUserAsync(userId, userDto);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -136,12 +166,8 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.ResetPasswordAsync(
-                    request.Email,
-                    request.Token,
-                    request.NewPassword);
-
-                return Ok(result);
+                var result = await _authService.ResetPasswordAsync(request.Email);
+                return Ok(new { message = "Password reset instructions have been sent to your email" });
             }
             catch (Exception ex)
             {
@@ -156,8 +182,8 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.ForgotPasswordAsync(request.Email);
-                return Ok(result);
+                var result = await _authService.ResetPasswordAsync(request.Email);
+                return Ok(new { message = "Password reset instructions have been sent to your email" });
             }
             catch (Exception ex)
             {
@@ -172,8 +198,12 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.VerifyEmailAsync(request.Email, request.Token);
-                return Ok(result);
+                var user = await _userService.GetUserByEmailAsync(request.Email);
+                if (user == null)
+                    return NotFound(new { error = "User not found" });
+
+                var result = await _authService.VerifyEmailAsync(user.Id, request.Token);
+                return Ok(new { message = "Email verified successfully" });
             }
             catch (Exception ex)
             {
@@ -188,8 +218,29 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.ResendVerificationEmailAsync(request.Email);
-                return Ok(result);
+                var user = await _userService.GetUserByEmailAsync(request.Email);
+                if (user == null)
+                    return NotFound(new { error = "User not found" });
+
+                if (user.IsVerified)
+                    return BadRequest(new { error = "Email is already verified" });
+
+                // Generate a verification token
+                var token = await _tokenService.GenerateRefreshTokenAsync(user.Id);
+                if (string.IsNullOrEmpty(token))
+                    return StatusCode(500, "Error generating verification token");
+
+                var subject = "Verify Your Email";
+                var body = $@"
+                    <h2>Email Verification</h2>
+                    <p>Hello {user.DisplayName},</p>
+                    <p>Please click the link below to verify your email address:</p>
+                    <p><a href='{Request.Scheme}://{Request.Host}/api/user/verify-email?email={user.Email}&token={token}'>Verify Email</a></p>
+                    <p>If you did not request this verification, please ignore this email.</p>
+                    <p>Best regards,<br>Your App Team</p>";
+
+                await _emailService.SendEmailAsync(user.Email, subject, body);
+                return Ok(new { message = "Verification email has been sent" });
             }
             catch (Exception ex)
             {
@@ -204,13 +255,37 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var users = await _userService.SearchUsersAsync(
-                    request.Query,
-                    request.Page,
-                    request.PageSize,
-                    request.Role);
+                var users = await _userService.SearchUsersAsync(request.Query ?? string.Empty);
+                
+                // Apply pagination manually
+                var totalCount = users.Count();
+                var pageSize = request.PageSize > 0 ? request.PageSize : 10;
+                var page = request.Page > 0 ? request.Page : 1;
+                var skip = (page - 1) * pageSize;
 
-                return Ok(users);
+                var paginatedUsers = users
+                    .Skip(skip)
+                    .Take(pageSize)
+                    .Select(u => new
+                    {
+                        u.Id,
+                        u.UserName,
+                        u.Email,
+                        u.DisplayName,
+                        u.Role,
+                        u.IsVerified,
+                        u.IsActive,
+                        u.CreatedAt
+                    });
+
+                return Ok(new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                    Users = paginatedUsers
+                });
             }
             catch (Exception ex)
             {
@@ -225,8 +300,16 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.UpdateUserRolesAsync(userId, request.Roles);
-                return Ok(result);
+                foreach (var role in request.Roles)
+                {
+                    var success = await _securityService.AssignRoleToUserAsync(userId, role);
+                    if (!success)
+                    {
+                        _logger.LogWarning("Failed to assign role {Role} to user {UserId}", role, userId);
+                    }
+                }
+
+                return Ok(new { message = "User roles updated successfully" });
             }
             catch (Exception ex)
             {
@@ -257,7 +340,11 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.BlockUserAsync(userId);
+                var adminId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(adminId))
+                    return Unauthorized();
+
+                var result = await _userService.BlockUserAsync(adminId, userId);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -273,7 +360,11 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var result = await _userService.UnblockUserAsync(userId);
+                var adminId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(adminId))
+                    return Unauthorized();
+
+                var result = await _userService.UnblockUserAsync(adminId, userId);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -292,8 +383,23 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var activity = await _userService.GetUserActivityAsync(userId);
-                return Ok(activity);
+                var activities = await _userService.GetUserActivitiesAsync(userId, 10); // Get last 10 activities
+                return Ok(new
+                {
+                    UserId = userId,
+                    Activities = activities.Select(a => new
+                    {
+                        a.ActivityType,
+                        a.Description,
+                        a.Timestamp,
+                        a.IpAddress,
+                        a.UserAgent,
+                        a.IsSuccessful,
+                        a.ErrorMessage,
+                        a.RelatedEntityId,
+                        a.RelatedEntityType
+                    })
+                });
             }
             catch (Exception ex)
             {
@@ -330,7 +436,30 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _userService.UpdateUserPreferencesAsync(userId, request.Preferences);
+                var user = await _userService.GetUserByIdAsync(userId);
+                if (user == null)
+                    return NotFound(new { error = "User not found" });
+
+                var preferences = new UserPreferences
+                {
+                    UserId = userId,
+                    User = user,
+                    DisplayName = user.DisplayName ?? user.UserName,
+                    ProfilePicture = user.ProfilePictureUrl,
+                    Bio = user.Bio,
+                    PhoneNumber = user.PhoneNumber,
+                    IsPhoneNumberPublic = false,
+                    IsEmailPublic = false,
+                    IsOnlineStatusPublic = true,
+                    IsLastSeenPublic = true,
+                    IsReadReceiptsPublic = true,
+                    IsProfilePicturePublic = true,
+                    IsBioPublic = true,
+                    IsFriendListPublic = true,
+                    IsMessageHistoryPublic = true
+                };
+
+                var result = await _userService.UpdateUserPreferencesAsync(userId, preferences);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -373,8 +502,6 @@ namespace WebApplication1.Controllers
     public class ResetPasswordRequest
     {
         public required string Email { get; set; }
-        public required string Token { get; set; }
-        public required string NewPassword { get; set; }
     }
 
     public class ForgotPasswordRequest
@@ -398,7 +525,6 @@ namespace WebApplication1.Controllers
         public string? Query { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 10;
-        public string? Role { get; set; }
     }
 
     public class UpdateRolesRequest

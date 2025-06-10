@@ -335,7 +335,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task HandleWebSocketConnection(WebSocket webSocket, string userId)
+        public async Task HandleWebSocketConnection(WebSocket webSocket, string userId, string? ipAddress)
         {
             if (webSocket == null)
             {
@@ -348,7 +348,10 @@ namespace WebApplication1.Services
 
             try
             {
-                await _connectionManager.AddClientAsync(userId, webSocket);
+                if (!_connectionManager.AddClient(userId, webSocket, ipAddress))
+                {
+                    throw new InvalidOperationException("Failed to establish connection");
+                }
 
                 var buffer = new byte[1024 * 4];
                 var receiveResult = await webSocket.ReceiveAsync(

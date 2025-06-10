@@ -14,7 +14,7 @@ namespace WebApplication1.Services
         Task<List<Message>> GetChatHistoryAsync(string chatRoomId, string userId, int skip = 0, int take = 50);
         Task<bool> DeleteMessageAsync(string messageId, string userId);
         Task<bool> EditMessageAsync(string messageId, string userId, string newContent);
-        Task HandleWebSocketConnection(WebSocket webSocket, string userId);
+        Task HandleWebSocketConnection(WebSocket webSocket, string userId, string? ipAddress);
         Task BroadcastMessageToRoom(string chatRoomId, string message, string senderId);
         Task<ChatRoom> CreateChatRoomAsync(string name, string? description, string creatorId);
         Task<ChatRoom?> GetChatRoomAsync(string chatRoomId);

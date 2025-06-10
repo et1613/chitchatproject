@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using System.Security.Claims;
-using WebApplication1.Models.Files;
 
 namespace WebApplication1.Controllers
 {
@@ -13,17 +12,20 @@ namespace WebApplication1.Controllers
     {
         private readonly IFileService _fileService;
         private readonly ILogger<FileController> _logger;
+        private readonly IStorageService _storageService;
 
         public FileController(
             IFileService fileService,
-            ILogger<FileController> logger)
+            ILogger<FileController> logger,
+            IStorageService storageService)
         {
             _fileService = fileService;
             _logger = logger;
+            _storageService = storageService;
         }
 
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadFile(IFormFile file)
+        public async Task<IActionResult> UploadFile(IFormFile file, [FromQuery] string messageId)
         {
             try
             {
@@ -31,7 +33,7 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var attachment = await _fileService.UploadFileAsync(file, userId);
+                var attachment = await _fileService.UploadFileAsync(file, userId, messageId);
                 return Ok(attachment);
             }
             catch (Exception ex)
@@ -42,7 +44,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("upload/multiple")]
-        public async Task<IActionResult> UploadMultipleFiles(List<IFormFile> files)
+        public async Task<IActionResult> UploadMultipleFiles(List<IFormFile> files, [FromQuery] string messageId)
         {
             try
             {
@@ -50,7 +52,7 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var attachments = await _fileService.UploadMultipleFilesAsync(files, userId);
+                var attachments = await _fileService.UploadMultipleFilesAsync(files, userId, messageId);
                 return Ok(attachments);
             }
             catch (Exception ex)
@@ -88,8 +90,16 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var (stream, fileName, contentType) = await _fileService.DownloadFileAsync(fileId);
-                return File(stream, contentType, fileName);
+                var attachment = await _fileService.GetFileAsync(fileId);
+                if (attachment == null)
+                    return NotFound();
+
+                var fileUrl = await _fileService.GetFileUrlAsync(fileId);
+                if (string.IsNullOrEmpty(fileUrl))
+                    return NotFound();
+
+                var fileBytes = await _storageService.GetFileBytesAsync(fileUrl);
+                return File(fileBytes, attachment.MimeType, attachment.FileName);
             }
             catch (Exception ex)
             {
@@ -183,7 +193,7 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(currentUserId))
                     return Unauthorized();
 
-                var files = await _fileService.GetUserFilesAsync(userId);
+                var files = await _fileService.SearchFilesAsync(userId, "", null);
                 return Ok(files);
             }
             catch (Exception ex)
@@ -202,7 +212,10 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var files = await _fileService.SearchFilesAsync(query, fileType);
+                if (string.IsNullOrEmpty(query))
+                    return BadRequest("Search query cannot be empty");
+
+                var files = await _fileService.SearchFilesAsync(userId, query, fileType);
                 return Ok(files);
             }
             catch (Exception ex)
@@ -221,7 +234,12 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _fileService.ShareFileAsync(fileId, request.SharedWithUserId, request.Permissions);
+                var permissions = new Dictionary<string, string>
+                {
+                    { request.SharedWithUserId, request.Permissions }
+                };
+
+                var result = await _fileService.SetFilePermissionsAsync(fileId, permissions);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -240,8 +258,13 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var files = await _fileService.GetSharedFilesAsync(userId);
-                return Ok(files);
+                // Get all files and filter those that have permissions for this user
+                var allFiles = await _fileService.SearchFilesAsync(userId, "", null);
+                var sharedFiles = allFiles.Where(f => 
+                    f.Metadata.ContainsKey($"Permission_{userId}") && 
+                    f.Metadata[$"Permission_{userId}"] == "Read").ToList();
+
+                return Ok(sharedFiles);
             }
             catch (Exception ex)
             {
@@ -259,7 +282,12 @@ namespace WebApplication1.Controllers
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var result = await _fileService.UnshareFileAsync(fileId, request.SharedWithUserId);
+                var permissions = new Dictionary<string, string>
+                {
+                    { request.SharedWithUserId, "None" }
+                };
+
+                var result = await _fileService.SetFilePermissionsAsync(fileId, permissions);
                 return Ok(result);
             }
             catch (Exception ex)

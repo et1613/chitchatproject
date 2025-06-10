@@ -104,7 +104,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<ConnectionStatus> GetConnectionStatusAsync(string userId)
+        public UserStatus GetConnectionStatusAsync(string userId)
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
@@ -113,16 +113,11 @@ namespace WebApplication1.Services
             {
                 if (_connections.TryGetValue(userId, out var connectionInfo))
                 {
-                    return new ConnectionStatus
-                    {
-                        IsConnected = connectionInfo.Socket.State == WebSocketState.Open,
-                        IpAddress = connectionInfo.IpAddress,
-                        LastActivity = connectionInfo.LastActivity,
-                        DeviceInfo = connectionInfo.DeviceInfo
-                    };
+                    return connectionInfo.Socket.State == WebSocketState.Open ? 
+                        UserStatus.Online : UserStatus.Offline;
                 }
 
-                return new ConnectionStatus { IsConnected = false };
+                return UserStatus.Offline;
             }
             catch (Exception ex)
             {
@@ -131,20 +126,13 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<IEnumerable<ActiveUser>> GetActiveUsersAsync()
+        public IEnumerable<UserStatus> GetActiveUsersAsync()
         {
             try
             {
                 var activeUsers = _connections
                     .Where(kvp => kvp.Value.Socket.State == WebSocketState.Open)
-                    .Select(kvp => new ActiveUser
-                    {
-                        UserId = kvp.Key,
-                        IsOnline = true,
-                        LastSeen = kvp.Value.LastActivity,
-                        IpAddress = kvp.Value.IpAddress,
-                        DeviceInfo = kvp.Value.DeviceInfo
-                    })
+                    .Select(kvp => UserStatus.Online)
                     .ToList();
 
                 return activeUsers;
@@ -156,7 +144,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<UserStatus> GetUserStatusAsync(string userId)
+        public UserStatus GetUserStatusAsync(string userId)
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
@@ -165,22 +153,11 @@ namespace WebApplication1.Services
             {
                 if (_connections.TryGetValue(userId, out var connectionInfo))
                 {
-                    return new UserStatus
-                    {
-                        UserId = userId,
-                        IsOnline = connectionInfo.Socket.State == WebSocketState.Open,
-                        LastSeen = connectionInfo.LastActivity,
-                        Status = connectionInfo.Socket.State.ToString()
-                    };
+                    return connectionInfo.Socket.State == WebSocketState.Open ? 
+                        UserStatus.Online : UserStatus.Offline;
                 }
 
-                return new UserStatus
-                {
-                    UserId = userId,
-                    IsOnline = false,
-                    LastSeen = DateTime.UtcNow,
-                    Status = "Offline"
-                };
+                return UserStatus.Offline;
             }
             catch (Exception ex)
             {
@@ -189,7 +166,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<IEnumerable<UserSession>> GetUserSessionsAsync(string userId)
+        public IEnumerable<UserStatus> GetUserSessionsAsync(string userId)
         {
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("User ID cannot be null or empty", nameof(userId));
@@ -198,22 +175,14 @@ namespace WebApplication1.Services
             {
                 if (_connections.TryGetValue(userId, out var connectionInfo))
                 {
-                    return new List<UserSession>
+                    return new List<UserStatus>
                     {
-                        new UserSession
-                        {
-                            SessionId = Guid.NewGuid().ToString(),
-                            UserId = userId,
-                            IpAddress = connectionInfo.IpAddress,
-                            DeviceInfo = connectionInfo.DeviceInfo,
-                            CreatedAt = connectionInfo.ConnectedAt,
-                            LastActivity = connectionInfo.LastActivity,
-                            IsActive = connectionInfo.Socket.State == WebSocketState.Open
-                        }
+                        connectionInfo.Socket.State == WebSocketState.Open ? 
+                            UserStatus.Online : UserStatus.Offline
                     };
                 }
 
-                return Enumerable.Empty<UserSession>();
+                return Enumerable.Empty<UserStatus>();
             }
             catch (Exception ex)
             {
@@ -245,9 +214,9 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<IEnumerable<UserSession>> GetActiveSessionsAsync(string userId)
+        public IEnumerable<UserStatus> GetActiveSessionsAsync(string userId)
         {
-            return await GetUserSessionsAsync(userId);
+            return GetUserSessionsAsync(userId);
         }
 
         public async Task BroadcastMessageAsync(string message, string? type)

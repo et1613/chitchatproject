@@ -75,7 +75,7 @@ namespace WebApplication1.Services
         public Dictionary<string, int> ErrorTypes { get; set; } = new();
     }
 
-    public class DigitalSignatureService : IDigitalSignatureService
+    public class DigitalSignatureService : IDigitalSignatureService, ISignatureService
     {
         private readonly ILogger<DigitalSignatureService> _logger;
         private readonly DigitalSignatureOptions _options;
@@ -599,8 +599,25 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Implement certificate retrieval from storage
-                return new List<Certificate>();
+                // Simüle edilmiş sertifika listesi
+                var certificates = new List<Certificate>
+                {
+                    new Certificate
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        SubjectName = $"User {userId}",
+                        IssuerName = "Self-Signed",
+                        ValidFrom = DateTime.UtcNow.AddDays(-30),
+                        ValidTo = DateTime.UtcNow.AddDays(365),
+                        SerialNumber = "1",
+                        Thumbprint = "sample-thumbprint",
+                        HasPrivateKey = true,
+                        Status = CertificateStatus.Valid
+                    }
+                };
+
+                await Task.Delay(100); // Simüle edilmiş asenkron işlem
+                return certificates;
             }
             catch (Exception ex)
             {
@@ -613,8 +630,24 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Implement certificate retrieval from storage
-                return null;
+                // Simüle edilmiş sertifika arama
+                await Task.Delay(100); // Simüle edilmiş asenkron işlem
+                
+                if (string.IsNullOrEmpty(certificateId))
+                    return null;
+
+                return new Certificate
+                {
+                    Id = certificateId,
+                    SubjectName = "Test Certificate",
+                    IssuerName = "Test CA",
+                    ValidFrom = DateTime.UtcNow.AddDays(-30),
+                    ValidTo = DateTime.UtcNow.AddDays(365),
+                    SerialNumber = "2",
+                    Thumbprint = "test-thumbprint",
+                    HasPrivateKey = true,
+                    Status = CertificateStatus.Valid
+                };
             }
             catch (Exception ex)
             {
@@ -664,19 +697,29 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Implement certificate import logic
-                return new Certificate
+                if (string.IsNullOrEmpty(certificateData))
+                    throw new ArgumentException("Certificate data cannot be empty");
+
+                // Simüle edilmiş sertifika import işlemi
+                await Task.Delay(100); // Simüle edilmiş asenkron işlem
+
+                var certificate = new Certificate
                 {
                     Id = Guid.NewGuid().ToString(),
                     SubjectName = "Imported Certificate",
                     IssuerName = "Unknown",
                     ValidFrom = DateTime.UtcNow,
                     ValidTo = DateTime.UtcNow.AddYears(1),
-                    SerialNumber = "0",
-                    Thumbprint = "0",
-                    HasPrivateKey = false,
+                    SerialNumber = "3",
+                    Thumbprint = "imported-thumbprint",
+                    HasPrivateKey = !string.IsNullOrEmpty(password),
                     Status = CertificateStatus.Valid
                 };
+
+                // Sertifikayı güvenli bir şekilde sakla
+                await StoreCertificateAsync(new X509Certificate2(Convert.FromBase64String(certificateData), password), certificate, password);
+                
+                return certificate;
             }
             catch (Exception ex)
             {
@@ -734,6 +777,46 @@ namespace WebApplication1.Services
         {
             // Implement secure certificate storage
             await Task.CompletedTask;
+        }
+
+        public async Task<(string Signature, string Message)> SignMessageAsync(string message, string key, Dictionary<string, string>? metadata = null)
+        {
+            try
+            {
+                var signature = await SignMessageAsync(message, key, "RSA", metadata);
+                return (signature.Signature, message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error signing message");
+                throw new DigitalSignatureException("Failed to sign message", ex);
+            }
+        }
+
+        public async Task<bool> VerifyMessageSignatureAsync(string message, string signature, string key)
+        {
+            try
+            {
+                var signatureResult = new SignatureResult
+                {
+                    Signature = signature,
+                    Timestamp = DateTime.UtcNow,
+                    Algorithm = "RSA" // Default algorithm
+                };
+
+                return await VerifySignatureAsync(message, signatureResult, key);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying signature");
+                return false;
+            }
+        }
+
+        // ISignatureService implementation
+        Task<bool> ISignatureService.VerifySignatureAsync(string message, string signature, string key)
+        {
+            return VerifyMessageSignatureAsync(message, signature, key);
         }
     }
 
