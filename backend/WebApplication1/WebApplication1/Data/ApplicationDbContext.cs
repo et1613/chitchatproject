@@ -78,7 +78,7 @@ namespace WebApplication1.Data
                 entity.Property(e => e.ProfilePictureUrl).HasMaxLength(500);
                 entity.Property(e => e.Status).HasDefaultValue(UserStatus.Offline);
                 entity.Property(e => e.Role).HasDefaultValue(UserRole.Member);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt).HasDefaultValue(DateTime.UtcNow);
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
                 entity.Property(e => e.IsVerified).HasDefaultValue(false);
 
@@ -106,7 +106,7 @@ namespace WebApplication1.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
                 entity.Property(e => e.Description).HasMaxLength(500);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt).HasDefaultValue(DateTime.UtcNow);
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
 
                 // Many-to-many relationship with Users
@@ -125,11 +125,15 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Content).IsRequired();
-                entity.Property(e => e.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.Timestamp).HasDefaultValue(DateTime.UtcNow);
                 entity.Property(e => e.IsRead).HasDefaultValue(false);
                 entity.Property(e => e.IsEdited).HasDefaultValue(false);
                 entity.Property(e => e.IsDeleted).HasDefaultValue(false);
                 entity.Property(e => e.DeleteReason).HasMaxLength(500);
+                entity.Property(e => e.PinnedAt).HasColumnType("datetime(6)");
+                entity.Property(e => e.PinnedBy).HasColumnType("longtext");
+                entity.Property(e => e.ReactionsJson).HasColumnType("json");
+                entity.Property(e => e.HiddenForUsers).HasColumnType("longtext");
 
                 // Relationships
                 entity.HasOne(m => m.Sender)
@@ -153,7 +157,7 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Type).IsRequired();
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt);
                 entity.Property(e => e.Status).HasDefaultValue(false);
 
                 // Relationships
@@ -173,7 +177,7 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Status).HasDefaultValue(FriendRequestStatus.Pending);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt);
 
                 // Relationships
                 entity.HasOne(f => f.Sender)
@@ -191,7 +195,7 @@ namespace WebApplication1.Data
             modelBuilder.Entity<BlockedUser>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.BlockedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.BlockedAt);
                 entity.Property(e => e.IsActive).HasDefaultValue(true);
                 entity.Property(e => e.BlockCount).HasDefaultValue(1);
 
@@ -208,38 +212,36 @@ namespace WebApplication1.Data
             });
 
             // UserActivity configurations
-            modelBuilder.Entity<UserActivity>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.ActivityType).IsRequired();
-                entity.Property(e => e.Description).IsRequired();
-                entity.Property(e => e.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.IsSuccessful).HasDefaultValue(true);
-
-                // Relationship
-                entity.HasOne(a => a.User)
-                    .WithMany(u => u.Activities)
-                    .HasForeignKey(a => a.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            // modelBuilder.Entity<UserActivity>(entity =>
+            // {
+            //     entity.HasKey(e => e.Id);
+            //     entity.Property(e => e.ActivityType).IsRequired();
+            //     entity.Property(e => e.Description).IsRequired();
+            //     entity.Property(e => e.Timestamp);
+            //     entity.Property(e => e.IsSuccessful).HasDefaultValue(true);
+            //     entity.HasOne(a => a.User)
+            //         .WithMany(u => u.Activities)
+            //         .HasForeignKey(a => a.UserId)
+            //         .OnDelete(DeleteBehavior.Cascade);
+            // });
 
             // NotificationSettings configurations
-            modelBuilder.Entity<NotificationSettings>(entity =>
-            {
-                entity.HasKey(e => e.UserId);
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.EmailNotifications).HasDefaultValue(true);
-                entity.Property(e => e.PushNotifications).HasDefaultValue(true);
-                entity.Property(e => e.InAppNotifications).HasDefaultValue(true);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                // Relationship
-                entity.HasOne(ns => ns.User)
-                    .WithOne()
-                    .HasForeignKey<NotificationSettings>("UserId")
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            // modelBuilder.Entity<NotificationSettings>(entity =>
+            // {
+            //     entity.HasKey(e => e.UserId);
+            //     entity.Property(e => e.UserId).IsRequired();
+            //     entity.Property(e => e.EmailNotifications).HasDefaultValue(true);
+            //     entity.Property(e => e.PushNotifications).HasDefaultValue(true);
+            //     entity.Property(e => e.InAppNotifications).HasDefaultValue(true);
+            //     entity.Property(e => e.CreatedAt);
+            //     entity.Property(e => e.UpdatedAt);
+            //     entity.Property(e => e.TypeSettingsJson).HasColumnType("json");
+            //     entity.Property(e => e.PrioritySettingsJson).HasColumnType("json");
+            //     entity.HasOne(ns => ns.User)
+            //         .WithOne()
+            //         .HasForeignKey<NotificationSettings>("UserId")
+            //         .OnDelete(DeleteBehavior.Cascade);
+            // });
 
             // Attachment configurations
             modelBuilder.Entity<Attachment>(entity =>
@@ -252,10 +254,10 @@ namespace WebApplication1.Data
                 entity.Property(e => e.FileSize).IsRequired();
                 entity.Property(e => e.UploadedBy).IsRequired();
                 entity.Property(e => e.MimeType).IsRequired();
-                entity.Property(e => e.UploadedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.UploadedAt);
                 entity.Property(e => e.Metadata)
                     .HasConversion(dictionaryConverter)
-                    .HasColumnType("jsonb");
+                    .HasColumnType("json");
 
                 // Relationship
                 entity.HasOne(a => a.Message)
@@ -264,24 +266,22 @@ namespace WebApplication1.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // MessageHistory configurations
-            modelBuilder.Entity<MessageHistory>(entity =>
-            {
-                entity.HasKey(e => e.Id);
-                entity.Property(e => e.MessageId).IsRequired();
-                entity.Property(e => e.OldContent).IsRequired();
-                entity.Property(e => e.NewContent).IsRequired();
-                entity.Property(e => e.EditedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.Metadata)
-                    .HasConversion(dictionaryConverter)
-                    .HasColumnType("jsonb");
-
-                // Relationship
-                entity.HasOne(mh => mh.Message)
-                    .WithMany(m => m.EditHistory)
-                    .HasForeignKey(mh => mh.MessageId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            
+             modelBuilder.Entity<MessageHistory>(entity =>
+             {
+                 entity.HasKey(e => e.Id);
+                 entity.Property(e => e.MessageId).IsRequired();
+                 entity.Property(e => e.OldContent).IsRequired();
+                 entity.Property(e => e.NewContent).IsRequired();
+                 entity.Property(e => e.EditedAt);
+                 entity.Property(e => e.Metadata)
+                     .HasConversion(dictionaryConverter)
+                     .HasColumnType("json");
+                 entity.HasOne(mh => mh.Message)
+                     .WithMany(m => m.EditHistory)
+                     .HasForeignKey(mh => mh.MessageId)
+                     .OnDelete(DeleteBehavior.Cascade);
+             });
 
             // StoredToken configurations
             modelBuilder.Entity<StoredToken>(entity =>
@@ -290,13 +290,13 @@ namespace WebApplication1.Data
                 entity.Property(e => e.UserId).IsRequired();
                 entity.Property(e => e.TokenType).IsRequired();
                 entity.Property(e => e.Token).IsRequired();
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt);
                 entity.Property(e => e.ExpiresAt).IsRequired();
                 entity.Property(e => e.IsRevoked).HasDefaultValue(false);
                 entity.Property(e => e.RevocationReason).HasMaxLength(500);
-                entity.Property(e => e.Metadata).HasColumnType("jsonb");
+                entity.Property(e => e.Metadata).HasColumnType("json");
                 entity.Property(e => e.UsageCount).HasDefaultValue(0);
-                entity.Property(e => e.LastUsedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.LastUsedAt);
 
                 // Indexes
                 entity.HasIndex(t => t.Token);
@@ -309,7 +309,7 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Token).IsRequired();
-                entity.Property(e => e.AddedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.AddedAt);
 
                 // Indexes
                 entity.HasIndex(t => t.Token);
@@ -317,41 +317,37 @@ namespace WebApplication1.Data
             });
 
             // UserSettings configurations
-            modelBuilder.Entity<UserSettings>(entity =>
-            {
-                entity.HasKey(e => e.UserId);
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.Theme).HasDefaultValue("light");
-                entity.Property(e => e.Language).HasDefaultValue("en");
-                entity.Property(e => e.TimeZone).HasDefaultValue("UTC");
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                // Relationship
-                entity.HasOne(us => us.User)
-                    .WithOne()
-                    .HasForeignKey<UserSettings>("UserId")
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            // modelBuilder.Entity<UserSettings>(entity =>
+            // {
+            //     entity.HasKey(e => e.UserId);
+            //     entity.Property(e => e.UserId).IsRequired();
+            //     entity.Property(e => e.Theme).HasDefaultValue("light");
+            //     entity.Property(e => e.Language).HasDefaultValue("en");
+            //     entity.Property(e => e.TimeZone).HasDefaultValue("UTC");
+            //     entity.Property(e => e.CreatedAt);
+            //     entity.Property(e => e.UpdatedAt);
+            //     entity.HasOne(us => us.User)
+            //         .WithOne()
+            //         .HasForeignKey<UserSettings>("UserId")
+            //         .OnDelete(DeleteBehavior.Cascade);
+            // });
 
             // UserPreferences configurations
-            modelBuilder.Entity<UserPreferences>(entity =>
-            {
-                entity.HasKey(e => e.UserId);
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.DisplayName).IsRequired();
-                entity.Property(e => e.IsEmailPublic).HasDefaultValue(true);
-                entity.Property(e => e.IsOnlineStatusPublic).HasDefaultValue(true);
-                entity.Property(e => e.IsReadReceiptsPublic).HasDefaultValue(true);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                // Relationship
-                entity.HasOne(up => up.User)
-                    .WithOne()
-                    .HasForeignKey<UserPreferences>(up => up.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            // modelBuilder.Entity<UserPreferences>(entity =>
+            // {
+            //     entity.HasKey(e => e.UserId);
+            //     entity.Property(e => e.UserId).IsRequired();
+            //     entity.Property(e => e.DisplayName).IsRequired();
+            //     entity.Property(e => e.IsEmailPublic).HasDefaultValue(true);
+            //     entity.Property(e => e.IsOnlineStatusPublic).HasDefaultValue(true);
+            //     entity.Property(e => e.IsReadReceiptsPublic).HasDefaultValue(true);
+            //     entity.Property(e => e.CreatedAt);
+            //     entity.Property(e => e.UpdatedAt);
+            //     entity.HasOne(up => up.User)
+            //         .WithOne()
+            //         .HasForeignKey<UserPreferences>(up => up.UserId)
+            //         .OnDelete(DeleteBehavior.Cascade);
+            // });
 
             // MessageBackup configurations
             modelBuilder.Entity<MessageBackup>(entity =>
@@ -359,7 +355,6 @@ namespace WebApplication1.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.ChatRoomId).IsRequired();
                 entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(e => e.BackupPath).IsRequired();
                 entity.Property(e => e.MessageCount).HasDefaultValue(0);
                 entity.Property(e => e.BackupSize).HasDefaultValue(0L);
@@ -372,9 +367,9 @@ namespace WebApplication1.Data
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
                 entity.Property(e => e.Content).IsRequired();
                 entity.Property(e => e.Type).IsRequired();
-                entity.Property(e => e.Parameters).HasColumnType("jsonb");
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.ParametersJson).HasColumnType("json");
+                entity.Property(e => e.CreatedAt);
+                entity.Property(e => e.UpdatedAt);
             });
 
             // NotificationGroup configurations
@@ -382,9 +377,9 @@ namespace WebApplication1.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.UserIds).HasColumnType("jsonb");
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.UserIds).HasColumnType("json");
+                entity.Property(e => e.CreatedAt);
+                entity.Property(e => e.UpdatedAt);
             });
 
             // ScheduledNotification configurations
@@ -397,32 +392,30 @@ namespace WebApplication1.Data
                 entity.Property(e => e.ScheduledTime).IsRequired();
                 entity.Property(e => e.IsRecurring).HasDefaultValue(false);
                 entity.Property(e => e.RecurrencePattern).HasMaxLength(100);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt);
             });
 
             // NotificationPreferences configurations
-            modelBuilder.Entity<NotificationPreferences>(entity =>
-            {
-                entity.HasKey(e => e.UserId);
-                entity.Property(e => e.UserId).IsRequired();
-                entity.Property(e => e.EnabledTypes)
-                    .HasConversion(notificationTypeBoolDictConverter)
-                    .HasColumnType("jsonb");
-                entity.Property(e => e.EnabledChannels)
-                    .HasConversion(notificationChannelBoolDictConverter)
-                    .HasColumnType("jsonb");
-                entity.Property(e => e.BlockedSenders)
-                    .HasConversion(stringListConverter)
-                    .HasColumnType("jsonb");
-                entity.Property(e => e.QuietHoursStart).IsRequired();
-                entity.Property(e => e.QuietHoursEnd).IsRequired();
-
-                // Relationship
-                entity.HasOne(np => np.User)
-                    .WithOne(u => u.NotificationPreferences)
-                    .HasForeignKey<NotificationPreferences>(np => np.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
+            // modelBuilder.Entity<NotificationPreferences>(entity =>
+            // {
+            //     entity.HasKey(e => e.UserId);
+            //     entity.Property(e => e.UserId).IsRequired();
+            //     entity.Property(e => e.EnabledTypes)
+            //         .HasConversion(notificationTypeBoolDictConverter)
+            //         .HasColumnType("json");
+            //     entity.Property(e => e.EnabledChannels)
+            //         .HasConversion(notificationChannelBoolDictConverter)
+            //         .HasColumnType("json");
+            //     entity.Property(e => e.BlockedSenders)
+            //         .HasConversion(stringListConverter)
+            //         .HasColumnType("json");
+            //     entity.Property(e => e.QuietHoursStart).IsRequired();
+            //     entity.Property(e => e.QuietHoursEnd).IsRequired();
+            //     entity.HasOne(np => np.User)
+            //         .WithOne(u => u.NotificationPreferences)
+            //         .HasForeignKey<NotificationPreferences>(np => np.UserId)
+            //         .OnDelete(DeleteBehavior.Cascade);
+            // });
 
             // SecurityEvent configurations
             modelBuilder.Entity<SecurityEvent>(entity =>
@@ -432,21 +425,18 @@ namespace WebApplication1.Data
                 entity.Property(e => e.EventType).IsRequired();
                 entity.Property(e => e.Description).IsRequired();
                 entity.Property(e => e.IpAddress).HasMaxLength(45);
-                entity.Property(e => e.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.Timestamp);
             });
 
             // BlockedIpAddress configurations
-            modelBuilder.Entity<BlockedIpAddress>(entity =>
-            {
-                entity.HasKey(e => e.IpAddress);
-                entity.Property(e => e.IpAddress).IsRequired().HasMaxLength(45);
-                entity.Property(e => e.Reason).IsRequired();
-                entity.Property(e => e.BlockedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.ExpiresAt).IsRequired();
-
-                // Indexes
-                entity.HasIndex(b => b.ExpiresAt);
-            });
+            // modelBuilder.Entity<BlockedIpAddress>(entity =>
+            // {
+            //     entity.HasKey(e => e.IpAddress);
+            //     entity.Property(e => e.IpAddress).IsRequired().HasMaxLength(45);
+            //     entity.Property(e => e.Reason).IsRequired();
+            //     entity.Property(e => e.ExpiresAt).IsRequired();
+            //     entity.HasIndex(b => b.ExpiresAt);
+            // });
 
             // RefreshToken configurations
             modelBuilder.Entity<RefreshToken>(entity =>
@@ -456,7 +446,7 @@ namespace WebApplication1.Data
                 entity.Property(e => e.UserId).IsRequired();
                 entity.Property(e => e.ExpiryDate).IsRequired();
                 entity.Property(e => e.IsValid).HasDefaultValue(true);
-                entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.CreatedAt);
 
                 // Relationship
                 entity.HasOne(rt => rt.User)

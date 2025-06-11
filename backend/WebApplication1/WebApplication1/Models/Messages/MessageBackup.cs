@@ -15,7 +15,7 @@ namespace WebApplication1.Models.Messages
         [Required]
         public required string UserId { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; }
 
         public int MessageCount { get; set; }
 

@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Models.Enums;
 using WebApplication1.Models.Users;
+using System.Text.Json;
 
 namespace WebApplication1.Models.Notifications
 {
@@ -40,7 +41,8 @@ namespace WebApplication1.Models.Notifications
         public string Language { get; set; } = "en";
         public string Theme { get; set; } = "light";
 
-        public Dictionary<NotificationType, bool> TypeSettings { get; set; } = new()
+        [Column(TypeName = "json")]
+        public string TypeSettingsJson { get; set; } = JsonSerializer.Serialize(new Dictionary<NotificationType, bool>
         {
             { NotificationType.MessageReceived, true },
             { NotificationType.MessageRead, true },
@@ -57,15 +59,30 @@ namespace WebApplication1.Models.Notifications
             { NotificationType.ChatRoomJoined, true },
             { NotificationType.ChatRoomLeft, true },
             { NotificationType.SystemMessage, true }
-        };
+        });
 
-        public Dictionary<NotificationPriority, bool> PrioritySettings { get; set; } = new()
+        [Column(TypeName = "json")]
+        public string PrioritySettingsJson { get; set; } = JsonSerializer.Serialize(new Dictionary<NotificationPriority, bool>
         {
             { NotificationPriority.Low, true },
             { NotificationPriority.Normal, true },
             { NotificationPriority.High, true },
             { NotificationPriority.Urgent, true }
-        };
+        });
+
+        [NotMapped]
+        public Dictionary<NotificationType, bool> TypeSettings
+        {
+            get => JsonSerializer.Deserialize<Dictionary<NotificationType, bool>>(TypeSettingsJson) ?? new Dictionary<NotificationType, bool>();
+            set => TypeSettingsJson = JsonSerializer.Serialize(value);
+        }
+
+        [NotMapped]
+        public Dictionary<NotificationPriority, bool> PrioritySettings
+        {
+            get => JsonSerializer.Deserialize<Dictionary<NotificationPriority, bool>>(PrioritySettingsJson) ?? new Dictionary<NotificationPriority, bool>();
+            set => PrioritySettingsJson = JsonSerializer.Serialize(value);
+        }
 
         public bool IsNotificationEnabled(NotificationType type, NotificationPriority priority)
         {
@@ -90,12 +107,16 @@ namespace WebApplication1.Models.Notifications
 
         public void UpdateTypeSetting(NotificationType type, bool enabled)
         {
-            TypeSettings[type] = enabled;
+            var settings = TypeSettings;
+            settings[type] = enabled;
+            TypeSettings = settings;
         }
 
         public void UpdatePrioritySetting(NotificationPriority priority, bool enabled)
         {
-            PrioritySettings[priority] = enabled;
+            var settings = PrioritySettings;
+            settings[priority] = enabled;
+            PrioritySettings = settings;
         }
 
         public void SetQuietHours(TimeSpan? start, TimeSpan? end)
