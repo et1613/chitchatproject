@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using WebApplication1.Models.Users;
 using WebApplication1.Models.Enums;
+using System.Text.Json;
 
 namespace WebApplication1.Models.Notifications
 {
@@ -117,13 +118,31 @@ namespace WebApplication1.Models.Notifications
             };
         }
 
-        public Dictionary<NotificationType, bool> EnabledTypes { get; set; } = new();
-        public Dictionary<NotificationChannel, bool> EnabledChannels { get; set; } = new();
         public bool EnableSound { get; set; } = true;
         public bool EnableVibration { get; set; } = true;
         public bool EnableDesktopNotifications { get; set; } = true;
         public TimeSpan QuietHoursStart { get; set; } = new TimeSpan(22, 0, 0); // 22:00
         public TimeSpan QuietHoursEnd { get; set; } = new TimeSpan(8, 0, 0); // 08:00
         public List<string> BlockedSenders { get; set; } = new();
+
+        [Column(TypeName = "jsonb")]
+        public string EnabledTypesJson { get; set; } = "{}";
+
+        [Column(TypeName = "jsonb")]
+        public string EnabledChannelsJson { get; set; } = "{}";
+
+        [NotMapped]
+        public Dictionary<NotificationType, bool> EnabledTypes
+        {
+            get => JsonSerializer.Deserialize<Dictionary<NotificationType, bool>>(EnabledTypesJson) ?? new Dictionary<NotificationType, bool>();
+            set => EnabledTypesJson = JsonSerializer.Serialize(value);
+        }
+
+        [NotMapped]
+        public Dictionary<NotificationChannel, bool> EnabledChannels
+        {
+            get => JsonSerializer.Deserialize<Dictionary<NotificationChannel, bool>>(EnabledChannelsJson) ?? new Dictionary<NotificationChannel, bool>();
+            set => EnabledChannelsJson = JsonSerializer.Serialize(value);
+        }
     }
 } 

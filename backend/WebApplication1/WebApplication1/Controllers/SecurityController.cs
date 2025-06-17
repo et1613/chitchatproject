@@ -227,8 +227,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var success = await _securityService.BlockIpAddressAsync(request.IpAddress, request.Reason);
-                return Ok(new { Success = success });
+                throw new NotImplementedException();
             }
             catch (Exception ex)
             {
@@ -243,8 +242,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var success = await _securityService.UnblockIpAddressAsync(request.IpAddress);
-                return Ok(new { Success = success });
+                throw new NotImplementedException();
             }
             catch (Exception ex)
             {
@@ -413,8 +411,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var isBlocked = await _securityService.IsIpBlockedAsync(request.IpAddress);
-                return Ok(new { IsBlocked = isBlocked });
+                throw new NotImplementedException();
             }
             catch (Exception ex)
             {
@@ -524,8 +521,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var success = await _securityService.BlockIpAddressAsync(request.IpAddress, request.Reason);
-                return Ok(new { Success = success });
+                throw new NotImplementedException();
             }
             catch (Exception ex)
             {
@@ -540,8 +536,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var success = await _securityService.UnblockIpAddressAsync(ipAddress);
-                return Ok(new { Success = success });
+                throw new NotImplementedException();
             }
             catch (Exception ex)
             {

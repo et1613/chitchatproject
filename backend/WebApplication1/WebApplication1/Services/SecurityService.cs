@@ -33,8 +33,6 @@ namespace WebApplication1.Services
         Task LogSecurityEventAsync(string userId, string eventType, string description);
         Task<IEnumerable<SecurityEvent>> GetSecurityEventsAsync(string userId, DateTime? startDate = null, DateTime? endDate = null);
         Task<bool> IsSuspiciousActivityAsync(string userId, string ipAddress);
-        Task<bool> BlockIpAddressAsync(string ipAddress, string reason);
-        Task<bool> UnblockIpAddressAsync(string ipAddress);
         Task<IEnumerable<SessionInfo>> GetActiveSessionsAsync(string userId);
         Task<bool> TerminateSessionAsync(string sessionId);
 
@@ -49,7 +47,6 @@ namespace WebApplication1.Services
         // Güvenlik Duvarı ve Korumalar
         Task<bool> IsRateLimitExceededAsync(string userId, string action);
         Task<bool> ValidateInputAsync(string input, string inputType);
-        Task<bool> IsIpBlockedAsync(string ipAddress);
         Task<bool> IsRequestValidAsync(HttpContext context);
         Task<bool> ValidateFileUploadAsync(IFormFile file);
 
@@ -428,52 +425,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> BlockIpAddressAsync(string ipAddress, string reason)
-        {
-            try
-            {
-                var blockedIp = new BlockedIpAddress
-                {
-                    IpAddress = ipAddress,
-                    Reason = reason,
-                    BlockedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.AddHours(24)
-                };
-
-                _context.BlockedIpAddresses.Add(blockedIp);
-                await _context.SaveChangesAsync();
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error blocking IP address {IpAddress}", ipAddress);
-                throw;
-            }
-        }
-
-        public async Task<bool> UnblockIpAddressAsync(string ipAddress)
-        {
-            try
-            {
-                var blockedIp = await _context.BlockedIpAddresses
-                    .FirstOrDefaultAsync(b => b.IpAddress == ipAddress);
-
-                if (blockedIp == null)
-                    return false;
-
-                _context.BlockedIpAddresses.Remove(blockedIp);
-                await _context.SaveChangesAsync();
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error unblocking IP address {IpAddress}", ipAddress);
-                throw;
-            }
-        }
-
         public async Task<IEnumerable<SessionInfo>> GetActiveSessionsAsync(string userId)
         {
             try
@@ -736,20 +687,6 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<bool> IsIpBlockedAsync(string ipAddress)
-        {
-            try
-            {
-                return await _context.BlockedIpAddresses
-                    .AnyAsync(b => b.IpAddress == ipAddress && b.ExpiresAt > DateTime.UtcNow);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking if IP is blocked");
-                throw;
-            }
-        }
-
         public Task<bool> IsRequestValidAsync(HttpContext context)
         {
             try
@@ -868,7 +805,6 @@ namespace WebApplication1.Services
                         .Select(e => new { e.UserId, e.IpAddress, e.UserAgent })
                         .Distinct()
                         .CountAsync(),
-                    BlockedIpAddresses = await _context.BlockedIpAddresses.CountAsync(b => b.ExpiresAt > DateTime.UtcNow),
                     FailedLoginAttempts = await _context.SecurityEvents.CountAsync(e => e.EventType == "FailedLogin" && e.Timestamp >= DateTime.UtcNow.AddHours(-1)),
                     SuspiciousActivities = await _context.SecurityEvents.CountAsync(e => e.EventType == "SuspiciousActivity" && e.Timestamp >= DateTime.UtcNow.AddHours(-1))
                 };
@@ -1079,14 +1015,6 @@ namespace WebApplication1.Services
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
-    public class BlockedIpAddress
-    {
-        public required string IpAddress { get; set; }
-        public required string Reason { get; set; }
-        public DateTime BlockedAt { get; set; } = DateTime.UtcNow;
-        public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddHours(24);
-    }
-
     public class SecurityReport
     {
         public required string UserId { get; set; }
@@ -1104,7 +1032,6 @@ namespace WebApplication1.Services
     {
         public int TotalUsers { get; set; }
         public int ActiveSessions { get; set; }
-        public int BlockedIpAddresses { get; set; }
         public int FailedLoginAttempts { get; set; }
         public int SuspiciousActivities { get; set; }
     }

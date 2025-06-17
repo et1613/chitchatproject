@@ -39,7 +39,6 @@ namespace WebApplication1.Data
         public DbSet<ScheduledNotification> ScheduledNotifications { get; set; }
         public DbSet<NotificationPreferences> NotificationPreferences { get; set; }
         public DbSet<SecurityEvent> SecurityEvents { get; set; }
-        public DbSet<BlockedIpAddress> BlockedIpAddresses { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -226,22 +225,18 @@ namespace WebApplication1.Data
             // });
 
             // NotificationSettings configurations
-            // modelBuilder.Entity<NotificationSettings>(entity =>
-            // {
-            //     entity.HasKey(e => e.UserId);
-            //     entity.Property(e => e.UserId).IsRequired();
-            //     entity.Property(e => e.EmailNotifications).HasDefaultValue(true);
-            //     entity.Property(e => e.PushNotifications).HasDefaultValue(true);
-            //     entity.Property(e => e.InAppNotifications).HasDefaultValue(true);
-            //     entity.Property(e => e.CreatedAt);
-            //     entity.Property(e => e.UpdatedAt);
-            //     entity.Property(e => e.TypeSettingsJson).HasColumnType("json");
-            //     entity.Property(e => e.PrioritySettingsJson).HasColumnType("json");
-            //     entity.HasOne(ns => ns.User)
-            //         .WithOne()
-            //         .HasForeignKey<NotificationSettings>("UserId")
-            //         .OnDelete(DeleteBehavior.Cascade);
-            // });
+            modelBuilder.Entity<NotificationSettings>(entity =>
+            {
+                entity.HasKey(e => e.UserId);
+                entity.Property(e => e.UserId).IsRequired();
+                entity.Property(e => e.EmailNotifications).HasDefaultValue(true);
+                entity.Property(e => e.PushNotifications).HasDefaultValue(true);
+                entity.Property(e => e.InAppNotifications).HasDefaultValue(true);
+                entity.Property(e => e.CreatedAt);
+                entity.Property(e => e.UpdatedAt);
+                entity.Property(e => e.TypeSettingsJson).HasColumnType("jsonb");
+                entity.Property(e => e.PrioritySettingsJson).HasColumnType("jsonb");
+            });
 
             // Attachment configurations
             modelBuilder.Entity<Attachment>(entity =>
@@ -427,16 +422,6 @@ namespace WebApplication1.Data
                 entity.Property(e => e.IpAddress).HasMaxLength(45);
                 entity.Property(e => e.Timestamp);
             });
-
-            // BlockedIpAddress configurations
-            // modelBuilder.Entity<BlockedIpAddress>(entity =>
-            // {
-            //     entity.HasKey(e => e.IpAddress);
-            //     entity.Property(e => e.IpAddress).IsRequired().HasMaxLength(45);
-            //     entity.Property(e => e.Reason).IsRequired();
-            //     entity.Property(e => e.ExpiresAt).IsRequired();
-            //     entity.HasIndex(b => b.ExpiresAt);
-            // });
 
             // RefreshToken configurations
             modelBuilder.Entity<RefreshToken>(entity =>
