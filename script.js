@@ -1,5 +1,5 @@
 let selectedReceiver = null;
-const backendUrl = "https://f0dd-85-101-157-155.ngrok-free.app";
+const backendUrl = "https://localhost:5001/api/users";
 
 // Eğer giriş yapılmamışsa sahte kullanıcı ile devam et
 const fallbackUser = JSON.parse(localStorage.getItem("user")) || {
