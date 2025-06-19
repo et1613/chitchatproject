@@ -56,7 +56,7 @@
       btn.innerText = "Giriş yapılıyor...";
 
       try {
-        const res = await fetch("https://f0dd-85-101-157-155.ngrok-free.app/api/login", {
+        const res = await fetch("https://localhost:5001/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password })
