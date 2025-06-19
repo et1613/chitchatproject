@@ -1,5 +1,5 @@
 let selectedReceiver = null;
-const backendUrl = "https://localhost:5001/api/users";
+const backendUrl = "https://localhost:5001";
 
 // Eğer giriş yapılmamışsa sahte kullanıcı ile devam et
 const fallbackUser = JSON.parse(localStorage.getItem("user")) || {
