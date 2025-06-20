@@ -1,0 +1,138 @@
+<!-- chat.html -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChitChat - Sohbet</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body class="bg-light">
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">ChitChat</a>
+      <span class="text-white me-3" id="navUserName"></span>
+      <button class="btn btn-outline-light btn-sm ms-auto" onclick="logout()">Çıkış Yap</button>
+    </div>
+  </nav>
+<!--Grup Kur Butonu -->
+<button class="btn btn-primary w-100 mt-3" data-bs-toggle="modal" data-bs-target="#groupModal" onclick="populateFriendCheckboxes()">➕ Grup Kur</button>
+
+<!--Grup Kurma Modalı -->
+<div class="modal fade" id="groupModal" tabindex="-1" aria-labelledby="groupModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="groupModalLabel">Yeni Grup Oluştur</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="groupName" class="form-control mb-3" placeholder="Grup adı">
+        <div id="friendCheckboxes" class="text-start">
+          <!-- Buraya arkadaş checkbox'ları JS ile gelecek -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" onclick="createGroup()">Grubu Oluştur</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Ana içerik -->
+  <div class="container-fluid mt-3">
+    <div class="row">
+
+      <!-- Sol Menü -->
+      <div class="col-md-3 col-12 mb-3">
+        <!-- Arkadaş Ekle -->
+        <div class="card mb-3">
+          <div class="card-header bg-primary text-white">Arkadaş Ekle (E-posta)</div>
+          <div class="card-body p-2">
+            <input type="email" id="friendEmail" class="form-control mb-2" placeholder="E-posta girin">
+            <button class="btn btn-sm btn-primary w-100" onclick="addFriend()">Ekle</button>
+          </div>
+        </div>
+
+        <!-- Kullanıcı listesi -->
+        <div class="card">
+          <div class="card-header bg-secondary text-white">
+            <div class="input-group">
+              <input type="text" class="form-control form-control-sm" id="userSearch" placeholder="Kişi ara...">
+            </div>
+          </div>
+          <ul class="list-group list-group-flush" id="userList"></ul>
+        </div>
+      </div>
+
+      <!-- Sağ İçerik -->
+      <div class="col-md-9 col-12">
+        <!-- Sekme Butonları -->
+<div class="d-flex justify-content-center gap-2 mb-3">
+  <button id="btnChat" class="btn btn-primary active">Sohbet</button>
+  <button id="btnProfile" class="btn btn-outline-secondary">Profil</button>
+</div>
+<!-- Profil Kartı -->
+        <div id="profileSection" class="mb-3" style="display: none;">
+          <div class="card">
+            <div class="card-header bg-secondary text-white">Profil Bilgileri</div>
+            <div class="card-body">
+              <p><strong>İsim:</strong> <span id="profileName"></span></p>
+              <p><strong>Cinsiyet:</strong> <span id="profileGender"></span></p>
+              <img id="profileAvatar" src="" class="img-thumbnail" style="max-width: 150px;">
+              <hr>
+               <div id="blockedUsersSection" class="mt-4">
+    <h5>🚫 Engellenen Kullanıcılar</h5>
+    <ul id="blockedList" class="list-group"></ul>
+  </div>
+              <hr>
+<h6>🔐 Şifremi Unuttum</h6>
+<input type="email" id="resetEmail" class="form-control mb-2" placeholder="E-posta adresiniz">
+<button class="btn btn-outline-danger btn-sm" onclick="resetPassword()">Şifre Sıfırla</button>
+<input type="file" id="updateAvatarInput" class="form-control mb-2" accept="image/*">
+<button class="btn btn-sm btn-outline-primary" onclick="updateAvatar()">Profil Fotoğrafını Güncelle</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sohbet Kartı -->
+        <div id="chatSection" style="display: block;">
+          <div class="card">
+            <div class="card-header bg-primary text-white">Sohbet</div>
+            <div class="card-body" id="messageArea" style="height: 300px; overflow-y: scroll;"></div>
+            <div class="card-footer">
+              <div class="input-group">
+                <input type="file" id="fileInput" class="form-control" accept="image/*,.pdf,.doc,.docx" style="max-width: 200px;">
+                <input type="text" id="messageInput" class="form-control" placeholder="Mesaj yaz...">
+                <button class="btn btn-primary" onclick="sendMessage()">Gönder</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> <!-- /col-md-9 -->
+    </div> <!-- /row -->
+  </div> <!-- /container -->
+
+  <script src="js/script.js"></script>
+   <!-- Bildirim kutusu -->
+  <div id="notification" style="
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #198754;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    cursor: pointer;
+  " onclick="hideNotification()">
+    <span id="notificationText">Yeni mesaj!</span>
+  </div>
+  <audio id="notifSound" src="notif.mp3" preload="auto"></audio>
+</body>
+</html>

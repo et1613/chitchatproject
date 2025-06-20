@@ -1,0 +1,97 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChitChat - Giriş</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+</head>
+<body class="bg-light">
+  <div class="container text-center mt-5">
+    <h1 class="mb-4 text-primary">ChitChat - Giriş Yap</h1>
+    <div class="card mx-auto p-4" style="max-width: 400px;">
+      <input type="email" id="email" class="form-control mb-3" placeholder="E-posta">
+
+      <!-- Şifre inputu + Göster/Gizle butonu -->
+      <div class="mb-3 position-relative">
+        <input type="password" id="password" class="form-control" placeholder="Şifre">
+        <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-50 end-0 translate-middle-y me-2"
+                onclick="togglePassword('password', this)">👁</button>
+      </div>
+
+      <button class="btn btn-primary w-100 mb-2" onclick="login()">Giriş Yap</button>
+      <a href="register.html" class="btn btn-outline-secondary w-100">Kayıt Ol</a>
+      <div id="status" class="alert d-none mt-3" role="alert"></div>
+    </div>
+  </div>
+
+  <script>
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁";
+      }
+    }
+
+    async function login() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const statusBox = document.getElementById("status");
+      const btn = document.querySelector("button.btn-primary");
+
+      if (!email || !password) {
+        statusBox.className = "alert alert-danger";
+        statusBox.innerText = "E-posta ve şifre girin.";
+        statusBox.classList.remove("d-none");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Giriş yapılıyor...";
+
+      try {
+        const res = await fetch("https://localhost:5001/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        if (!res.ok) {
+          let errMsg = "Giriş başarısız.";
+          try {
+            const err = await res.json();
+            errMsg = err.message || errMsg;
+          } catch (_) {}
+          throw new Error(errMsg);
+        }
+
+        const data = await res.json();
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("chitchat_user", JSON.stringify(data.user));
+
+        statusBox.className = "alert alert-success";
+        statusBox.innerText = "✅ Giriş başarılı. Yönlendiriliyorsunuz...";
+        statusBox.classList.remove("d-none");
+
+        setTimeout(() => {
+          window.location.href = "chat.html";
+        }, 1500);
+
+      } catch (err) {
+        statusBox.className = "alert alert-danger mt-3";
+        statusBox.innerText = `❌ ${err.message}`;
+        statusBox.classList.remove("d-none");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Giriş Yap";
+      }
+    }
+  </script>
+</body>
+</html>
