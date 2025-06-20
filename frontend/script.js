@@ -203,175 +203,114 @@ function populateFriendCheckboxes() {
 }
 
 // ✅ DOĞRU: Fonksiyon DOMContentLoaded'ın dışına alınmalı
-function createGroup() {
-  const name = document.getElementById("groupName").value.trim();
-  const checkboxes = document.querySelectorAll("#friendCheckboxes input:checked");
-  const members = Array.from(checkboxes).map(cb => cb.value);
-
-  if (!name || members.length === 0) {
-    alert("Grup adı girin ve en az 1 kişi seçin.");
-    return;
-  }
-
-  const creator = JSON.parse(localStorage.getItem("chitchat_user"));
-  const group = {
-    name,
-    members: [creator.email, ...members]
-  };
-
-  console.log("📦 Yeni grup oluşturuluyor:", group);
-  // localStorage'a grup kaydet
-let groups = JSON.parse(localStorage.getItem("chitchat_groups")) || [];
-groups.push(group);
-localStorage.setItem("chitchat_groups", JSON.stringify(groups));
-
-  alert("✅ Grup oluşturuldu (simülasyon)");
-
-  const modal = bootstrap.Modal.getInstance(document.getElementById("groupModal"));
-  modal.hide();
-}
-
-
-function sendMessage() {
-  const input = document.getElementById("messageInput");
-  const fileInput = document.getElementById("fileInput");
-  const text = input.value.trim();
-  const file = fileInput.files[0];
-  const user = JSON.parse(localStorage.getItem("chitchat_user"));
-
-   console.log("user.name:", user.name);
-  console.log("receiver:", selectedReceiver);
-
-  if (!selectedReceiver || (!text && !file)) return;
-
- const messageData = {
-  sender: user.name,
-  receiver: selectedReceiver.email,
-  gender: user.gender,
-  avatar: user.avatar,
-  text: text,
-  timestamp: new Date().toLocaleString()
-};
-
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      messageData.fileData = e.target.result;
-      messageData.fileName = file.name;
-      messageData.fileType = file.type;
-
-      sendToServer(messageData);
-    };
-    reader.readAsDataURL(file);
-  } else {
-    sendToServer(messageData);
-  }
-
-  function sendToServer(data) {
-    fetch(`${backendUrl}/api/messages`, {
+async function createGroup() {
+  const token = localStorage.getItem("token");
+  if (!token) return alert("Giriş yapmalısınız!");
+  const groupName = document.getElementById("groupName").value.trim();
+  const checkboxes = document.querySelectorAll("#friendCheckboxes input[type=checkbox]:checked");
+  const memberEmails = Array.from(checkboxes).map(cb => cb.value);
+  if (!groupName || memberEmails.length === 0) return alert("Grup adı ve en az bir üye seçmelisiniz.");
+  try {
+    const res = await fetch(`${backendUrl}/api/chat/rooms`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, avatar: user.avatar })
-    })
-      .then(async res => {
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.message || "Sunucuya mesaj gönderilemedi");
-  return data;
-})
-      .then(() => {
-        input.value = "";
-        fileInput.value = "";
-        loadMessages();
-      })
-      .catch(err => {
-        console.error("Mesaj gönderme hatası:", err);
-        alert("❌ Mesaj gönderilemedi.");
-      });
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      body: JSON.stringify({ name: groupName, members: memberEmails })
+    });
+    if (!res.ok) throw new Error("Grup oluşturulamadı");
+    alert("✅ Grup oluşturuldu!");
+    // Gerekirse grupları yeniden yükle
+    // renderUserList();
+    document.getElementById("groupName").value = "";
+    $("#groupModal").modal("hide");
+  } catch (err) {
+    alert("❌ Hata: " + err.message);
   }
 }
-document.getElementById("messageInput").addEventListener("keydown", function (e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault(); // Sayfanın yenilenmesini engeller
-    sendMessage();      // Mesajı gönder
-  }
-});
 
-function updateAvatar() {
-  const file = document.getElementById("updateAvatarInput").files[0];
-  if (!file) {
-    alert("Lütfen bir görsel seçin.");
-    return;
-  }
+// MESAJ GÖNDERME (API ENTEGRASYONU)
+async function sendMessage() {
+  const token = localStorage.getItem("token");
+  if (!token) return alert("Giriş yapmalısınız!");
+  if (!selectedReceiver) return alert("Lütfen bir kişi veya grup seçin.");
+  const messageInput = document.getElementById("messageInput");
+  const content = messageInput.value.trim();
+  if (!content) return;
 
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const avatarBase64 = e.target.result;
-    const user = JSON.parse(localStorage.getItem("chitchat_user"));
-    user.avatar = avatarBase64;
-    localStorage.setItem("chitchat_user", JSON.stringify(user));
-
-    $("#profileAvatar").attr("src", avatarBase64);
-    alert("✅ Profil fotoğrafı güncellendi.");
-  };
-  reader.readAsDataURL(file);
-}
-
-async function loadMessages() {
-  const user = JSON.parse(localStorage.getItem("chitchat_user"));
-  const area = document.getElementById("messageArea");
-  area.innerHTML = "";
-
-  if (!selectedReceiver) {
-    area.innerHTML = "<p class='text-muted'>Bir kullanıcı seçin.</p>";
-    return;
+  // Grup mu bireysel mi kontrolü
+  let endpoint = "";
+  let body = {};
+  if (selectedReceiver.email.startsWith("group:")) {
+    // Grup mesajı
+    const chatRoomId = selectedReceiver.name;
+    endpoint = `${backendUrl}/api/message/send`;
+    body = { chatRoomId, content };
+  } else {
+    // Direkt mesaj
+    endpoint = `${backendUrl}/api/chat/direct-messages`;
+    body = { receiverId: selectedReceiver.email, content };
   }
 
   try {
-    const res = await fetch(`${backendUrl}/api/messages?user1=${user.email}&user2=${selectedReceiver.email}`);
-
-    const messages = await res.json();
-
-    messages.forEach(msg => {
-      const align = msg.sender === user.name ? "text-end" : "text-start";
-      const bubbleClass = msg.sender === user.name ? "bg-primary text-white" : "bg-light";
-         const avatarImg = msg.avatar
-    ? `<img src="${msg.avatar}" class="rounded-circle me-2" style="width:30px; height:30px;">`
-    : `<img src="${msg.gender === "male" ? "img/avatar_male.png" : "img/avatar_female.png"}" class="rounded-circle me-2" style="width:30px; height:30px;">`;
-
-      let fileHTML = "";
-      if (msg.fileData) {
-        if (msg.fileType?.startsWith("image/")) {
-          fileHTML = `<img src="${msg.fileData}" alt="${msg.fileName}" style="max-width: 200px;" class="img-fluid rounded mt-2">`;
-        } else {
-          fileHTML = `<a href="${msg.fileData}" download="${msg.fileName}" class="btn btn-sm btn-outline-secondary mt-2">📎 ${msg.fileName}</a>`;
-        }
-      }
-
-area.innerHTML += `
-  <div class="d-flex ${align} mb-3">
-    ${align === "text-end" ? "" : avatarImg}
-    <div class="d-inline-block p-2 rounded ${bubbleClass}">
-      <strong>${msg.sender}:</strong> ${msg.text || ""}
-      ${fileHTML}
-      <div class="text-muted small">${msg.timestamp}</div>
-    </div>
-    ${align === "text-end" ? avatarImg : ""}
-  </div>
-`;
-if (msg.receiver === user.email && msg.sender !== user.name) {
-  showNotification(`📨 ${msg.sender} sana mesaj gönderdi.`);
-}
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      body: JSON.stringify(body)
     });
-
-    area.scrollTo({ top: area.scrollHeight, behavior: "smooth" });
-
+    if (!res.ok) throw new Error("Mesaj gönderilemedi");
+    messageInput.value = "";
+    loadMessages();
   } catch (err) {
-    area.innerHTML = `<div class="text-danger">❌ Mesajlar alınamadı.</div>`;
-    console.error("Mesaj getirme hatası:", err);
+    alert("❌ Hata: " + err.message);
   }
 }
 
- 
+// MESAJLARI ÇEKME (API ENTEGRASYONU)
+async function loadMessages() {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  if (!selectedReceiver) return;
+  let endpoint = "";
+  if (selectedReceiver.email.startsWith("group:")) {
+    // Grup mesajları
+    const chatRoomId = selectedReceiver.name;
+    endpoint = `${backendUrl}/api/message/chat/${chatRoomId}`;
+  } else {
+    // Direkt mesajlar (örnek: iki kullanıcının ortak chatRoomId'si olmalı)
+    // Burada backend'den iki kullanıcı arasındaki chatRoomId'yi bulmak gerekebilir
+    // Şimdilik email ile deniyoruz (gerekirse backend'e ek endpoint eklenir)
+    endpoint = `${backendUrl}/api/chat/rooms/${selectedReceiver.email}/messages`;
+  }
+  try {
+    const res = await fetch(endpoint, {
+      headers: { Authorization: "Bearer " + token }
+    });
+    if (!res.ok) throw new Error("Mesajlar alınamadı");
+    const messages = await res.json();
+    renderMessages(messages);
+  } catch (err) {
+    document.getElementById("messageArea").innerHTML = `<div class='text-danger'>${err.message}</div>`;
+  }
+}
+
+function renderMessages(messages) {
+  const area = document.getElementById("messageArea");
+  area.innerHTML = "";
+  if (!messages || messages.length === 0) {
+    area.innerHTML = `<div class='text-muted'>Hiç mesaj yok.</div>`;
+    return;
+  }
+  messages.forEach(msg => {
+    area.innerHTML += `<div><strong>${msg.senderName || msg.senderId}:</strong> ${msg.content}</div>`;
+  });
+  area.scrollTop = area.scrollHeight;
+}
+
 // Sohbet sayfası açıldığında çalışır
 window.onload = function () {
   //const token = localStorage.getItem("token");
@@ -405,36 +344,26 @@ function logout() {
   window.location.href = "index.html";
 }
 async function addFriend() {
+  const token = localStorage.getItem("token");
+  if (!token) return alert("Giriş yapmalısınız!");
   const email = document.getElementById("friendEmail").value.trim();
-  if (!email) {
-    alert("Lütfen bir e-posta girin.");
-    return;
-  }
-
+  if (!email) return alert("E-posta girin");
   try {
-    const res = await fetch(`${backendUrl}/api/users`);
-    const users = await res.json();
-    const match = users.find(u => u.email === email);
-
-    if (!match) {
-      alert("❌ Bu e-posta ile kayıtlı kullanıcı bulunamadı.");
-      return;
-    }
-
-    let friends = JSON.parse(localStorage.getItem("chitchat_friends")) || [];
-    if (friends.some(f => f.email === email)) {
-      alert("Zaten arkadaş listenizde.");
-      return;
-    }
-
-    friends.push({ name: match.name, gender: match.gender, email: match.email });
-    localStorage.setItem("chitchat_friends", JSON.stringify(friends));
-    renderUserList();
-    alert("✅ Arkadaş eklendi.");
+    const res = await fetch(`${backendUrl}/api/users/friends`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      body: JSON.stringify({ email })
+    });
+    if (!res.ok) throw new Error("Arkadaş eklenemedi");
+    alert("✅ Arkadaş eklendi!");
     document.getElementById("friendEmail").value = "";
+    // Gerekirse arkadaş listesini güncelle
+    // renderUserList();
   } catch (err) {
-    console.error("Arkadaş ekleme hatası:", err);
-    alert("❌ Bir hata oluştu.");
+    alert("❌ Hata: " + err.message);
   }
 }
 function showNotification(message) {

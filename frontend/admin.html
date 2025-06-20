@@ -9,54 +9,80 @@
 <body class="bg-light">
   <div class="container mt-5">
     <h2 class="mb-4 text-center text-primary">Admin Paneli</h2>
-<div class="input-group mb-3">
-  <input type="text" class="form-control" id="userSearch" placeholder="İsim veya e-posta ara...">
-  <button class="btn btn-outline-secondary" onclick="loadUsers()">Temizle</button>
-</div>
+
+    <!-- Kullanıcı Ekleme Formu -->
+    <form id="addUserForm" class="mb-4">
+      <div class="row g-2">
+        <div class="col">
+          <input type="text" class="form-control" id="addUserName" placeholder="İsim" required>
+        </div>
+        <div class="col">
+          <input type="email" class="form-control" id="addUserEmail" placeholder="E-posta" required>
+        </div>
+        <div class="col">
+          <select class="form-control" id="addUserGender" required>
+            <option value="">Cinsiyet</option>
+            <option value="male">Erkek</option>
+            <option value="female">Kadın</option>
+          </select>
+        </div>
+        <div class="col">
+          <input type="password" class="form-control" id="addUserPassword" placeholder="Şifre" required>
+        </div>
+        <div class="col">
+          <button type="submit" class="btn btn-success">Ekle</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="input-group mb-3">
+      <input type="text" class="form-control" id="userSearch" placeholder="İsim veya e-posta ara...">
+      <button class="btn btn-outline-secondary" onclick="loadUsers()">Temizle</button>
+    </div>
 
     <div id="adminContent" class="card p-4">
         <div class="row text-center mb-4">
-  <div class="col-md-3 col-6">
-    <div class="card bg-primary text-white p-3">
-      <h4 id="totalCount">0</h4>
-      <small>Toplam Kullanıcı</small>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="card bg-info text-white p-3">
-      <h4 id="maleCount">0</h4>
-      <small>Erkek</small>
-    </div>
-  </div>
-  <div class="col-md-3 col-6 mt-3 mt-md-0">
-    <div class="card bg-warning text-white p-3">
-      <h4 id="femaleCount">0</h4>
-      <small>Kadın</small>
-    </div>
-  </div>
-  <div class="col-md-3 col-6 mt-3 mt-md-0">
-    <div class="card bg-success text-white p-3">
-      <h4 id="verifiedCount">0</h4>
-      <small>Doğrulanmış</small>
-    </div>
-  </div>
-</div>
+          <div class="col-md-3 col-6">
+            <div class="card bg-primary text-white p-3">
+              <h4 id="totalCount">0</h4>
+              <small>Toplam Kullanıcı</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="card bg-info text-white p-3">
+              <h4 id="maleCount">0</h4>
+              <small>Erkek</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6 mt-3 mt-md-0">
+            <div class="card bg-warning text-white p-3">
+              <h4 id="femaleCount">0</h4>
+              <small>Kadın</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6 mt-3 mt-md-0">
+            <div class="card bg-success text-white p-3">
+              <h4 id="verifiedCount">0</h4>
+              <small>Doğrulanmış</small>
+            </div>
+          </div>
+        </div>
 
-      <h5 class="mb-3">👥 Kayıtlı Kullanıcılar</h5>
-      <table class="table table-bordered table-striped">
-        <thead>
-          <tr>
-            <th>İsim</th>
-            <th>E-posta</th>
-            <th>Cinsiyet</th>
-            <th>Durum</th>
-             <th>Son Giriş</th>
-          </tr>
-        </thead>
-        <tbody id="userTableBody">
-          <!-- JS ile doldurulacak -->
-        </tbody>
-      </table>
+        <h5 class="mb-3">👥 Kayıtlı Kullanıcılar</h5>
+        <table class="table table-bordered table-striped">
+          <thead>
+            <tr>
+              <th>İsim</th>
+              <th>E-posta</th>
+              <th>Cinsiyet</th>
+              <th>Durum</th>
+              <th>Son Giriş</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <!-- JS ile doldurulacak -->
+          </tbody>
+        </table>
     </div>
   </div>
 
@@ -66,7 +92,7 @@
     if (!confirm(`❗ ${email} adresli kullanıcıyı silmek istediğinize emin misiniz?`)) return;
 
     try {
-      const res = await fetch(`https://localhost:5001/api/users${encodeURIComponent(email)}`, {
+      const res = await fetch(`https://localhost:7030/api/users${encodeURIComponent(email)}`, {
         method: "DELETE"
       });
 
@@ -81,7 +107,7 @@
 
     async function loadUsers() {
   try {
-    const res = await fetch("https://localhost:5001/api/users/api/users");
+    const res = await fetch("https://localhost:7030/api/users/api/users");
     const users = await res.json();
 
     // 🔍 Arama kutusundan filtre
@@ -105,11 +131,12 @@
     filtered.forEach(u => {
       const row = `
         <tr>
-          <td>${u.name}</td>
+          <td><a href="#" onclick="showUserDetail('${u.email}');return false;">${u.name}</a></td>
           <td>${u.email}</td>
           <td>${u.gender === "male" ? "Erkek" : "Kadın"}</td>
           <td>
             <span class="badge bg-${u.avatar ? 'success' : 'secondary'}">${u.avatar ? 'Profil Var' : 'Yok'}</span>
+            <button class="btn btn-sm btn-primary ms-2" onclick="editUser('${u.email}')">Düzenle</button>
             <button class="btn btn-sm btn-danger ms-2" onclick="deleteUser('${u.email}')">Sil</button>
           </td>
            <td>${u.lastLogin || "-"}</td>
@@ -135,6 +162,71 @@
 
     window.onload = loadUsers;
 
+  // Kullanıcı ekleme formu submit
+  document.getElementById("addUserForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const name = document.getElementById("addUserName").value.trim();
+    const email = document.getElementById("addUserEmail").value.trim();
+    const gender = document.getElementById("addUserGender").value;
+    const password = document.getElementById("addUserPassword").value;
+
+    try {
+      const res = await fetch("https://localhost:7030/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, gender, password })
+      });
+      if (!res.ok) throw new Error("Kullanıcı eklenemedi");
+      alert("✅ Kullanıcı eklendi!");
+      loadUsers();
+      this.reset();
+    } catch (err) {
+      alert("❌ Hata: " + err.message);
+    }
+  });
+
+  // Kullanıcı düzenleme
+  async function editUser(email) {
+    try {
+      // Kullanıcıyı mevcut listeden bulmak için tekrar fetch
+      const res = await fetch(`https://localhost:7030/api/users/${encodeURIComponent(email)}`);
+      if (!res.ok) throw new Error("Kullanıcı bulunamadı");
+      const user = await res.json();
+      const newName = prompt("Yeni isim girin:", user.name);
+      if (newName && newName !== user.name) {
+        await updateUser(email, { name: newName });
+      }
+    } catch (err) {
+      alert("❌ Hata: " + err.message);
+    }
+  }
+
+  async function updateUser(email, updateData) {
+    try {
+      const res = await fetch(`https://localhost:7030/api/users/${encodeURIComponent(email)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData)
+      });
+      if (!res.ok) throw new Error("Güncelleme başarısız");
+      alert("✅ Kullanıcı güncellendi!");
+      loadUsers();
+    } catch (err) {
+      alert("❌ Hata: " + err.message);
+    }
+  }
+
+  // Kullanıcı detayını göster
+  async function showUserDetail(email) {
+    try {
+      const res = await fetch(`https://localhost:7030/api/users/${encodeURIComponent(email)}`);
+      if (!res.ok) throw new Error("Kullanıcı bulunamadı");
+      const user = await res.json();
+      alert("Kullanıcı Detayı:\n" + JSON.stringify(user, null, 2));
+    } catch (err) {
+      alert("❌ Hata: " + err.message);
+    }
+  }
 
     
   </script>

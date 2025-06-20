@@ -168,6 +168,7 @@ C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\staticwebassets\msbuild.buildMultiTargeting.WebApplication1.props
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\staticwebassets\msbuild.buildTransitive.WebApplication1.props
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\staticwebassets.pack.json
+C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebAppli.7D14BD69.Up2Date
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\WebApplication1.dll
 C:\Users\emir_\chitchatproject\backend\WebApplication1\WebApplication1\obj\Debug\net8.0\refint\WebApplication1.dll

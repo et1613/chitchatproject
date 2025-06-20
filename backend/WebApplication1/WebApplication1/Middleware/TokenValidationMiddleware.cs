@@ -12,21 +12,19 @@ namespace WebApplication1.Middleware
     public class TokenValidationMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ITokenService _tokenService;
         private readonly ILogger<TokenValidationMiddleware> _logger;
 
         public TokenValidationMiddleware(
             RequestDelegate next,
-            ITokenService tokenService,
             ILogger<TokenValidationMiddleware> logger)
         {
             _next = next;
-            _tokenService = tokenService;
             _logger = logger;
         }
 
         public async Task InvokeAsync(HttpContext context)
         {
+            var tokenService = context.RequestServices.GetRequiredService<ITokenService>();
             try
             {
                 // Skip token validation for authentication endpoints
@@ -52,7 +50,7 @@ namespace WebApplication1.Middleware
                     return;
                 }
 
-                if (!await _tokenService.ValidateRefreshTokenAsync(token, userId))
+                if (!await tokenService.ValidateRefreshTokenAsync(token, userId))
                 {
                     _logger.LogWarning($"Invalid token detected for user {userId}");
                     context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
