@@ -104,7 +104,7 @@ namespace WebApplication1.Services
 
     public interface IAuthService
     {
-        Task<(string accessToken, string refreshToken)> LoginAsync(string email, string password);
+        Task<AuthResponse> LoginAsync(string email, string password);
         Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null);
         Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshToken);
         Task LogoutAsync(string refreshToken);
@@ -165,7 +165,7 @@ namespace WebApplication1.Services
             _emailService = emailService;
         }
 
-        public async Task<(string accessToken, string refreshToken)> LoginAsync(string email, string password)
+        public async Task<AuthResponse> LoginAsync(string email, string password)
         {
             try
             {
@@ -218,7 +218,24 @@ namespace WebApplication1.Services
 
                 _logger.LogInformation($"User {user.Id} logged in successfully");
 
-                return (accessToken, refreshToken);
+                return new AuthResponse
+                {
+                    AccessToken = accessToken,
+                    RefreshToken = refreshToken,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(AccessTokenExpiryMinutes),
+                    User = new UserDto
+                    {
+                        Id = user.Id,
+                        Username = user.UserName,
+                        Email = user.Email,
+                        DisplayName = user.DisplayName,
+                        Role = user.Role,
+                        IsVerified = user.IsVerified,
+                        Status = user.Status,
+                        CreatedAt = user.CreatedAt,
+                        LastLoginAt = user.LastLoginAt
+                    }
+                };
             }
             catch (Exception ex)
             {
@@ -248,16 +265,15 @@ namespace WebApplication1.Services
                 // Create user
                 var newUser = new User
                 {
+                    Id = Guid.NewGuid().ToString(),
                     UserName = username,
                     Email = email,
+                    PasswordHash = _hashingService.HashPassword(password),
                     DisplayName = displayName ?? username,
                     CreatedAt = DateTime.UtcNow,
                     IsActive = true,
                     Role = UserRole.Member
                 };
-
-                // Hash password
-                newUser.PasswordHash = _hashingService.HashPassword(password);
 
                 // Save user
                 await _userRepository.AddAsync(newUser);

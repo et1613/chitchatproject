@@ -59,7 +59,7 @@ function togglePassword(inputId, btn) {
   btn.innerText = "Kayıt oluyor...";
 
   try {
-    const res = await fetch("https://localhost:5001/api/auth/register", {
+    const res = await fetch("https://localhost:7030/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name, gender, avatar: "" })

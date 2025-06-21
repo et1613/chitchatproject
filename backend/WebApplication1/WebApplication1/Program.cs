@@ -24,6 +24,7 @@ using WebApplication1.Middleware;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,7 +93,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            RoleClaimType = ClaimTypes.Role
         };
 
         // Configure SignalR to use JWT
@@ -186,7 +188,14 @@ app.UseRouting();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseTokenValidation();
+
+// ensure database is created
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.Database.EnsureDeleted();
+    dbContext.Database.EnsureCreated();
+}
 
 app.MapControllers();
 app.MapHub<ChatHub>("/chatHub");
@@ -259,6 +268,7 @@ using (var scope = app.Services.CreateScope())
             Email = "admin@chitchat.com",
             PasswordHash = hashingService.HashPassword("Admin123!"),
             DisplayName = "System Admin",
+            Role = UserRole.Admin,
             Status = UserStatus.Online,
             IsActive = true,
             IsVerified = true,

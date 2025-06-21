@@ -1,5 +1,38 @@
 let selectedReceiver = null;
-const backendUrl = "https://localhost:5001";
+const backendUrl = "https://localhost:7030";
+
+// Toast Bildirim Fonksiyonu
+function showToast(message, type = 'info') {
+  const toastContainer = document.getElementById('toastContainer');
+  if (!toastContainer) return; // Eğer container yoksa işlem yapma
+  const toast = document.createElement('div');
+  const toastClass = type === 'success' ? 'bg-success' : (type === 'error' ? 'bg-danger' : 'bg-primary');
+  
+  toast.className = `toast show align-items-center text-white ${toastClass} border-0 mb-2`;
+  toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
+  toast.setAttribute('aria-atomic', 'true');
+
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  `;
+  
+  toastContainer.appendChild(toast);
+
+  // 3 saniye sonra tostu kaldır
+  setTimeout(() => {
+    // Bootstrap 5'in Toast bileşenini manuel olarak gizle
+    const bsToast = bootstrap.Toast.getInstance(toast);
+    if (bsToast) {
+        bsToast.hide();
+    }
+    // DOM'dan kaldırmak için
+    setTimeout(() => toast.remove(), 500);
+  }, 3000);
+}
 
 // Eğer giriş yapılmamışsa sahte kullanıcı ile devam et
 const fallbackUser = JSON.parse(localStorage.getItem("user")) || {
@@ -18,7 +51,7 @@ function loadUser() {
     return;
   }
 
-  fetch(`${backendUrl}/api/me`, {
+  fetch(`${backendUrl}/api/User/profile`, {
     headers: { Authorization: "Bearer " + token }
   })
     .then(res => {
@@ -127,47 +160,79 @@ if (item.classList.contains("group-item")) {
     });
   });
 }
-function blockUser(email) {
-  let blocked = JSON.parse(localStorage.getItem("chitchat_blocked")) || [];
-  if (!blocked.includes(email)) {
-    blocked.push(email);
-    localStorage.setItem("chitchat_blocked", JSON.stringify(blocked));
-    alert("🚫 Kullanıcı engellendi.");
-    renderUserList(); // listeyi güncelle
+async function blockUser(email) {
+  const token = localStorage.getItem("token");
+  if (!confirm(`🚫 ${email} adresli kullanıcıyı engellemek istediğinize emin misiniz?`)) return;
+
+  try {
+    const res = await fetch(`${backendUrl}/api/users/block`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({ emailToBlock: email }),
+    });
+    if (!res.ok) throw new Error("Kullanıcı engellenemedi.");
+    showToast("🚫 Kullanıcı engellendi.", 'success');
+    renderUserList();
+    renderBlockedUsers();
+  } catch (err) {
+    showToast("❌ Hata: " + err.message, 'error');
   }
 }
-function renderBlockedUsers() {
-  const blocked = JSON.parse(localStorage.getItem("chitchat_blocked")) || [];
-  const friends = JSON.parse(localStorage.getItem("chitchat_friends")) || [];
-  const list = document.getElementById("blockedList");
 
+async function renderBlockedUsers() {
+  const token = localStorage.getItem("token");
+  const list = document.getElementById("blockedList");
   if (!list) return;
 
-  list.innerHTML = "";
+  try {
+    const res = await fetch(`${backendUrl}/api/users/blocked`, {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!res.ok) throw new Error("Engellenenler listesi alınamadı.");
+    
+    const blockedUsers = await res.json();
+    list.innerHTML = "";
 
-  if (blocked.length === 0) {
-    list.innerHTML = `<li class="list-group-item text-muted">Engellenmiş kullanıcı yok</li>`;
-    return;
+    if (blockedUsers.length === 0) {
+      list.innerHTML = `<li class="list-group-item text-muted">Engellenmiş kullanıcı yok</li>`;
+      return;
+    }
+
+    blockedUsers.forEach(user => {
+      const item = document.createElement("li");
+      item.className = "list-group-item d-flex justify-content-between align-items-center";
+      item.innerHTML = `
+        <span>${user.name} (${user.email})</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="unblockUser('${user.email}')">Kaldır</button>
+      `;
+      list.appendChild(item);
+    });
+  } catch(err) {
+    list.innerHTML = `<li class="list-group-item text-danger">${err.message}</li>`;
   }
-
-  blocked.forEach(email => {
-    const user = friends.find(f => f.email === email) || { name: email };
-    const item = document.createElement("li");
-    item.className = "list-group-item d-flex justify-content-between align-items-center";
-    item.innerHTML = `
-      <span>${user.name} (${email})</span>
-      <button class="btn btn-sm btn-outline-secondary" onclick="unblockUser('${email}')">Kaldır</button>
-    `;
-    list.appendChild(item);
-  });
 }
-function unblockUser(email) {
-  let blocked = JSON.parse(localStorage.getItem("chitchat_blocked")) || [];
-  blocked = blocked.filter(e => e !== email);
-  localStorage.setItem("chitchat_blocked", JSON.stringify(blocked));
-  alert("✅ Kullanıcının engeli kaldırıldı.");
-  renderUserList();
-  renderBlockedUsers(); // listeyi yenile
+
+async function unblockUser(email) {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await fetch(`${backendUrl}/api/users/unblock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({ emailToUnblock: email }),
+    });
+    if (!res.ok) throw new Error("Engelleme kaldırılamadı.");
+    showToast("✅ Kullanıcının engeli kaldırıldı.", 'success');
+    renderUserList();
+    renderBlockedUsers();
+  } catch (err) {
+    showToast("❌ Hata: " + err.message, 'error');
+  }
 }
 
 
@@ -205,11 +270,11 @@ function populateFriendCheckboxes() {
 // ✅ DOĞRU: Fonksiyon DOMContentLoaded'ın dışına alınmalı
 async function createGroup() {
   const token = localStorage.getItem("token");
-  if (!token) return alert("Giriş yapmalısınız!");
+  if (!token) return showToast("Giriş yapmalısınız!", 'error');
   const groupName = document.getElementById("groupName").value.trim();
   const checkboxes = document.querySelectorAll("#friendCheckboxes input[type=checkbox]:checked");
   const memberEmails = Array.from(checkboxes).map(cb => cb.value);
-  if (!groupName || memberEmails.length === 0) return alert("Grup adı ve en az bir üye seçmelisiniz.");
+  if (!groupName || memberEmails.length === 0) return showToast("Grup adı ve en az bir üye seçmelisiniz.", 'error');
   try {
     const res = await fetch(`${backendUrl}/api/chat/rooms`, {
       method: "POST",
@@ -220,53 +285,62 @@ async function createGroup() {
       body: JSON.stringify({ name: groupName, members: memberEmails })
     });
     if (!res.ok) throw new Error("Grup oluşturulamadı");
-    alert("✅ Grup oluşturuldu!");
+    showToast("✅ Grup oluşturuldu!", 'success');
     // Gerekirse grupları yeniden yükle
     // renderUserList();
     document.getElementById("groupName").value = "";
     $("#groupModal").modal("hide");
   } catch (err) {
-    alert("❌ Hata: " + err.message);
+    showToast("❌ Hata: " + err.message, 'error');
   }
 }
 
 // MESAJ GÖNDERME (API ENTEGRASYONU)
 async function sendMessage() {
   const token = localStorage.getItem("token");
-  if (!token) return alert("Giriş yapmalısınız!");
-  if (!selectedReceiver) return alert("Lütfen bir kişi veya grup seçin.");
+  if (!token) return showToast("Giriş yapmalısınız!", 'error');
+  if (!selectedReceiver) return showToast("Lütfen bir kişi veya grup seçin.", 'error');
+
   const messageInput = document.getElementById("messageInput");
+  const fileInput = document.getElementById("fileInput");
   const content = messageInput.value.trim();
-  if (!content) return;
+  const file = fileInput.files[0];
+
+  if (!content && !file) return; // Boş mesaj veya dosya gönderme
+
+  const formData = new FormData();
+  formData.append("content", content);
+  if (file) {
+    formData.append("file", file);
+  }
 
   // Grup mu bireysel mi kontrolü
-  let endpoint = "";
-  let body = {};
   if (selectedReceiver.email.startsWith("group:")) {
-    // Grup mesajı
-    const chatRoomId = selectedReceiver.name;
-    endpoint = `${backendUrl}/api/message/send`;
-    body = { chatRoomId, content };
+    formData.append("chatRoomId", selectedReceiver.name);
   } else {
-    // Direkt mesaj
-    endpoint = `${backendUrl}/api/chat/direct-messages`;
-    body = { receiverId: selectedReceiver.email, content };
+    formData.append("receiverId", selectedReceiver.email);
   }
+  
+  // Endpoint seçimi (dosya varsa farklı olabilir, backend'e bağlı)
+  // Şimdilik /api/message/send endpoint'inin FormData kabul ettiğini varsayıyoruz.
+  const endpoint = `${backendUrl}/api/message/send`; 
 
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token
+        // FormData için Content-Type tarayıcı tarafından ayarlanır
+        Authorization: "Bearer " + token,
       },
-      body: JSON.stringify(body)
+      body: formData,
     });
     if (!res.ok) throw new Error("Mesaj gönderilemedi");
+    
     messageInput.value = "";
+    fileInput.value = ""; // Dosya inputunu temizle
     loadMessages();
   } catch (err) {
-    alert("❌ Hata: " + err.message);
+    showToast("❌ Hata: " + err.message, 'error');
   }
 }
 
@@ -345,9 +419,9 @@ function logout() {
 }
 async function addFriend() {
   const token = localStorage.getItem("token");
-  if (!token) return alert("Giriş yapmalısınız!");
+  if (!token) return showToast("Giriş yapmalısınız!", 'error');
   const email = document.getElementById("friendEmail").value.trim();
-  if (!email) return alert("E-posta girin");
+  if (!email) return showToast("E-posta girin", 'error');
   try {
     const res = await fetch(`${backendUrl}/api/users/friends`, {
       method: "POST",
@@ -358,12 +432,12 @@ async function addFriend() {
       body: JSON.stringify({ email })
     });
     if (!res.ok) throw new Error("Arkadaş eklenemedi");
-    alert("✅ Arkadaş eklendi!");
+    showToast("✅ Arkadaş eklendi!", 'success');
     document.getElementById("friendEmail").value = "";
     // Gerekirse arkadaş listesini güncelle
     // renderUserList();
   } catch (err) {
-    alert("❌ Hata: " + err.message);
+    showToast("❌ Hata: " + err.message, 'error');
   }
 }
 function showNotification(message) {
@@ -389,21 +463,64 @@ if (audio) {
 function hideNotification() {
   document.getElementById("notification").style.display = "none";
 }
-function resetPassword() {
-  const email = document.getElementById("resetEmail").value.trim();
+async function resetPassword() {
+  const email = document.getElementById("resetEmail").value;
   if (!email) {
-    alert("Lütfen e-posta adresinizi girin.");
-    return;
+    return showToast("Lütfen şifresini sıfırlamak istediğiniz e-posta adresini girin.", 'error');
   }
 
-  alert("📧 Şifre sıfırlama bağlantısı e-posta ile gönderilecek (simülasyon).");
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${backendUrl}/api/security/forgot-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({ email: email }),
+    });
 
-  // Gerçek API'ye bağlamak istersen buraya POST isteği eklersin:
-  // fetch('/api/reset-password', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ email })
-  // });
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({ message: "İstek başarısız." }));
+        throw new Error(errData.message);
+    }
+
+    showToast("✅ Şifre sıfırlama linki e-posta adresinize gönderildi.", 'success');
+    document.getElementById("resetEmail").value = "";
+  } catch (err) {
+    showToast(`❌ Hata: ${err.message}`, 'error');
+  }
+}
+
+async function updateAvatar() {
+  const token = localStorage.getItem("token");
+  const fileInput = document.getElementById("updateAvatarInput");
+  const file = fileInput.files[0];
+
+  if (!file) {
+    return showToast("Lütfen bir görsel seçin.", 'error');
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch(`${backendUrl}/api/users/avatar`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) throw new Error("Profil fotoğrafı güncellenemedi.");
+
+    const data = await res.json();
+    $("#profileAvatar").attr("src", data.avatarUrl); // Sunucudan dönen URL'i kullan
+    showToast("✅ Profil fotoğrafı güncellendi.", 'success');
+  } catch (err) {
+    showToast("❌ Hata: " + err.message, 'error');
+  }
 }
 
 

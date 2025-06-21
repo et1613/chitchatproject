@@ -125,10 +125,8 @@ namespace WebApplication1.Models.Notifications
         public TimeSpan QuietHoursEnd { get; set; } = new TimeSpan(8, 0, 0); // 08:00
         public List<string> BlockedSenders { get; set; } = new();
 
-        [Column(TypeName = "jsonb")]
         public string EnabledTypesJson { get; set; } = "{}";
 
-        [Column(TypeName = "jsonb")]
         public string EnabledChannelsJson { get; set; } = "{}";
 
         [NotMapped]

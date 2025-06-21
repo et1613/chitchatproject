@@ -234,8 +234,8 @@ namespace WebApplication1.Data
                 entity.Property(e => e.InAppNotifications).HasDefaultValue(true);
                 entity.Property(e => e.CreatedAt);
                 entity.Property(e => e.UpdatedAt);
-                entity.Property(e => e.TypeSettingsJson).HasColumnType("jsonb");
-                entity.Property(e => e.PrioritySettingsJson).HasColumnType("jsonb");
+                entity.Property(e => e.TypeSettingsJson).HasColumnType("json");
+                entity.Property(e => e.PrioritySettingsJson).HasColumnType("json");
             });
 
             // Attachment configurations
@@ -391,26 +391,18 @@ namespace WebApplication1.Data
             });
 
             // NotificationPreferences configurations
-            // modelBuilder.Entity<NotificationPreferences>(entity =>
-            // {
-            //     entity.HasKey(e => e.UserId);
-            //     entity.Property(e => e.UserId).IsRequired();
-            //     entity.Property(e => e.EnabledTypes)
-            //         .HasConversion(notificationTypeBoolDictConverter)
-            //         .HasColumnType("json");
-            //     entity.Property(e => e.EnabledChannels)
-            //         .HasConversion(notificationChannelBoolDictConverter)
-            //         .HasColumnType("json");
-            //     entity.Property(e => e.BlockedSenders)
-            //         .HasConversion(stringListConverter)
-            //         .HasColumnType("json");
-            //     entity.Property(e => e.QuietHoursStart).IsRequired();
-            //     entity.Property(e => e.QuietHoursEnd).IsRequired();
-            //     entity.HasOne(np => np.User)
-            //         .WithOne(u => u.NotificationPreferences)
-            //         .HasForeignKey<NotificationPreferences>(np => np.UserId)
-            //         .OnDelete(DeleteBehavior.Cascade);
-            // });
+            modelBuilder.Entity<NotificationPreferences>(entity =>
+            {
+                entity.HasKey(e => e.UserId);
+
+                entity.HasOne(e => e.User)
+                    .WithOne(u => u.NotificationPreferences)
+                    .HasForeignKey<NotificationPreferences>(e => e.UserId);
+
+                entity.Property(e => e.EnabledTypesJson).HasColumnType("json");
+                entity.Property(e => e.EnabledChannelsJson).HasColumnType("json");
+                entity.Property(e => e.CustomSettings).IsRequired(false);
+            });
 
             // SecurityEvent configurations
             modelBuilder.Entity<SecurityEvent>(entity =>

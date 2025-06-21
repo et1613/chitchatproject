@@ -33,21 +33,7 @@ namespace WebApplication1.Controllers
         {
             try
             {
-                var (accessToken, refreshToken) = await _authService.LoginAsync(request.Email, request.Password);
-                
-                // Log the login event with IP and device info
-                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
-                var deviceInfo = HttpContext.Request.Headers["User-Agent"].ToString();
-                
-                // Create a response object that includes the tokens and user info
-                var response = new
-                {
-                    AccessToken = accessToken,
-                    RefreshToken = refreshToken,
-                    IpAddress = ipAddress,
-                    DeviceInfo = deviceInfo
-                };
-
+                var response = await _authService.LoginAsync(request.Email, request.Password);
                 return Ok(response);
             }
             catch (AuthException ex)

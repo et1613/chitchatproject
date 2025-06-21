@@ -61,5 +61,12 @@ namespace WebApplication1.Repositories
                 .Include(u => u.BlockedByUsers)
                 .FirstOrDefaultAsync(u => u.Id == id);
         }
+
+        public async Task<IEnumerable<User>> SearchUsersAsync(string query)
+        {
+            return await _context.Users
+                .Where(u => u.UserName.Contains(query) || u.Email.Contains(query))
+                .ToListAsync();
+        }
     }
 } 
