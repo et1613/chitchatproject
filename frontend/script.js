@@ -296,6 +296,7 @@ async function createGroup() {
 }
 
 // MESAJ GÖNDERME (API ENTEGRASYONU)
+// ✅ SignalR Entegreli sendMessage() fonksiyonu
 async function sendMessage() {
   const token = localStorage.getItem("token");
   if (!token) return showToast("Giriş yapmalısınız!", 'error');
@@ -315,63 +316,174 @@ async function sendMessage() {
   }
 
   // Grup mu bireysel mi kontrolü
+  let chatRoomId = null;
   if (selectedReceiver.email.startsWith("group:")) {
+    chatRoomId = selectedReceiver.name;
     formData.append("chatRoomId", selectedReceiver.name);
   } else {
     formData.append("receiverId", selectedReceiver.email);
+    // Bireysel chat için room ID'yi selectedReceiver email'i olarak kullan
+    chatRoomId = selectedReceiver.email;
   }
   
-  // Endpoint seçimi (dosya varsa farklı olabilir, backend'e bağlı)
-  // Şimdilik /api/message/send endpoint'inin FormData kabul ettiğini varsayıyoruz.
   const endpoint = `${backendUrl}/api/message/send`; 
 
   try {
+    // 1. ✅ REST API ile veritabanına kaydet (mevcut kod)
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {
-        // FormData için Content-Type tarayıcı tarafından ayarlanır
         Authorization: "Bearer " + token,
       },
       body: formData,
     });
-    if (!res.ok) throw new Error("Mesaj gönderilemedi");
     
+    if (!res.ok) throw new Error("Mesaj gönderilemedi");
+
+    // 2. ✅ SignalR ile real-time gönderim (YENİ EKLENEN)
+    if (isSignalRConnected && signalRConnection) {
+      try {
+        if (selectedReceiver.email.startsWith("group:")) {
+          // Grup mesajı gönder
+          await signalRConnection.invoke("SendMessageToRoom", chatRoomId, content);
+        } else {
+          // Bireysel mesaj gönder
+          await signalRConnection.invoke("SendPrivateMessage", selectedReceiver.email, content);
+        }
+        console.log("SignalR message sent successfully");
+      } catch (signalRError) {
+        console.error("SignalR send error:", signalRError);
+        // SignalR hata olsa bile REST API başarılıysa işlem devam etsin
+      }
+    }
+    
+    // 3. ✅ Input'ları temizle
     messageInput.value = "";
-    fileInput.value = ""; // Dosya inputunu temizle
-    loadMessages();
+    fileInput.value = "";
+    
+    // 4. ✅ NOT: loadMessages() çağırmıyoruz, çünkü SignalR real-time olarak mesajı ekleyecek
+    // loadMessages(); // Bu satırı kaldırdık, SignalR ile real-time gelecek
+
   } catch (err) {
     showToast("❌ Hata: " + err.message, 'error');
   }
 }
 
-// MESAJLARI ÇEKME (API ENTEGRASYONU)
+// ✅ SignalR Entegreli loadMessages() fonksiyonu
 async function loadMessages() {
   const token = localStorage.getItem("token");
   if (!token) return;
   if (!selectedReceiver) return;
+
   let endpoint = "";
+  let chatRoomId = null;
+
   if (selectedReceiver.email.startsWith("group:")) {
     // Grup mesajları
-    const chatRoomId = selectedReceiver.name;
+    chatRoomId = selectedReceiver.name;
     endpoint = `${backendUrl}/api/message/chat/${chatRoomId}`;
   } else {
-    // Direkt mesajlar (örnek: iki kullanıcının ortak chatRoomId'si olmalı)
-    // Burada backend'den iki kullanıcı arasındaki chatRoomId'yi bulmak gerekebilir
-    // Şimdilik email ile deniyoruz (gerekirse backend'e ek endpoint eklenir)
+    // Direkt mesajlar
+    chatRoomId = selectedReceiver.email;
     endpoint = `${backendUrl}/api/chat/rooms/${selectedReceiver.email}/messages`;
   }
+
   try {
+    // 1. ✅ REST API ile geçmiş mesajları yükle (mevcut kod)
     const res = await fetch(endpoint, {
       headers: { Authorization: "Bearer " + token }
     });
+    
     if (!res.ok) throw new Error("Mesajlar alınamadı");
     const messages = await res.json();
     renderMessages(messages);
+
+    // 2. ✅ SignalR ile chat room'a katıl (YENİ EKLENEN)
+    if (isSignalRConnected && signalRConnection) {
+      try {
+        // Önceki room'dan ayrıl
+        if (window.currentChatRoom && window.currentChatRoom !== chatRoomId) {
+          await signalRConnection.invoke("LeaveRoom", window.currentChatRoom);
+          console.log(`Left previous room: ${window.currentChatRoom}`);
+        }
+
+        // Yeni room'a katıl
+        await signalRConnection.invoke("JoinRoom", chatRoomId);
+        window.currentChatRoom = chatRoomId; // Mevcut room'u kaydet
+        console.log(`Joined room: ${chatRoomId}`);
+
+        // Bağlantı durumunu güncelle
+        updateConnectionStatus("Bağlı - " + selectedReceiver.name, "success");
+
+      } catch (signalRError) {
+        console.error("SignalR room join error:", signalRError);
+        updateConnectionStatus("Bağlı (Room Hatası)", "warning");
+      }
+    }
+
   } catch (err) {
     document.getElementById("messageArea").innerHTML = `<div class='text-danger'>${err.message}</div>`;
   }
 }
 
+// ✅ YENİ EKLENEN: Real-time mesajı chat'e eklemek için renderMessages'ı güncelle
+function renderMessages(messages) {
+  const area = document.getElementById("messageArea");
+  area.innerHTML = "";
+  
+  if (!messages || messages.length === 0) {
+    area.innerHTML = `<div class='text-muted'>Hiç mesaj yok.</div>`;
+    return;
+  }
+  
+  messages.forEach(msg => {
+    addMessageToChat(
+      msg.senderName || msg.senderId || msg.sender, 
+      msg.content || msg.message, 
+      msg.timestamp || msg.createdAt || new Date()
+    );
+  });
+  
+  area.scrollTop = area.scrollHeight;
+}
+
+// ✅ YENİ EKLENEN: Mesajı chat'e eklemek için helper fonksiyon
+function addMessageToChat(sender, content, timestamp) {
+  const messageArea = document.getElementById("messageArea");
+  
+  // Timestamp formatla
+  const time = new Date(timestamp).toLocaleTimeString('tr-TR', {
+    hour: '2-digit', 
+    minute: '2-digit'
+  });
+  
+  // Mevcut kullanıcının kendi mesajını farklı stillendir
+  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  const isOwnMessage = sender === currentUser.email || sender === currentUser.name;
+  
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `mb-2 p-2 rounded ${isOwnMessage ? 'bg-primary text-white ms-5' : 'bg-light me-5'}`;
+  messageDiv.innerHTML = `
+    ${!isOwnMessage ? `<strong>${sender}:</strong> ` : ''}
+    ${content}
+    <small class="d-block mt-1 ${isOwnMessage ? 'text-light' : 'text-muted'}">${time}</small>
+  `;
+  
+  messageArea.appendChild(messageDiv);
+  messageArea.scrollTop = messageArea.scrollHeight;
+}
+
+// ✅ YENİ EKLENEN: chat.html'deki addRealTimeMessage fonksiyonunu güncelle
+// Bu fonksiyon chat.html'de SignalR event'inde çağrılacak
+function addRealTimeMessage(sender, content, timestamp) {
+  addMessageToChat(sender, content, timestamp);
+  
+  // Eğer şu anda farklı bir room'daysa mesajı gösterme
+  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  if (sender !== currentUser.email && sender !== currentUser.name) {
+    showNotification(`${sender}: ${content}`);
+  }
+}
 function renderMessages(messages) {
   const area = document.getElementById("messageArea");
   area.innerHTML = "";
