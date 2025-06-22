@@ -204,6 +204,13 @@ namespace WebApplication1.Services
                     throw new Exception("Account is deactivated");
                 }
 
+                // Check if email is verified (except for admin/superadmin)
+                if (!user.IsVerified && user.Role != UserRole.Admin && user.Role != UserRole.SuperAdmin)
+                {
+                    _logger.LogWarning($"Login attempt failed: Email not verified for user {user.Id}");
+                    throw new AuthException("E-posta adresiniz doğrulanmamış. Lütfen e-postanızı kontrol edin.", AuthErrorType.EmailNotVerified);
+                }
+
                 // Reset failed login attempts on successful login
                 await ResetFailedLoginAttemptsAsync(user.Id);
 
