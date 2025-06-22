@@ -44,6 +44,9 @@ namespace WebApplication1.Models.Users
 
         public bool IsVerified { get; set; } = false;
 
+        public string? EmailVerificationToken { get; set; }
+        public DateTime? EmailVerificationTokenExpiresAt { get; set; }
+
         public NotificationSettings? NotificationSettings { get; set; }
 
         public virtual UserSettings? UserSettings { get; set; }

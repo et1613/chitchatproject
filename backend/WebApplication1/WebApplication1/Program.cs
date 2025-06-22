@@ -183,7 +183,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles();
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "../../../frontend")),
+    RequestPath = ""
+});
+
 app.UseRouting();
 app.UseCors("AllowAll");
 app.UseAuthentication();

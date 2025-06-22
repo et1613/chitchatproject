@@ -248,48 +248,67 @@ namespace WebApplication1.Services
         {
             try
             {
-                // Check if email is already in use
-                var existingUser = await _userRepository.GetByEmailAsync(email);
-                if (existingUser != null)
-                {
-                    throw new AuthException("Email is already in use", AuthErrorType.InvalidCredentials);
-                }
+                if (await _userRepository.GetByEmailAsync(email) != null)
+                    throw new AuthException("User with this email already exists", AuthErrorType.InvalidCredentials);
 
-                // Check if username is already in use
-                var existingUsername = await _userRepository.GetByUsernameAsync(username);
-                if (existingUsername != null)
-                {
-                    throw new AuthException("Username is already in use", AuthErrorType.InvalidCredentials);
-                }
+                if (await _context.Users.AnyAsync(u => u.UserName == username))
+                    throw new AuthException("Username is already taken", AuthErrorType.InvalidCredentials);
 
-                // Create user
-                var newUser = new User
+                var passwordHash = _hashingService.HashPassword(password);
+
+                var user = new User
                 {
                     Id = Guid.NewGuid().ToString(),
                     UserName = username,
                     Email = email,
-                    PasswordHash = _hashingService.HashPassword(password),
+                    PasswordHash = passwordHash,
                     DisplayName = displayName ?? username,
+                    Role = UserRole.Member,
+                    IsActive = true, 
+                    IsVerified = false,
                     CreatedAt = DateTime.UtcNow,
-                    IsActive = true,
-                    Role = UserRole.Member
+                    Status = UserStatus.Offline,
+                    EmailVerificationToken = Guid.NewGuid().ToString("N"),
+                    EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24)
                 };
 
-                // Save user
-                await _userRepository.AddAsync(newUser);
+                await _userRepository.AddAsync(user);
 
-                // Generate tokens
-                var accessToken = GenerateJwtToken(newUser);
-                var refreshToken = await _tokenService.GenerateRefreshTokenAsync(newUser.Id);
+                await SendVerificationEmailAsync(user);
 
-                _logger.LogInformation($"User {newUser.Id} registered successfully");
+                var accessToken = GenerateJwtToken(user);
+                var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user.Id);
+
+                _logger.LogInformation($"User {user.Id} registered successfully. Verification email sent.");
 
                 return (accessToken, refreshToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error during registration for email {email}");
+                _logger.LogError(ex, "Error during registration");
                 throw;
+            }
+        }
+
+        private async Task SendVerificationEmailAsync(User user)
+        {
+            if (user.EmailVerificationToken == null) return;
+
+            var verificationUrl = $"{_configuration["App:ClientUrl"]}/verify-email.html?userId={user.Id}&token={user.EmailVerificationToken}";
+
+            var emailSubject = "ChitChat - Verify Your Email";
+            var emailBody = $"<p>Please verify your email by clicking the link below:</p>" +
+                            $"<a href='{verificationUrl}'>Verify Email</a>" +
+                            $"<p>This link will expire in 24 hours.</p>";
+
+            try
+            {
+                await _emailService.SendEmailAsync(user.Email, emailSubject, emailBody);
+                _logger.LogInformation($"Verification email sent to {user.Email}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to send verification email to {user.Email}");
             }
         }
 
@@ -593,18 +612,17 @@ namespace WebApplication1.Services
                 }
 
                 // Validate token
-                if (!await _tokenService.ValidateRefreshTokenAsync(token, userId))
+                if (user.EmailVerificationToken != token || user.EmailVerificationTokenExpiresAt < DateTime.UtcNow)
                 {
-                    _logger.LogWarning($"Email verification failed: Invalid token for user {userId}");
+                    _logger.LogWarning($"Email verification failed: Invalid or expired token for user {userId}");
                     return false;
                 }
 
                 // Update user verification status
                 user.IsVerified = true;
+                user.EmailVerificationToken = null;
+                user.EmailVerificationTokenExpiresAt = null;
                 await _userRepository.UpdateAsync(user);
-
-                // Revoke the verification token
-                await _tokenService.RevokeRefreshTokenAsync(token);
 
                 _logger.LogInformation($"Email verified successfully for user {userId}");
                 return true;
@@ -612,7 +630,7 @@ namespace WebApplication1.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error verifying email for user {userId}");
-                throw;
+                return false;
             }
         }
 

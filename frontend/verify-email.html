@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChitChat - E-posta Doğrulama</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container text-center mt-5">
+        <h1 class="mb-4 text-success">ChitChat - E-posta Doğrulama</h1>
+        <div id="status" class="alert d-none" role="alert"></div>
+        <a href="index.html" class="btn btn-primary mt-3 d-none" id="login-button">Giriş Yap</a>
+    </div>
+
+    <script>
+        async function verifyEmail() {
+            const statusBox = document.getElementById("status");
+            const loginButton = document.getElementById("login-button");
+            const params = new URLSearchParams(window.location.search);
+            const userId = params.get("userId");
+            const token = params.get("token");
+
+            if (!userId || !token) {
+                statusBox.className = "alert alert-danger";
+                statusBox.innerText = "❌ Geçersiz doğrulama linki.";
+                statusBox.classList.remove("d-none");
+                return;
+            }
+
+            statusBox.className = "alert alert-info";
+            statusBox.innerText = "E-posta adresiniz doğrulanıyor...";
+            statusBox.classList.remove("d-none");
+
+            try {
+                const res = await fetch("https://localhost:7030/api/auth/verify-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId, token })
+                });
+
+                if (!res.ok) {
+                    throw new Error("E-posta doğrulama başarısız oldu.");
+                }
+
+                const data = await res.json();
+
+                if (data.success) {
+                    statusBox.className = "alert alert-success";
+                    statusBox.innerText = "✅ E-posta adresiniz başarıyla doğrulandı. Şimdi giriş yapabilirsiniz.";
+                    loginButton.classList.remove("d-none");
+                } else {
+                    throw new Error("E-posta doğrulama başarısız oldu.");
+                }
+
+            } catch (err) {
+                statusBox.className = "alert alert-danger";
+                statusBox.innerText = `❌ ${err.message}`;
+            } finally {
+                statusBox.classList.remove("d-none");
+            }
+        }
+
+        window.onload = verifyEmail;
+    </script>
+</body>
+</html> 
