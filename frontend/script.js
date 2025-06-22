@@ -96,7 +96,7 @@ renderUserList(); // kullanıcıları yükle
   loadMessages();
   // Kullanıcı listesini göster
 
-
+  fetchAndStoreFriends();
 }
 
 function renderUserList(filter = "") {
@@ -309,64 +309,91 @@ async function sendMessage() {
 
   if (!content && !file) return; // Boş mesaj veya dosya gönderme
 
-  const formData = new FormData();
-  formData.append("content", content);
-  if (file) {
-    formData.append("file", file);
-  }
-
-  // Grup mu bireysel mi kontrolü
   let chatRoomId = null;
-  if (selectedReceiver.email.startsWith("group:")) {
-    chatRoomId = selectedReceiver.name;
-    formData.append("chatRoomId", selectedReceiver.name);
-  } else {
-    formData.append("receiverId", selectedReceiver.email);
-    // Bireysel chat için room ID'yi selectedReceiver email'i olarak kullan
-    chatRoomId = selectedReceiver.email;
-  }
-  
-  const endpoint = `${backendUrl}/api/message/send`; 
+  let isGroup = selectedReceiver.email.startsWith("group:");
 
+  if (isGroup) {
+    chatRoomId = selectedReceiver.name;
+  } else {
+    // Birebir sohbet için oda oluştur veya bul
+    const userData = JSON.parse(localStorage.getItem("chitchat_user") || '{}');
+    const emails = [userData.email, selectedReceiver.email].sort();
+    const roomName = emails.join("_");
+    // Oda oluşturma isteği
+    try {
+      const res = await fetch(`${backendUrl}/api/chat/rooms`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token
+        },
+        body: JSON.stringify({ name: roomName, members: emails })
+      });
+      if (!res.ok) throw new Error("Chat odası oluşturulamadı");
+      const room = await res.json();
+      chatRoomId = room.id || room.Id || room._id || roomName; // Fallback olarak oda adını kullan
+    } catch (err) {
+      showToast("❌ Oda oluşturulamadı: " + err.message, 'error');
+      return;
+    }
+  }
+
+  // 1. Önce metin mesajını gönder
+  let messageId = null;
   try {
-    // 1. ✅ REST API ile veritabanına kaydet (mevcut kod)
-    const res = await fetch(endpoint, {
+    const res = await fetch(`${backendUrl}/api/message/send`, {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + token,
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
       },
-      body: formData,
+      body: JSON.stringify({
+        chatRoomId: chatRoomId,
+        content: content,
+        attachmentUrls: []
+      })
     });
-    
     if (!res.ok) throw new Error("Mesaj gönderilemedi");
-
-    // 2. ✅ SignalR ile real-time gönderim (YENİ EKLENEN)
-    if (isSignalRConnected && signalRConnection) {
-      try {
-        if (selectedReceiver.email.startsWith("group:")) {
-          // Grup mesajı gönder
-          await signalRConnection.invoke("SendMessageToRoom", chatRoomId, content);
-        } else {
-          // Bireysel mesaj gönder
-          await signalRConnection.invoke("SendPrivateMessage", selectedReceiver.email, content);
-        }
-        console.log("SignalR message sent successfully");
-      } catch (signalRError) {
-        console.error("SignalR send error:", signalRError);
-        // SignalR hata olsa bile REST API başarılıysa işlem devam etsin
-      }
-    }
-    
-    // 3. ✅ Input'ları temizle
-    messageInput.value = "";
-    fileInput.value = "";
-    
-    // 4. ✅ NOT: loadMessages() çağırmıyoruz, çünkü SignalR real-time olarak mesajı ekleyecek
-    // loadMessages(); // Bu satırı kaldırdık, SignalR ile real-time gelecek
-
+    const message = await res.json();
+    messageId = message.id || message.Id || message._id;
   } catch (err) {
-    showToast("❌ Hata: " + err.message, 'error');
+    showToast("❌ Mesaj gönderilemedi: " + err.message, 'error');
+    return;
   }
+
+  // 2. Dosya varsa upload et
+  if (file && messageId) {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(`${backendUrl}/api/file/upload?messageId=${messageId}`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token
+        },
+        body: formData
+      });
+      if (!res.ok) throw new Error("Dosya yüklenemedi");
+      // Dosya başarıyla yüklendi
+    } catch (err) {
+      showToast("❌ Dosya yüklenemedi: " + err.message, 'error');
+      // Dosya yüklenemese bile mesaj gönderildiği için devam edelim
+    }
+  }
+
+  // 3. SignalR ile real-time gönderim (YENİ EKLENEN)
+  if (isSignalRConnected && signalRConnection) {
+    try {
+      await signalRConnection.invoke("SendMessage", chatRoomId, content);
+      console.log("SignalR message sent successfully");
+    } catch (signalRError) {
+      console.error("SignalR send error:", signalRError);
+    }
+  }
+
+  // 4. Input'ları temizle
+  messageInput.value = "";
+  fileInput.value = "";
 }
 
 // ✅ SignalR Entegreli loadMessages() fonksiyonu
@@ -385,7 +412,7 @@ async function loadMessages() {
   } else {
     // Direkt mesajlar
     chatRoomId = selectedReceiver.email;
-    endpoint = `${backendUrl}/api/chat/rooms/${selectedReceiver.email}/messages`;
+    endpoint = `${backendUrl}/api/message/chat/${selectedReceiver.email}`;
   }
 
   try {
@@ -403,12 +430,12 @@ async function loadMessages() {
       try {
         // Önceki room'dan ayrıl
         if (window.currentChatRoom && window.currentChatRoom !== chatRoomId) {
-          await signalRConnection.invoke("LeaveRoom", window.currentChatRoom);
+          await signalRConnection.invoke("LeaveChatRoom", window.currentChatRoom);
           console.log(`Left previous room: ${window.currentChatRoom}`);
         }
 
         // Yeni room'a katıl
-        await signalRConnection.invoke("JoinRoom", chatRoomId);
+        await signalRConnection.invoke("JoinChatRoom", chatRoomId);
         window.currentChatRoom = chatRoomId; // Mevcut room'u kaydet
         console.log(`Joined room: ${chatRoomId}`);
 
@@ -535,19 +562,18 @@ async function addFriend() {
   const email = document.getElementById("friendEmail").value.trim();
   if (!email) return showToast("E-posta girin", 'error');
   try {
-    const res = await fetch(`${backendUrl}/api/users/friends`, {
+    const res = await fetch(`${backendUrl}/api/user/friends/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token
       },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ FriendEmail: email })
     });
     if (!res.ok) throw new Error("Arkadaş eklenemedi");
     showToast("✅ Arkadaş eklendi!", 'success');
     document.getElementById("friendEmail").value = "";
-    // Gerekirse arkadaş listesini güncelle
-    // renderUserList();
+    await fetchAndStoreFriends();
   } catch (err) {
     showToast("❌ Hata: " + err.message, 'error');
   }
@@ -632,6 +658,29 @@ async function updateAvatar() {
     showToast("✅ Profil fotoğrafı güncellendi.", 'success');
   } catch (err) {
     showToast("❌ Hata: " + err.message, 'error');
+  }
+}
+
+async function fetchAndStoreFriends() {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  try {
+    const res = await fetch(`${backendUrl}/api/user/friends`, {
+      headers: { Authorization: "Bearer " + token }
+    });
+    if (!res.ok) throw new Error("Arkadaşlar alınamadı");
+    const friends = await res.json();
+    // Backend'den gelen isimleri frontend ile uyumlu hale getir
+    const mapped = friends.map(f => ({
+      name: f.displayName || f.userName || f.email,
+      email: f.email,
+      avatar: f.profilePicture || "",
+      gender: f.gender || "unknown"
+    }));
+    localStorage.setItem("chitchat_friends", JSON.stringify(mapped));
+    renderUserList();
+  } catch (err) {
+    // Hata durumunda localStorage'daki eski listeyi kullanmaya devam et
   }
 }
 

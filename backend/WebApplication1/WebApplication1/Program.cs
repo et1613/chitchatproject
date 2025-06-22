@@ -135,6 +135,7 @@ builder.Services.AddScoped<IStorageService, StorageService>();
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<IDigitalSignatureService, DigitalSignatureService>();
+builder.Services.AddScoped<DigitalSignatureService>();
 builder.Services.AddScoped<ISignatureService>(sp => sp.GetRequiredService<DigitalSignatureService>());
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IUserService, UserService>();

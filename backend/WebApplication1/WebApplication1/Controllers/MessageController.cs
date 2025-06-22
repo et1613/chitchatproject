@@ -43,7 +43,12 @@ namespace WebApplication1.Controllers
                     attachmentUrls: request.AttachmentUrls
                 );
 
-                return Ok(message);
+                return Ok(new {
+                    id = message.Id,
+                    senderId = message.SenderId,
+                    content = message.Content,
+                    timestamp = message.Timestamp
+                });
             }
             catch (Exception ex)
             {

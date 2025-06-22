@@ -468,6 +468,42 @@ namespace WebApplication1.Controllers
                 return StatusCode(500, "Error updating user preferences");
             }
         }
+
+        [HttpPost("friends/add")]
+        public async Task<IActionResult> AddFriend([FromBody] AddFriendRequest request)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var friend = await _userService.GetUserByEmailAsync(request.FriendEmail);
+            if (friend == null)
+                return NotFound(new { error = "Kullanıcı bulunamadı" });
+
+            var result = await _userService.AddFriendAsync(userId, friend.Id);
+            if (!result)
+                return BadRequest(new { error = "Arkadaş eklenemedi veya zaten ekli" });
+
+            return Ok(new { success = true });
+        }
+
+        [HttpGet("friends")]
+        public async Task<IActionResult> GetFriends()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var friends = await _userService.GetFriendsAsync(userId);
+            var friendList = friends.Select(f => new {
+                f.Id,
+                f.UserName,
+                f.Email,
+                f.DisplayName
+            });
+
+            return Ok(friendList);
+        }
     }
 
     public class RegisterRequest
@@ -535,5 +571,10 @@ namespace WebApplication1.Controllers
     public class UpdatePreferencesRequest
     {
         public required Dictionary<string, object> Preferences { get; set; }
+    }
+
+    public class AddFriendRequest
+    {
+        public string FriendEmail { get; set; }
     }
 } 

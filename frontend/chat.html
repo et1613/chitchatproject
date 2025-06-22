@@ -170,17 +170,13 @@
     // SignalR event listeners
     function setupSignalREventListeners() {
       // Yeni mesaj geldiğinde
-      signalRConnection.on("ReceiveMessage", function (user, message, timestamp) {
-        console.log("Real-time message received:", { user, message, timestamp });
-        
-        // Mesajı chat'e ekle
-        addRealTimeMessage(user, message, timestamp);
-        
-        // Bildirim göster (eğer farklı kullanıcıdan geliyorsa)
-        const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
-        if (user !== currentUser.email) {
-          showNotification(`${user}: ${message}`);
-        }
+      signalRConnection.on("ReceiveMessage", function (message) {
+        console.log("Real-time message received:", message);
+        // message.sender, message.senderId, message.content, message.timestamp
+        const sender = message.sender?.email || message.senderId || "Bilinmeyen";
+        const content = message.content;
+        const timestamp = message.timestamp;
+        addRealTimeMessage(sender, content, timestamp);
       });
 
       // Kullanıcı chat'e katıldı

@@ -146,7 +146,7 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var chatRoom = await _chatService.CreateChatRoomAsync(request.Name, request.Description, userId);
-                return Ok(chatRoom);
+                return Ok(new { id = chatRoom.Id, name = chatRoom.Name, description = chatRoom.Description });
             }
             catch (Exception ex)
             {
