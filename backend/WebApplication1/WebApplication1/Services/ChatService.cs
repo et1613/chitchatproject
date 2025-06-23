@@ -842,6 +842,54 @@ namespace WebApplication1.Services
                 throw;
             }
         }
+
+        /// <summary>
+        /// Finds an existing 1:1 chat room for two users, or creates one if it doesn't exist.
+        /// </summary>
+        public async Task<ChatRoom> GetOrCreateDirectChatRoomAsync(string userId1, string userId2)
+        {
+            if (string.IsNullOrEmpty(userId1) || string.IsNullOrEmpty(userId2))
+                throw new ArgumentException("User IDs cannot be null or empty");
+            if (userId1 == userId2)
+                throw new ArgumentException("Cannot create a direct chat with yourself");
+
+            // Always order IDs to ensure uniqueness regardless of order
+            var ids = new List<string> { userId1, userId2 };
+            ids.Sort();
+            var sortedId1 = ids[0];
+            var sortedId2 = ids[1];
+
+            // Try to find an existing private chat room with exactly these two participants
+            var existingRoom = await _context.ChatRooms
+                .Include(r => r.Participants)
+                .Where(r => r.IsPrivate && r.Participants.Count == 2)
+                .FirstOrDefaultAsync(r =>
+                    r.Participants.Any(p => p.Id == sortedId1) &&
+                    r.Participants.Any(p => p.Id == sortedId2)
+                );
+            if (existingRoom != null)
+                return existingRoom;
+
+            // Create new private chat room
+            var user1 = await _userRepository.GetByIdAsync(sortedId1);
+            var user2 = await _userRepository.GetByIdAsync(sortedId2);
+            if (user1 == null || user2 == null)
+                throw new ArgumentException("One or both users not found");
+
+            var room = new ChatRoom
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = $"{user1.UserName} & {user2.UserName}",
+                IsPrivate = true,
+                CreatedAt = DateTime.UtcNow,
+                AdminId = sortedId1, // Arbitrary, could be either
+                Admin = user1,
+                Participants = new List<User> { user1, user2 }
+            };
+            _context.ChatRooms.Add(room);
+            await _context.SaveChangesAsync();
+            return room;
+        }
     }
 
     public class WebSocketMessage

@@ -3,76 +3,12 @@
   "WorkspaceRootPath": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\hubs\\chathub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\hubs\\chathub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\repositories\\userrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\repositories\\userrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\securitycontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\securitycontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\users\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\users\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\requests\\chatrequests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\requests\\chatrequests.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\messagecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\messagecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\dtos\\messagehistorydto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\dtos\\messagehistorydto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\enums\\messagestatus.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\enums\\messagestatus.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\messages\\messagebackup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\messages\\messagebackup.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\messages\\messagehistory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\messages\\messagehistory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\messageservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\messageservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\models\\messages\\message.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\models\\messages\\message.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\services\\tokenservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\services\\tokenservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\middleware\\tokenvalidationmiddleware.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\middleware\\tokenvalidationmiddleware.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -82,171 +18,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 14,
+          "SelectedChildIndex": 0,
           "Children": [
             {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "ChatHub.cs",
+              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Hubs\\ChatHub.cs",
+              "RelativeDocumentMoniker": "WebApplication1\\Hubs\\ChatHub.cs",
+              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Hubs\\ChatHub.cs",
+              "RelativeToolTip": "WebApplication1\\Hubs\\ChatHub.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-06-23T08:38:02.917Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "AuthService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\AuthService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\AuthService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\AuthService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\AuthService.cs",
-              "ViewState": "AgIAAPMAAAAAAAAAAAD4vwABAAAQAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-22T11:41:21.952Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "UserRepository.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Repositories\\UserRepository.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Repositories\\UserRepository.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Repositories\\UserRepository.cs",
-              "RelativeToolTip": "WebApplication1\\Repositories\\UserRepository.cs",
-              "ViewState": "AgIAADUAAAAAAAAAAAAMwEcAAAACAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-21T13:07:38.933Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "AuthController.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\AuthController.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Controllers\\AuthController.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\AuthController.cs",
-              "RelativeToolTip": "WebApplication1\\Controllers\\AuthController.cs",
-              "ViewState": "AgIAAC4AAAAAAAAAAAAMwDwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-21T13:06:26.785Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "SecurityController.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\SecurityController.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Controllers\\SecurityController.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\SecurityController.cs",
-              "RelativeToolTip": "WebApplication1\\Controllers\\SecurityController.cs",
-              "ViewState": "AgIAAAgCAAAAAAAAAAAMwBYCAAApAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-21T12:51:00.164Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "User.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Users\\User.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Users\\User.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Users\\User.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Users\\User.cs",
-              "ViewState": "AgIAABIAAAAAAAAAAIA1wBoAAAAsAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-21T12:50:57.64Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "MessageController.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\MessageController.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Controllers\\MessageController.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\MessageController.cs",
-              "RelativeToolTip": "WebApplication1\\Controllers\\MessageController.cs",
-              "ViewState": "AgIAABgAAAAAAAAAAAAowB4AAAByAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:39:19.178Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "MessageHistoryDTO.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\DTOs\\MessageHistoryDTO.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\DTOs\\MessageHistoryDTO.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\DTOs\\MessageHistoryDTO.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\DTOs\\MessageHistoryDTO.cs",
-              "ViewState": "AgIAAA4AAAAAAAAAAAA+wBYAAAAbAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:39:14.024Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "MessageStatus.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Enums\\MessageStatus.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Enums\\MessageStatus.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Enums\\MessageStatus.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Enums\\MessageStatus.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:39:11.839Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "MessageBackup.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\MessageBackup.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Messages\\MessageBackup.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\MessageBackup.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Messages\\MessageBackup.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAiAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:39:05.898Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "MessageHistory.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\MessageHistory.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Messages\\MessageHistory.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\MessageHistory.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Messages\\MessageHistory.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAiAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:38:56.391Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
-              "Title": "MessageService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\MessageService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\MessageService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\MessageService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\MessageService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAhAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:38:49.23Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 15,
-              "Title": "Message.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\Message.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Messages\\Message.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Messages\\Message.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Messages\\Message.cs",
-              "ViewState": "AgIAAAwAAAAAAAAAAAAAABUAAAAjAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:38:43.207Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "ChatRequests.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Requests\\ChatRequests.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Models\\Requests\\ChatRequests.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Models\\Requests\\ChatRequests.cs",
-              "RelativeToolTip": "WebApplication1\\Models\\Requests\\ChatRequests.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAFAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:38:18.382Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Program.cs",
               "RelativeDocumentMoniker": "WebApplication1\\Program.cs",
@@ -256,54 +45,6 @@
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-06-20T12:56:19.976Z",
               "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 17,
-              "Title": "TokenValidationMiddleware.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Middleware\\TokenValidationMiddleware.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Middleware\\TokenValidationMiddleware.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Middleware\\TokenValidationMiddleware.cs",
-              "RelativeToolTip": "WebApplication1\\Middleware\\TokenValidationMiddleware.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T13:06:47.067Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 16,
-              "Title": "TokenService.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\TokenService.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Services\\TokenService.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Services\\TokenService.cs",
-              "RelativeToolTip": "WebApplication1\\Services\\TokenService.cs",
-              "ViewState": "AgIAACcAAAAAAAAAAIAwwC0AAAAmAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-20T12:57:40.909Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "launchSettings.json",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Properties\\launchSettings.json",
-              "RelativeDocumentMoniker": "WebApplication1\\Properties\\launchSettings.json",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Properties\\launchSettings.json",
-              "RelativeToolTip": "WebApplication1\\Properties\\launchSettings.json",
-              "ViewState": "AgIAABgAAAAAAAAAAAAAAC8AAAAwAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-06-20T12:54:58.414Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "ApplicationDbContext.cs",
-              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Data\\ApplicationDbContext.cs",
-              "RelativeDocumentMoniker": "WebApplication1\\Data\\ApplicationDbContext.cs",
-              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Data\\ApplicationDbContext.cs",
-              "RelativeToolTip": "WebApplication1\\Data\\ApplicationDbContext.cs",
-              "ViewState": "AgIAAH0BAAAAAAAAAAAMwI0BAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-10T12:02:38.846Z"
             }
           ]
         },

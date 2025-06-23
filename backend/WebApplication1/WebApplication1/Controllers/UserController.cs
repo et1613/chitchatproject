@@ -76,6 +76,8 @@ namespace WebApplication1.Controllers
                 if (user == null)
                     return Unauthorized(new { error = "User not found" });
 
+                await _userService.UpdateOnlineStatusAsync(user.Id, true);
+
                 return Ok(new
                 {
                     UserId = user.Id,
@@ -90,6 +92,16 @@ namespace WebApplication1.Controllers
                 _logger.LogError(ex, "Error logging in");
                 return StatusCode(500, "Error logging in");
             }
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+            await _userService.UpdateOnlineStatusAsync(userId, false);
+            return Ok(new { success = true });
         }
 
         [HttpGet("profile")]
@@ -503,6 +515,75 @@ namespace WebApplication1.Controllers
             });
 
             return Ok(friendList);
+        }
+
+        [HttpPost("friends/request")]
+        public async Task<IActionResult> SendFriendRequest([FromBody] AddFriendRequest request)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var receiver = await _userService.GetUserByEmailAsync(request.FriendEmail);
+            if (receiver == null)
+                return NotFound(new { error = "Kullanıcı bulunamadı" });
+
+            var result = await _userService.SendFriendRequestAsync(userId, receiver.Id);
+            if (!result)
+                return BadRequest(new { error = "Arkadaşlık isteği gönderilemedi veya zaten beklemede/arkadaşsınız" });
+
+            return Ok(new { success = true });
+        }
+
+        [HttpGet("friends/requests")]
+        public async Task<IActionResult> GetReceivedFriendRequests()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var requests = await _userService.GetReceivedFriendRequestsAsync(userId);
+            var result = requests.Select(r => new {
+                r.Id,
+                SenderId = r.SenderId,
+                SenderName = r.Sender.UserName,
+                SenderEmail = r.Sender.Email,
+                r.Message,
+                r.CreatedAt
+            });
+            return Ok(result);
+        }
+
+        [HttpPost("friends/requests/{id}/accept")]
+        public async Task<IActionResult> AcceptFriendRequest(string id)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var result = await _userService.AcceptFriendRequestAsync(id, userId);
+            if (!result)
+                return BadRequest(new { error = "İstek bulunamadı veya zaten yanıtlanmış" });
+            return Ok(new { success = true });
+        }
+
+        [HttpPost("friends/requests/{id}/reject")]
+        public async Task<IActionResult> RejectFriendRequest(string id, [FromBody] RejectFriendRequestModel? model)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var reason = model?.Reason;
+            var result = await _userService.RejectFriendRequestAsync(id, userId, reason);
+            if (!result)
+                return BadRequest(new { error = "İstek bulunamadı veya zaten yanıtlanmış" });
+            return Ok(new { success = true });
+        }
+
+        public class RejectFriendRequestModel
+        {
+            public string? Reason { get; set; }
         }
     }
 

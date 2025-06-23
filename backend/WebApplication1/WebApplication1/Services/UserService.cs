@@ -45,6 +45,11 @@ namespace WebApplication1.Services
         Task<IEnumerable<UserActivity>> GetUserActivitiesAsync(string userId, int limit = 10);
         Task SendFriendRequestNotificationAsync(string toEmail, string fromUserName);
         Task SendPasswordChangeNotificationAsync(string toEmail, string userName);
+        Task<bool> SendFriendRequestAsync(string senderId, string receiverId, string? message = null);
+        Task<List<FriendRequest>> GetReceivedFriendRequestsAsync(string userId);
+        Task<bool> AcceptFriendRequestAsync(string requestId, string userId);
+        Task<bool> RejectFriendRequestAsync(string requestId, string userId, string? reason = null);
+        Task UpdateOnlineStatusAsync(string userId, bool isOnline);
     }
 
     public class UserService : IUserService
@@ -414,6 +419,10 @@ namespace WebApplication1.Services
         {
             try
             {
+                // Prevent self-friendship
+                if (userId == friendId)
+                    return false;
+
                 var user = await GetUserByIdAsync(userId);
                 var friend = await GetUserByIdAsync(friendId);
 
@@ -477,7 +486,8 @@ namespace WebApplication1.Services
             try
             {
                 var user = await GetUserByIdAsync(userId);
-                return user?.Friends ?? new List<User>();
+                // Exclude self from friends list if present
+                return user?.Friends.Where(f => f.Id != userId) ?? new List<User>();
             }
             catch (Exception ex)
             {
@@ -762,6 +772,88 @@ namespace WebApplication1.Services
             {
                 _logger.LogError(ex, "Error sending password change notification to {Email}", toEmail);
                 throw;
+            }
+        }
+
+        // FRIEND REQUEST SYSTEM
+        public async Task<bool> SendFriendRequestAsync(string senderId, string receiverId, string? message = null)
+        {
+            _logger.LogInformation($"[FRIEND-REQUEST] senderId={senderId}, receiverId={receiverId}");
+            var receiverUser = await GetUserByIdAsync(receiverId);
+            if (receiverUser != null)
+                _logger.LogInformation($"[FRIEND-REQUEST] receiverUser: id={receiverUser.Id}, email={receiverUser.Email}");
+            if (senderId == receiverId)
+                return false;
+
+            var sender = await GetUserByIdAsync(senderId);
+            var receiver = receiverUser;
+            if (sender == null || receiver == null)
+                return false;
+
+            // Zaten bekleyen bir istek var mı?
+            if (_context.FriendRequests.Any(fr => fr.SenderId == senderId && fr.ReceiverId == receiverId && fr.Status == Models.Users.FriendRequestStatus.Pending))
+                return false;
+
+            // Zaten arkadaşlar mı?
+            if (sender.Friends.Any(f => f.Id == receiverId))
+                return false;
+
+            var request = new Models.Users.FriendRequest
+            {
+                SenderId = senderId,
+                Sender = sender,
+                ReceiverId = receiverId,
+                Receiver = receiver,
+                Status = Models.Users.FriendRequestStatus.Pending,
+                CreatedAt = DateTime.UtcNow,
+                Message = message ?? string.Empty
+            };
+            _context.FriendRequests.Add(request);
+            await _context.SaveChangesAsync();
+            // Bildirim veya e-posta gönderilebilir
+            return true;
+        }
+
+        public async Task<List<Models.Users.FriendRequest>> GetReceivedFriendRequestsAsync(string userId)
+        {
+            return await _context.FriendRequests
+                .Include(fr => fr.Sender)
+                .Where(fr => fr.ReceiverId == userId && fr.Status == Models.Users.FriendRequestStatus.Pending)
+                .ToListAsync();
+        }
+
+        public async Task<bool> AcceptFriendRequestAsync(string requestId, string userId)
+        {
+            var request = await _context.FriendRequests.Include(fr => fr.Sender).Include(fr => fr.Receiver).FirstOrDefaultAsync(fr => fr.Id == requestId);
+            if (request == null || request.ReceiverId != userId || request.Status != Models.Users.FriendRequestStatus.Pending)
+                return false;
+            request.Accept();
+            // Karşılıklı arkadaş ekle
+            request.Sender.Friends.Add(request.Receiver);
+            request.Receiver.Friends.Add(request.Sender);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> RejectFriendRequestAsync(string requestId, string userId, string? reason = null)
+        {
+            var request = await _context.FriendRequests.FirstOrDefaultAsync(fr => fr.Id == requestId);
+            if (request == null || request.ReceiverId != userId || request.Status != Models.Users.FriendRequestStatus.Pending)
+                return false;
+            request.Reject(reason);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task UpdateOnlineStatusAsync(string userId, bool isOnline)
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user != null)
+            {
+                user.IsOnline = isOnline;
+                user.Status = isOnline ? UserStatus.Online : UserStatus.Offline;
+                user.LastSeen = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
             }
         }
     }

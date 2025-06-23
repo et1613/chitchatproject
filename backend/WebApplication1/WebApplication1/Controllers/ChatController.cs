@@ -47,7 +47,18 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var message = await _chatService.SendMessageAsync(userId, request.ChatRoomId, request.Content);
-                return Ok(message);
+                return Ok(new MessageDTO {
+                    Id = message.Id,
+                    SenderId = message.SenderId,
+                    Content = message.Content,
+                    Timestamp = message.Timestamp,
+                    Sender = new UserDTO {
+                        Id = message.Sender.Id,
+                        DisplayName = message.Sender.DisplayName,
+                        UserName = message.Sender.UserName,
+                        Email = message.Sender.Email
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -89,7 +100,19 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var messages = await _chatService.GetChatHistoryAsync(roomId, userId, skip, take);
-                return Ok(messages);
+                var dtos = messages.Select(m => new MessageDTO {
+                    Id = m.Id,
+                    SenderId = m.SenderId,
+                    Content = m.Content,
+                    Timestamp = m.Timestamp,
+                    Sender = new UserDTO {
+                        Id = m.Sender.Id,
+                        DisplayName = m.Sender.DisplayName,
+                        UserName = m.Sender.UserName,
+                        Email = m.Sender.Email
+                    }
+                });
+                return Ok(dtos);
             }
             catch (Exception ex)
             {
@@ -344,6 +367,27 @@ namespace WebApplication1.Controllers
                 return StatusCode(500, "Error optimizing image");
             }
         }
+
+        [HttpPost("direct-room")]
+        public async Task<IActionResult> GetOrCreateDirectRoom([FromBody] DirectRoomRequest request)
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+                if (string.IsNullOrEmpty(request.OtherUserId))
+                    return BadRequest("OtherUserId is required");
+
+                var room = await _chatService.GetOrCreateDirectChatRoomAsync(userId, request.OtherUserId);
+                return Ok(new { id = room.Id, name = room.Name });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting or creating direct chat room");
+                return StatusCode(500, "Error getting or creating direct chat room");
+            }
+        }
     }
 
     public class SendMessageRequest
@@ -367,5 +411,27 @@ namespace WebApplication1.Controllers
     {
         public required string Name { get; set; }
         public string? Description { get; set; }
+    }
+
+    public class DirectRoomRequest
+    {
+        public required string OtherUserId { get; set; }
+    }
+
+    public class MessageDTO
+    {
+        public string Id { get; set; }
+        public string SenderId { get; set; }
+        public string Content { get; set; }
+        public DateTime Timestamp { get; set; }
+        public UserDTO Sender { get; set; }
+    }
+
+    public class UserDTO
+    {
+        public string Id { get; set; }
+        public string DisplayName { get; set; }
+        public string UserName { get; set; }
+        public string Email { get; set; }
     }
 } 

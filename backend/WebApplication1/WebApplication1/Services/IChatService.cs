@@ -24,5 +24,6 @@ namespace WebApplication1.Services
         Task<IEnumerable<Message>> GetChatRoomMessagesAsync(string chatRoomId, int skip = 0, int take = 50);
         Task<bool> MarkMessageAsReadAsync(string messageId);
         Task<bool> UpdateMessageAsync(string messageId, string content, string userId);
+        Task<ChatRoom> GetOrCreateDirectChatRoomAsync(string userId1, string userId2);
     }
 } 

@@ -4,6 +4,7 @@ using WebApplication1.Models.Messages;
 using WebApplication1.Services;
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
+using WebApplication1.Controllers;
 
 namespace WebApplication1.Hubs
 {
@@ -12,12 +13,14 @@ namespace WebApplication1.Hubs
         private readonly SignalRConnectionManager _connectionManager;
         private readonly IChatService _chatService;
         private readonly ILogger<ChatHub> _logger;
+        private readonly IUserService _userService;
 
-        public ChatHub(SignalRConnectionManager connectionManager, IChatService chatService, ILogger<ChatHub> logger)
+        public ChatHub(SignalRConnectionManager connectionManager, IChatService chatService, ILogger<ChatHub> logger, IUserService userService)
         {
             _connectionManager = connectionManager;
             _chatService = chatService;
             _logger = logger;
+            _userService = userService;
         }
 
         public override async Task OnConnectedAsync()
@@ -29,6 +32,7 @@ namespace WebApplication1.Hubs
                     throw new UnauthorizedAccessException("User not authenticated");
 
                 _connectionManager.AddClient(userId, Context.ConnectionId);
+                await _userService.UpdateOnlineStatusAsync(userId, true);
                 await Clients.Caller.SendAsync("Connected", "Successfully connected to chat hub");
             }
             catch (Exception ex)
@@ -47,6 +51,7 @@ namespace WebApplication1.Hubs
                 if (!string.IsNullOrEmpty(userId))
                 {
                     _connectionManager.RemoveClient(userId);
+                    await _userService.UpdateOnlineStatusAsync(userId, false);
                 }
             }
             catch (Exception ex)
@@ -64,7 +69,19 @@ namespace WebApplication1.Hubs
                 return;
 
             var message = await _chatService.SendMessageAsync(userId, chatRoomId, content);
-            await Clients.Group(chatRoomId).SendAsync("ReceiveMessage", message);
+            var dto = new MessageDTO {
+                Id = message.Id,
+                SenderId = message.SenderId,
+                Content = message.Content,
+                Timestamp = message.Timestamp,
+                Sender = new UserDTO {
+                    Id = message.Sender.Id,
+                    DisplayName = message.Sender.DisplayName,
+                    UserName = message.Sender.UserName,
+                    Email = message.Sender.Email
+                }
+            };
+            await Clients.Group(chatRoomId).SendAsync("ReceiveMessage", dto);
         }
 
         public async Task JoinChatRoom(string chatRoomId)
