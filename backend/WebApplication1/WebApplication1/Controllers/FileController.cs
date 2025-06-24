@@ -2,9 +2,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApplication1.Services;
 using System.Security.Claims;
+using System.IO;
 
 namespace WebApplication1.Controllers
 {
+    public class FileUploadRequest
+    {
+        public required IFormFile File { get; set; }
+    }
+
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
@@ -13,27 +19,33 @@ namespace WebApplication1.Controllers
         private readonly IFileService _fileService;
         private readonly ILogger<FileController> _logger;
         private readonly IStorageService _storageService;
+        private readonly IUserService _userService;
 
         public FileController(
             IFileService fileService,
             ILogger<FileController> logger,
-            IStorageService storageService)
+            IStorageService storageService,
+            IUserService userService)
         {
             _fileService = fileService;
             _logger = logger;
             _storageService = storageService;
+            _userService = userService;
         }
 
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadFile(IFormFile file, [FromQuery] string messageId)
+        public async Task<IActionResult> UploadFile([FromForm] FileUploadRequest request, [FromQuery] string messageId)
         {
+            if (request.File == null || request.File.Length == 0)
+                return BadRequest(new { error = "Dosya seçilmedi." });
+
             try
             {
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userId))
                     return Unauthorized();
 
-                var attachment = await _fileService.UploadFileAsync(file, userId, messageId);
+                var attachment = await _fileService.UploadFileAsync(request.File, userId, messageId);
                 return Ok(attachment);
             }
             catch (Exception ex)
@@ -44,7 +56,7 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost("upload/multiple")]
-        public async Task<IActionResult> UploadMultipleFiles(List<IFormFile> files, [FromQuery] string messageId)
+        public async Task<IActionResult> UploadMultipleFiles([FromForm] List<IFormFile> files, [FromQuery] string messageId)
         {
             try
             {
@@ -294,6 +306,44 @@ namespace WebApplication1.Controllers
             {
                 _logger.LogError(ex, "Error unsharing file");
                 return StatusCode(500, "Error unsharing file");
+            }
+        }
+
+        [HttpPost("upload/profile-picture")]
+        public async Task<IActionResult> UploadProfilePicture([FromForm] FileUploadRequest request)
+        {
+            if (request.File == null || request.File.Length == 0)
+                return BadRequest(new { error = "Dosya seçilmedi." });
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            try
+            {
+                await using var memoryStream = new MemoryStream();
+                await request.File.CopyToAsync(memoryStream);
+                var fileBytes = memoryStream.ToArray();
+
+                var relativePath = await _storageService.SaveFileAsync(fileBytes, request.File.FileName, "avatars");
+
+                if (string.IsNullOrEmpty(relativePath))
+                {
+                    return StatusCode(500, new { error = "Dosya kaydedilemedi." });
+                }
+
+                var success = await _userService.UpdateProfilePictureAsync(userId, relativePath);
+                if (!success)
+                {
+                    return StatusCode(500, new { error = "Profil resmi veritabanında güncellenemedi." });
+                }
+
+                return Ok(new { profilePictureUrl = relativePath });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Profil fotoğrafı yüklenirken hata.");
+                return StatusCode(500, new { error = "Profil fotoğrafı yüklenirken bir sunucu hatası oluştu." });
             }
         }
     }

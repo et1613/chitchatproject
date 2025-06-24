@@ -59,7 +59,10 @@
 
         <!-- Arkadaşlık İstekleri -->
         <div class="card mb-3" id="friendRequestsCard">
-          <div class="card-header bg-warning text-dark">Gelen Arkadaşlık İstekleri</div>
+          <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center" id="friendRequestsHeader">
+            Gelen Arkadaşlık İstekleri
+            <button id="friendRequestsRefreshBtn" class="btn btn-sm btn-outline-secondary ms-2">Yenile</button>
+          </div>
           <ul class="list-group list-group-flush" id="friendRequestsList">
             <!-- JS ile doldurulacak -->
           </ul>
@@ -89,7 +92,6 @@
             <div class="card-header bg-secondary text-white">Profil Bilgileri</div>
             <div class="card-body">
               <p><strong>İsim:</strong> <span id="profileName"></span></p>
-              <p><strong>Cinsiyet:</strong> <span id="profileGender"></span></p>
               <img id="profileAvatar" src="" class="img-thumbnail" style="max-width: 150px;">
               <hr>
                <div id="blockedUsersSection" class="mt-4">
@@ -133,178 +135,9 @@
   
   <!-- Mevcut script'ler -->
   <script src="script.js"></script>
+  <script src="signalr.js"></script>
   
-  <!-- ⚠️ YENİ EKLENEN: SignalR Connection ve Event Handling -->
-  <script>
-    let signalRConnection = null;
-    let isSignalRConnected = false;
-
-    // SignalR bağlantısını başlat
-    async function initializeSignalR() {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        console.log("No token, skipping SignalR connection");
-        return;
-      }
-
-      try {
-        // SignalR connection oluştur
-        signalRConnection = new signalR.HubConnectionBuilder()
-          .withUrl("https://localhost:7030/chatHub", {
-            accessTokenFactory: () => token,
-            transport: signalR.HttpTransportType.WebSockets,
-            skipNegotiation: true
-          })
-          .withAutomaticReconnect([0, 2000, 10000, 30000])
-          .configureLogging(signalR.LogLevel.Information)
-          .build();
-
-        // Event listeners
-        setupSignalREventListeners();
-
-        // Bağlantıyı başlat
-        await signalRConnection.start();
-        isSignalRConnected = true;
-        updateConnectionStatus("Bağlı", "success");
-        console.log("SignalR Connected successfully!");
-
-      } catch (error) {
-        console.error("SignalR Connection Error:", error);
-        isSignalRConnected = false;
-        updateConnectionStatus("Bağlantı Hatası", "danger");
-      }
-    }
-
-    // SignalR event listeners
-    function setupSignalREventListeners() {
-      // Yeni mesaj geldiğinde
-      signalRConnection.on("ReceiveMessage", function (user, message, timestamp) {
-  console.log("Real-time message received:", { user, message, timestamp });
-  
-  // Sadece başkalarından gelen mesajları ekle
-  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
-  const isOwnMessage = (user === currentUser.email || 
-                       user === currentUser.name ||
-                       user === currentUser.userName);
-  
-  if (!isOwnMessage) {
-    addRealTimeMessage(user, message, timestamp);
-    showNotification(`${user}: ${message}`);
-  } else {
-    console.log("Own message received via SignalR, skipping duplicate");
-  }
-});
-
-      // Kullanıcı chat'e katıldı
-      signalRConnection.on("UserJoined", function (user, roomId) {
-        console.log(`${user} joined room ${roomId}`);
-        addSystemMessage(`${user} sohbete katıldı`);
-      });
-
-      // Kullanıcı chat'ten ayrıldı
-      signalRConnection.on("UserLeft", function (user, roomId) {
-        console.log(`${user} left room ${roomId}`);
-        addSystemMessage(`${user} sohbetten ayrıldı`);
-      });
-
-      // Kullanıcı yazıyor bildirimi
-      signalRConnection.on("UserTyping", function (user) {
-        showTypingIndicator(user);
-      });
-
-      signalRConnection.on("UserStoppedTyping", function (user) {
-        hideTypingIndicator(user);
-      });
-
-      // Bağlantı events
-      signalRConnection.onreconnecting(() => {
-        isSignalRConnected = false;
-        updateConnectionStatus("Yeniden bağlanıyor...", "warning");
-      });
-
-      signalRConnection.onreconnected(() => {
-        isSignalRConnected = true;
-        updateConnectionStatus("Bağlı", "success");
-      });
-
-      signalRConnection.onclose(() => {
-        isSignalRConnected = false;
-        updateConnectionStatus("Bağlantı Kesildi", "danger");
-      });
-    }
-
-    // Real-time mesajı chat'e ekle
-    function addRealTimeMessage(sender, content, timestamp) {
-      const messageArea = document.getElementById("messageArea");
-      const time = new Date(timestamp).toLocaleTimeString('tr-TR', {
-        hour: '2-digit', 
-        minute: '2-digit'
-      });
-      
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'mb-2 p-2 border-bottom';
-      messageDiv.innerHTML = `
-        <strong>${sender}:</strong> ${content}
-        <small class="text-muted float-end">${time}</small>
-      `;
-      
-      messageArea.appendChild(messageDiv);
-      messageArea.scrollTop = messageArea.scrollHeight;
-    }
-
-    // Sistem mesajı ekle
-    function addSystemMessage(message) {
-      const messageArea = document.getElementById("messageArea");
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'text-center text-muted small my-2';
-      messageDiv.innerHTML = `<em>${message}</em>`;
-      messageArea.appendChild(messageDiv);
-      messageArea.scrollTop = messageArea.scrollHeight;
-    }
-
-    // Yazıyor göstergesi
-    function showTypingIndicator(user) {
-      const existingIndicator = document.getElementById("typingIndicator");
-      if (existingIndicator) return;
-
-      const messageArea = document.getElementById("messageArea");
-      const indicator = document.createElement('div');
-      indicator.id = "typingIndicator";
-      indicator.className = 'text-muted small';
-      indicator.innerHTML = `<em>${user} yazıyor...</em>`;
-      messageArea.appendChild(indicator);
-      messageArea.scrollTop = messageArea.scrollHeight;
-    }
-
-    function hideTypingIndicator(user) {
-      const indicator = document.getElementById("typingIndicator");
-      if (indicator) indicator.remove();
-    }
-
-    // Bağlantı durumu güncelle
-    function updateConnectionStatus(status, type) {
-      const statusElement = document.getElementById("connectionStatus");
-      if (statusElement) {
-        statusElement.textContent = status;
-        statusElement.className = `badge bg-${type} float-end`;
-      }
-    }
-
-    // Sayfa yüklendiğinde SignalR'ı başlat
-    document.addEventListener('DOMContentLoaded', function() {
-      // Biraz bekle, sonra SignalR'ı başlat
-      setTimeout(initializeSignalR, 1000);
-    });
-
-    // Sayfa kapatılırken bağlantıyı kapat
-    window.addEventListener('beforeunload', function() {
-      if (signalRConnection && isSignalRConnected) {
-        signalRConnection.stop();
-      }
-    });
-  </script>
-
-   <!-- Bildirim kutusu -->
+  <!-- Bildirim kutusu -->
   <div id="notification" style="
     position: fixed;
     bottom: 20px;
@@ -322,6 +155,17 @@
   </div>
   <audio id="notifSound" src="frontend/notif.mp3" preload="auto"></audio>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  window.onSignalRMessage = function(user, message, timestamp, chatRoomId) {
+    console.log("SignalR ile anlık mesaj geldi:", { user, message, timestamp, chatRoomId, currentChatRoomId });
+    if (typeof currentChatRoomId !== 'undefined' && chatRoomId === currentChatRoomId) {
+      addRealTimeMessage({ sender: user, content: message, timestamp: timestamp });
+    } else {
+      // İstersen burada bildirim gösterebilirsin
+      // showNotification('Başka bir sohbete yeni mesaj geldi!');
+    }
+  };
+  </script>
 </body>
 </html>
 <!-- Toast Bildirim Kutusu -->

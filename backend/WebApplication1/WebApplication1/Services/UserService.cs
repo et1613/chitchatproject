@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Identity;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using WebApplication1.Models.Enums;
+using WebApplication1.Repositories;
+using WebApplication1.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace WebApplication1.Services
 {
@@ -60,6 +63,8 @@ namespace WebApplication1.Services
         private readonly IEmailService _emailService;
         private readonly ISecurityService _securityService;
         private readonly IConfiguration _configuration;
+        private readonly IUserRepository _userRepository;
+        private readonly IHubContext<ChatHub> _hubContext;
 
         public UserService(
             ApplicationDbContext context,
@@ -67,7 +72,9 @@ namespace WebApplication1.Services
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
             ISecurityService securityService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IUserRepository userRepository,
+            IHubContext<ChatHub> hubContext)
         {
             _context = context;
             _logger = logger;
@@ -75,6 +82,8 @@ namespace WebApplication1.Services
             _emailService = emailService;
             _securityService = securityService;
             _configuration = configuration;
+            _userRepository = userRepository;
+            _hubContext = hubContext;
         }
 
         public async Task<User?> GetUserByIdAsync(string id)
@@ -485,9 +494,23 @@ namespace WebApplication1.Services
         {
             try
             {
-                var user = await GetUserByIdAsync(userId);
-                // Exclude self from friends list if present
-                return user?.Friends.Where(f => f.Id != userId) ?? new List<User>();
+                var user = await _context.Users
+                    .Include(u => u.Friends)
+                    .Include(u => u.BlockedUsers)
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+
+                if (user == null)
+                {
+                    return new List<User>();
+                }
+
+                var blockedUserIds = user.BlockedUsers.Select(b => b.BlockedUserId).ToHashSet();
+
+                var friends = user.Friends
+                    .Where(f => f.Id != userId && !blockedUserIds.Contains(f.Id))
+                    .ToList();
+
+                return friends;
             }
             catch (Exception ex)
             {

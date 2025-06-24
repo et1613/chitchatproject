@@ -1,5 +1,6 @@
 let selectedReceiver = null;
 let currentChatRoomId = null;
+let lastSelectedUserId = null;
 const backendUrl = "https://localhost:7030";
 
 // Toast Bildirim Fonksiyonu
@@ -45,14 +46,13 @@ const fallbackUser = JSON.parse(localStorage.getItem("user")) || {
 
 // Bu fonksiyon sohbet sayfasında çalışır
 function loadUser() {
-
   const token = localStorage.getItem("token");
   if (!token) {
     window.location.href = "index.html";
     return;
   }
 
-  fetch(`${backendUrl}/api/User/profile`, {
+  fetch(`${backendUrl}/api/user/profile`, {
     headers: { Authorization: "Bearer " + token }
   })
     .then(res => {
@@ -60,8 +60,11 @@ function loadUser() {
       return res.json();
     })
     .then(data => {
-      console.log("Kullanıcı:", data); // ✅ burada email: xxx döner
-      // İstersen localStorage.setItem("userEmail", data.email); şeklinde de saklayabilirsin
+      // Madde 4: Navbar'daki kullanıcı adını (hello unknown) düzelt
+      const navUser = document.getElementById("navUserName");
+      if (navUser) {
+        navUser.innerText = `👋 ${data.displayName || data.userName}`;
+      }
     })
     .catch(() => {
       localStorage.removeItem("token");
@@ -79,16 +82,39 @@ const user = JSON.parse(userData);
   $("#profileGender").text(user.gender === "male" ? "Erkek" : "Kadın");
  const avatarPath = user.avatar || (user.gender === "male" ? "img/avatar_male.png" : "img/avatar_female.png");
 $("#profileAvatar").attr("src", avatarPath);
- $("#btnProfile").click(function () {
-  $("#chatSection").removeClass("active").hide();
-  $("#profileSection").addClass("active").fadeIn(200);
+ $("#btnProfile").off('click').on('click', async function () {
+  $("#chatSection").hide();
+  $("#profileSection").fadeIn(200);
   $("#btnChat").removeClass("active");
   $(this).addClass("active");
+
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Giriş yapılmamış");
+
+    const res = await fetch(`${backendUrl}/api/user/profile`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Profil bilgileri alınamadı");
+    
+    const profile = await res.json();
+    
+    $("#profileName").text(profile.displayName || profile.userName || 'İsim Yok');
+    const avatarUrl = profile.profilePictureUrl || "frontend/img/avatar_male.png"; // Varsayılan avatar
+    $("#profileAvatar").attr("src", avatarUrl);
+
+    // Engellenen kullanıcılar listesini de yenile
+    await renderBlockedUsers();
+
+  } catch (err) {
+    $("#profileName").text('Hata: Bilgiler yüklenemedi.');
+    console.error('Profil yükleme hatası:', err);
+  }
 });
 
 $("#btnChat").click(function () {
-  $("#profileSection").removeClass("active").hide();
-  $("#chatSection").addClass("active").fadeIn(200);
+  $("#profileSection").hide();
+  $("#chatSection").fadeIn(200);
   $("#btnProfile").removeClass("active");
   $(this).addClass("active");
 });
@@ -116,7 +142,7 @@ async function fetchFriendsFromAPI() {
       displayName: f.displayName || f.userName || f.email,
       userName: f.userName || f.displayName || f.email,
       email: f.email,
-      avatar: f.profilePicture || "",
+      avatar: f.profilePictureUrl || "", // Backend'den gelen profil resmini ekle
       gender: f.gender || "unknown"
     }));
     window.chitchatFriends = mapped; // Arkadaşları window'da sakla
@@ -149,7 +175,7 @@ async function getBestUserName(sender) {
       // API'dan çek (ilk defa ise)
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`${backendUrl}/api/users/${sender.id}`, {
+        const res = await fetch(`${backendUrl}/api/user/${sender.id}`, {
           headers: { Authorization: "Bearer " + token }
         });
         if (res.ok) {
@@ -173,7 +199,7 @@ async function getBestUserName(sender) {
     // API'dan çek
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${backendUrl}/api/users/${sender}`, {
+      const res = await fetch(`${backendUrl}/api/user/${sender}`, {
         headers: { Authorization: "Bearer " + token }
       });
       if (res.ok) {
@@ -187,84 +213,151 @@ async function getBestUserName(sender) {
   return 'Kullanıcı';
 }
 
+async function fetchGroupsFromAPI() {
+    const token = localStorage.getItem("token");
+    if (!token) return [];
+    try {
+        const res = await fetch(`${backendUrl}/api/chat/rooms`, {
+            headers: { Authorization: "Bearer " + token }
+        });
+        if (!res.ok) throw new Error("Gruplar alınamadı");
+        const rooms = await res.json();
+        return rooms.filter(r => r.isGroupChat); // Sadece grup sohbetleri
+    } catch (err) {
+        console.error("Gruplar çekilirken hata:", err);
+        return [];
+    }
+}
+
 // Arkadaş listesini göster
 async function renderUserList(filter = "") {
   const friends = await fetchFriendsFromAPI();
-  const groups = []; // Gruplar için ayrı bir API varsa buradan çekilebilir
-  const filtered = friends.filter(u =>
-    (u.displayName || u.userName || u.email || '').toLowerCase().includes((filter || '').toLowerCase())
+  const groups = await fetchGroupsFromAPI();
+
+  const filterLower = (filter || "").toLowerCase();
+
+  const filteredFriends = friends.filter(u =>
+    (u.displayName || u.userName || u.email || '').toLowerCase().includes(filterLower)
   );
-  // Engellenenler localStorage'da tutuluyorsa burada kalabilir
-  const blocked = JSON.parse(localStorage.getItem("chitchat_blocked")) || [];
-  const visible = filtered.filter(u => !blocked.includes(u.email));
+
+  const filteredGroups = groups.filter(g =>
+    (g.name || '').toLowerCase().includes(filterLower)
+  );
+
   let html = "";
-  if (visible.length === 0) {
-    html = `<li class="list-group-item text-muted">Kullanıcı bulunamadı</li>`;
+  if (filteredFriends.length === 0 && filteredGroups.length === 0) {
+    html = `<li class="list-group-item text-muted">Kullanıcı veya grup bulunamadı</li>`;
   } else {
-    visible.forEach(u => {
-      const avatar = u.avatar || (u.gender === "male" ? "img/avatar_male.png" : "img/avatar_female.png");
+    // Önce Grupları göster
+    filteredGroups.forEach(g => {
+        const displayName = g.name || 'İsimsiz Grup';
+        html += `
+            <li class="list-group-item d-flex align-items-center user-item group-item" data-name="${displayName}" data-roomid="${g.id}">
+                <span class="me-2" style="font-size: 24px;">👥</span>
+                <strong>${displayName}</strong>
+            </li>
+        `;
+    });
+    // Sonra Arkadaşları göster
+    filteredFriends.forEach(u => {
+      const avatar = u.avatar || "frontend/img/avatar_male.png";
       const displayName = u.displayName || u.userName || u.email || u.id || 'Kullanıcı';
       html += `
         <li class="list-group-item d-flex align-items-center user-item" data-name="${displayName}" data-email="${u.email}" data-userid="${u.id}">
           <img src="${avatar}" class="rounded-circle me-2" style="width:30px; height:30px;">
           ${displayName}
-          <button class="btn btn-sm btn-outline-danger ms-auto" onclick="blockUser('${u.email}')">Engelle</button>
+          <button class="btn btn-sm btn-outline-danger ms-auto" onclick="event.stopPropagation(); blockUser('${u.email}')">Engelle</button>
         </li>
       `;
     });
   }
-  // Grupları ekle (varsa)
-  groups.forEach(g => {
-    html += `
-      <li class="list-group-item d-flex align-items-center user-item group-item" data-name="${g.name}" data-email="group:${g.name}">
-        <strong>👥 ${g.name}</strong>
-      </li>
-    `;
-  });
   document.getElementById("userList").innerHTML = html;
   document.querySelectorAll(".user-item").forEach(item => {
     item.addEventListener("click", async () => {
       document.querySelectorAll(".user-item").forEach(i => i.classList.remove("active-user"));
       item.classList.add("active-user");
-      selectedReceiver = {
-        name: item.dataset.name,
-        email: item.dataset.email,
-        id: item.dataset.userid
-      };
-      // Oda ID'sini bul veya oluştur
-      if (!item.classList.contains("group-item")) {
-        // Birebir sohbet için yeni endpoint ile oda oluştur veya bul
-        const token = localStorage.getItem("token");
-        try {
-          const res = await fetch(`${backendUrl}/api/chat/direct-room`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bearer " + token
-            },
-            body: JSON.stringify({ OtherUserId: selectedReceiver.id })
-          });
-          if (res.ok) {
-            const room = await res.json();
-            currentChatRoomId = room.id;
-          } else {
-            currentChatRoomId = null;
-          }
-        } catch {
-          currentChatRoomId = null;
-        }
-      } else {
-        // Grup sohbeti için
-        currentChatRoomId = selectedReceiver.name;
-      }
+
       if (item.classList.contains("group-item")) {
-        document.querySelector("#chatSection .card-header").innerText = `👥 Grup: ${selectedReceiver.name}`;
+          // Bu bir grup
+          selectedReceiver = {
+              name: item.dataset.name,
+              id: item.dataset.roomid,
+              isGroup: true
+          };
+          currentChatRoomId = item.dataset.roomid;
+          lastSelectedUserId = null; 
+          document.querySelector("#chatSection .card-header").innerText = `👥 Grup: ${selectedReceiver.name}`;
+          loadMessages();
       } else {
-        document.querySelector("#chatSection .card-header").innerText = `${selectedReceiver.name} ile Sohbet`;
+          // Bu bir kullanıcı
+          selectedReceiver = {
+              name: item.dataset.name,
+              email: item.dataset.email,
+              id: item.dataset.userid
+          };
+          lastSelectedUserId = selectedReceiver.id; // Son seçilen kullanıcıyı sakla
+
+          const token = localStorage.getItem("token");
+          try {
+              const res = await fetch(`${backendUrl}/api/chat/direct-room`, {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json",
+                      Authorization: "Bearer " + token
+                  },
+                  body: JSON.stringify({ OtherUserId: selectedReceiver.id })
+              });
+              if (res.ok) {
+                  const room = await res.json();
+                  currentChatRoomId = room.id;
+                  document.querySelector("#chatSection .card-header").innerText = `${selectedReceiver.name} ile Sohbet`;
+                  loadMessages();
+              } else {
+                  currentChatRoomId = null;
+                  showToast('Sohbet odası oluşturulamadı.', 'error');
+              }
+          } catch (err) {
+              currentChatRoomId = null;
+              showToast('Sohbet odası oluşturulurken hata: ' + err.message, 'error');
+          }
       }
-      loadMessages();
     });
   });
+  // Son seçilen kullanıcıyı otomatik olarak aktif yap
+  if (lastSelectedUserId) {
+    const lastItem = document.querySelector(`.user-item[data-userid='${lastSelectedUserId}']`);
+    if (lastItem) {
+      lastItem.classList.add("active-user");
+      lastItem.scrollIntoView({ block: "center" });
+      // Eğer ilk render ise otomatik mesajları yükle
+      selectedReceiver = {
+        name: lastItem.dataset.name,
+        email: lastItem.dataset.email,
+        id: lastItem.dataset.userid
+      };
+      if (!lastItem.classList.contains("group-item")) {
+        const token = localStorage.getItem("token");
+        fetch(`${backendUrl}/api/chat/direct-room`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token
+          },
+          body: JSON.stringify({ OtherUserId: selectedReceiver.id })
+        })
+        .then(res => res.ok ? res.json() : null)
+        .then(room => {
+          if (room && room.id) {
+            currentChatRoomId = room.id;
+            loadMessages();
+          }
+        });
+      } else {
+        currentChatRoomId = selectedReceiver.name;
+        loadMessages();
+      }
+    }
+  }
 }
 
 // Grup kurma modalında arkadaşları göster
@@ -279,13 +372,69 @@ async function populateFriendCheckboxes() {
   friends.forEach(friend => {
     container.innerHTML += `
       <div class="form-check">
-        <input class="form-check-input" type="checkbox" value="${friend.email}" id="friend-${friend.email}">
-        <label class="form-check-label" for="friend-${friend.email}">
-          ${friend.name} (${friend.email})
+        <input class="form-check-input" type="checkbox" value="${friend.id}" id="friend-${friend.id}">
+        <label class="form-check-label" for="friend-${friend.id}">
+          ${friend.displayName} (${friend.email})
         </label>
       </div>
     `;
   });
+}
+
+async function createGroup() {
+    const groupName = document.getElementById('groupName').value.trim();
+    if (!groupName) {
+        showToast('Lütfen bir grup adı girin.', 'error');
+        return;
+    }
+
+    const selectedFriendIds = Array.from(document.querySelectorAll('#friendCheckboxes input:checked'))
+                                   .map(input => input.value);
+
+    if (selectedFriendIds.length < 2) {
+        showToast('Lütfen bir grup oluşturmak için en az 2 arkadaş seçin.', 'error');
+        return;
+    }
+
+    const token = localStorage.getItem("token");
+    try {
+        const res = await fetch(`${backendUrl}/api/chat/group-room`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                name: groupName,
+                participantIds: selectedFriendIds
+            })
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({ message: 'Grup oluşturulamadı.' }));
+            throw new Error(errData.message || 'Bilinmeyen bir hata oluştu.');
+        }
+
+        const group = await res.json();
+        showToast(`'${group.name}' grubu başarıyla oluşturuldu!`, 'success');
+        
+        // Modal'ı kapat
+        const modalElement = document.getElementById('groupModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+
+        // Formu temizle
+        document.getElementById('groupName').value = '';
+        document.querySelectorAll('#friendCheckboxes input:checked').forEach(input => input.checked = false);
+
+        // Kullanıcı/grup listesini yenile
+        await renderUserList();
+
+    } catch (err) {
+        showToast(`❌ Hata: ${err.message}`, 'error');
+    }
 }
 
 // fetchAndStoreFriends fonksiyonu artık sadece renderUserList'i tetikler
@@ -298,7 +447,7 @@ async function blockUser(email) {
   if (!confirm(`🚫 ${email} adresli kullanıcıyı engellemek istediğinize emin misiniz?`)) return;
 
   try {
-    const res = await fetch(`${backendUrl}/api/users/block`, {
+    const res = await fetch(`${backendUrl}/api/user/block-by-email`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -321,7 +470,7 @@ async function renderBlockedUsers() {
   if (!list) return;
 
   try {
-    const res = await fetch(`${backendUrl}/api/users/blocked`, {
+    const res = await fetch(`${backendUrl}/api/user/blocked`, {
       headers: { Authorization: "Bearer " + token },
     });
     if (!res.ok) throw new Error("Engellenenler listesi alınamadı.");
@@ -338,8 +487,8 @@ async function renderBlockedUsers() {
       const item = document.createElement("li");
       item.className = "list-group-item d-flex justify-content-between align-items-center";
       item.innerHTML = `
-        <span>${user.name} (${user.email})</span>
-        <button class="btn btn-sm btn-outline-secondary" onclick="unblockUser('${user.email}')">Kaldır</button>
+        <span>${user.displayName || user.userName} (${user.email})</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="unblockUser('${user.id}')">Kaldır</button>
       `;
       list.appendChild(item);
     });
@@ -348,21 +497,19 @@ async function renderBlockedUsers() {
   }
 }
 
-async function unblockUser(email) {
+async function unblockUser(userId) {
   const token = localStorage.getItem("token");
   try {
-    const res = await fetch(`${backendUrl}/api/users/unblock`, {
+    const res = await fetch(`${backendUrl}/api/user/unblock-by-id/${userId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
       },
-      body: JSON.stringify({ emailToUnblock: email }),
     });
     if (!res.ok) throw new Error("Engelleme kaldırılamadı.");
     showToast("✅ Kullanıcının engeli kaldırıldı.", 'success');
-    renderUserList();
-    renderBlockedUsers();
+    await renderBlockedUsers(); // Listeyi yenile
   } catch (err) {
     showToast("❌ Hata: " + err.message, 'error');
   }
@@ -421,6 +568,10 @@ async function sendMessage() {
     return;
   }
 
+  // Mesajı hemen ekrana ekle (optimistic update)
+  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  await addMessageToChat(currentUser.id, content, new Date());
+
   // 2. Dosya varsa upload et
   if (file && messageId) {
     const formData = new FormData();
@@ -442,28 +593,28 @@ async function sendMessage() {
   }
 
   // 3. SignalR ile real-time gönderim (YENİ EKLENEN)
- const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
-if (content) {
-  await addMessageToChat(
-    currentUser.name || currentUser.displayName || currentUser.email, 
-    content, 
-    new Date()
-  );
-}
+  // const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  // if (content) {
+  //   await addMessageToChat(
+  //     currentUser.name || currentUser.displayName || currentUser.email, 
+  //     content, 
+  //     new Date()
+  //   );
+  // }
 
-// 4. SignalR ile real-time gönderim (başkaları görsün diye)
-if (isSignalRConnected && signalRConnection) {
-  try {
-    await signalRConnection.invoke("SendMessage", chatRoomId, content);
-    console.log("SignalR message sent successfully");
-  } catch (signalRError) {
-    console.error("SignalR send error:", signalRError);
+  // 4. SignalR ile real-time gönderim (başkaları görsün diye)
+  if (isSignalRConnected && signalRConnection) {
+    try {
+      await signalRConnection.invoke("SendMessage", chatRoomId, content);
+      console.log("SignalR message sent successfully");
+    } catch (signalRError) {
+      console.error("SignalR send error:", signalRError);
+    }
   }
-}
 
-// 5. Input'ları temizle
-messageInput.value = "";
-fileInput.value = "";
+  // 5. Input'ları temizle
+  messageInput.value = "";
+  fileInput.value = "";
 }
 
 // ✅ SignalR Entegreli loadMessages() fonksiyonu
@@ -515,48 +666,88 @@ async function renderMessages(messages) {
     return;
   }
   
-  for (const msg of messages) {
-    let senderName = await getBestUserName(msg.sender) || await getBestUserName(msg.senderName);
-    await addMessageToChat(senderName, msg.content || msg.message, msg.timestamp || msg.createdAt || new Date());
+  // Mesajları sondan başa doğru ekle (en yeni en altta)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const senderId = msg.senderId || msg.sender;
+    await addMessageToChat(senderId, msg.content || msg.message, msg.timestamp || msg.createdAt || new Date());
   }
   
   area.scrollTop = area.scrollHeight;
 }
 
 // addMessageToChat fonksiyonunu async yap
-async function addMessageToChat(sender, content, timestamp) {
+async function addMessageToChat(senderId, content, timestamp) {
   const messageArea = document.getElementById("messageArea");
-  let senderName = await getBestUserName(sender);
-  const time = new Date(timestamp).toLocaleTimeString('tr-TR', {
+  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  console.log("senderId:", senderId, "currentUser.id:", currentUser.id);
+  const isOwnMessage = senderId === currentUser.id;
+
+  // DisplayName'i bul
+  let senderName = senderId;
+  // Önce arkadaş listesinde ara
+  const friends = window.chitchatFriends || [];
+  const found = friends.find(f => f.id === senderId);
+  if (found && found.displayName) {
+    senderName = found.displayName;
+  } else if (window.chitchatUserCache && window.chitchatUserCache[senderId] && window.chitchatUserCache[senderId].displayName) {
+    senderName = window.chitchatUserCache[senderId].displayName;
+  } else {
+    // API'dan çek (ilk defa ise)
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${backendUrl}/api/user/${senderId}`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (res.ok) {
+        const u = await res.json();
+        window.chitchatUserCache[senderId] = u;
+        if (u.displayName) senderName = u.displayName;
+      }
+    } catch {}
+  }
+  console.log("senderId:", senderId, "displayName:", senderName);
+
+  let dateObject;
+  if (typeof timestamp === 'string' && !timestamp.endsWith('Z')) {
+    // Backend'den gelen string tarih ise ve UTC belirtilmemişse 'Z' ekle
+    dateObject = new Date(timestamp + 'Z');
+  } else {
+    // Zaten Date objesi veya UTC belirtilmiş string ise direkt kullan
+    dateObject = new Date(timestamp);
+  }
+
+  const time = dateObject.toLocaleTimeString('tr-TR', {
     hour: '2-digit', 
     minute: '2-digit'
   });
-  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
-  const isOwnMessage = senderName === currentUser.name || senderName === currentUser.displayName || senderName === currentUser.userName || senderName === currentUser.email;
-  const alignClass = isOwnMessage ? 'ms-auto text-end' : 'me-auto text-start';
-  const bubbleClass = isOwnMessage ? 'bg-primary text-white' : 'bg-light border';
+  const alignClass = isOwnMessage ? 'justify-content-end align-items-end' : 'justify-content-start align-items-start';
+  const bubbleClass = isOwnMessage ? 'bg-primary text-white text-end' : 'bg-light border text-start';
   const messageDiv = document.createElement('div');
-  messageDiv.className = `mb-2 d-flex flex-column ${alignClass}`;
+  messageDiv.className = `mb-2 d-flex ${alignClass}`;
   messageDiv.innerHTML = `
-    <div class=\"p-2 rounded ${bubbleClass}\" style=\"max-width: 70%; display: inline-block; word-break: break-word;\">
+    <div class=\"p-2 rounded ${bubbleClass}\" style=\"display: inline-block; min-width: 60px; max-width: 60%; word-break: break-word;\">
       ${!isOwnMessage && senderName !== 'Kullanıcı' ? `<strong>${senderName}</strong><br>` : ''}
       ${content}
       <div class=\"small mt-1 ${isOwnMessage ? 'text-light' : 'text-muted'}\">${time}</div>
     </div>
   `;
   messageArea.appendChild(messageDiv);
-  messageArea.scrollTop = messageArea.scrollHeight;
 }
 
 // ✅ YENİ EKLENEN: chat.html'deki addRealTimeMessage fonksiyonunu güncelle
 // Bu fonksiyon chat.html'de SignalR event'inde çağrılacak
 async function addRealTimeMessage(message) {
-  let senderName = await getBestUserName(message.sender) || await getBestUserName(message.senderName);
-  await addMessageToChat(senderName, message.content, message.timestamp);
+  await addMessageToChat(message.sender, message.content, message.timestamp);
+  // Bildirim için isim/email göster
+  const senderName = await getBestUserName(message.sender);
   const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
   if (senderName !== currentUser.name && senderName !== currentUser.displayName && senderName !== currentUser.userName && senderName !== currentUser.email) {
     showNotification(`${senderName}: ${message.content}`);
   }
+  // Yeni mesaj geldiğinde otomatik kaydır
+  const area = document.getElementById("messageArea");
+  area.scrollTop = area.scrollHeight;
 }
 
 // Sohbet sayfası açıldığında çalışır
@@ -677,32 +868,42 @@ async function resetPassword() {
 
 async function updateAvatar() {
   const token = localStorage.getItem("token");
-  const fileInput = document.getElementById("updateAvatarInput");
+  const fileInput = document.getElementById('updateAvatarInput');
   const file = fileInput.files[0];
 
   if (!file) {
-    return showToast("Lütfen bir görsel seçin.", 'error');
+    showToast('Lütfen bir dosya seçin.', 'error');
+    return;
   }
 
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append('file', file);
 
   try {
-    const res = await fetch(`${backendUrl}/api/users/avatar`, {
-      method: "POST",
+    const res = await fetch(`${backendUrl}/api/file/upload/profile-picture`, {
+      method: 'POST',
       headers: {
-        Authorization: "Bearer " + token,
+        'Authorization': `Bearer ${token}`
       },
-      body: formData,
+      body: formData
     });
 
-    if (!res.ok) throw new Error("Profil fotoğrafı güncellenemedi.");
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Profil fotoğrafı yüklenemedi.');
+    }
 
     const data = await res.json();
-    $("#profileAvatar").attr("src", data.avatarUrl); // Sunucudan dönen URL'i kullan
-    showToast("✅ Profil fotoğrafı güncellendi.", 'success');
+    showToast('✅ Profil fotoğrafı güncellendi!', 'success');
+    
+    // UI'daki avatarı anında güncelle
+    $('#profileAvatar').attr('src', data.profilePictureUrl);
+
+    // Arkadaş listesini de yenileyerek yeni avatarı göster
+    await renderUserList();
+
   } catch (err) {
-    showToast("❌ Hata: " + err.message, 'error');
+    showToast(`❌ Hata: ${err.message}`, 'error');
   }
 }
 
@@ -724,14 +925,17 @@ async function fetchAndRenderFriendRequests() {
     }
     list.innerHTML = '';
     requests.forEach(r => {
-      // Gönderenin email ve kullanıcı adı birlikte gösterilsin
-      const senderInfo = `${r.SenderName || ''} <span class='text-muted'>(${r.SenderEmail || ''})</span>`;
+      // JSON'dan gelen camelCase (küçük harfle başlayan) alanları kullan
+      const senderName = r.senderName || r.senderEmail || r.senderId || 'Bilinmeyen';
+      const senderEmail = r.senderEmail || '-';
+      // Gelen UTC tarihini doğru yorumlamak için sonuna 'Z' ekliyoruz
+      const createdAt = r.createdAt ? new Date(r.createdAt + 'Z').toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
       const li = document.createElement('li');
       li.className = 'list-group-item d-flex align-items-center';
       li.innerHTML = `
         <div>
-          <strong>${senderInfo}</strong>
-          <br><small class="text-muted">${new Date(r.CreatedAt).toLocaleString('tr-TR')}</small>
+          <strong>${senderName}</strong> <span class='text-muted'>(${senderEmail})</span><br>
+          <small class="text-muted">${createdAt} tarihinde gönderildi</small>
         </div>
         <button class="btn btn-success btn-sm ms-auto me-1" onclick="acceptFriendRequest('${r.id}')">Kabul</button>
         <button class="btn btn-danger btn-sm" onclick="rejectFriendRequest('${r.id}')">Reddet</button>
@@ -803,7 +1007,36 @@ if (window.location.pathname.includes('chat.html')) {
       fetchAndRenderFriendRequests();
       fetchAndStoreFriends();
     }, 10000);
+
+    // Arkadaşlık istekleri başlığına tıklanınca hemen güncelle
+    const friendRequestsHeader = document.getElementById('friendRequestsHeader');
+    if (friendRequestsHeader) {
+      friendRequestsHeader.addEventListener('click', () => {
+        fetchAndRenderFriendRequests();
+      });
+    }
+    // Yenile butonuna tıklanınca hemen güncelle
+    const friendRequestsRefreshBtn = document.getElementById('friendRequestsRefreshBtn');
+    if (friendRequestsRefreshBtn) {
+      friendRequestsRefreshBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Kart başlığına tıklamayı tetiklemesin
+        fetchAndRenderFriendRequests();
+      });
+    }
   });
+}
+
+// Pencere odaklandığında arkadaşlık isteklerini güncelle
+window.addEventListener('focus', () => {
+  fetchAndRenderFriendRequests();
+});
+
+// SignalR event handler'ı güncelle
+if (window.signalRConnection) {
+  window.signalRConnection.on("ReceiveMessage", function(message) {
+    addRealTimeMessage(message);
+  });
+
 }
 
 

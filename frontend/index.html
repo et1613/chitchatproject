@@ -27,6 +27,9 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+  <script src="signalr.js"></script>
+
   <script>
     const backendUrl = "https://localhost:7030"; // <-- API ADRESİ İÇİN SABİT
 
@@ -69,9 +72,11 @@
           let errMsg = "Giriş başarısız.";
           try {
             const err = await res.json();
-            errMsg = err.message || errMsg;
+            errMsg = err.message || err.error || errMsg;
             if ((errMsg && (errMsg.toLowerCase().includes("doğrulanmamış") || errMsg.toLowerCase().includes("verify")))) {
               errMsg = "E-posta adresiniz doğrulanmamış. Lütfen e-postanızı kontrol edin.";
+            } else if (res.status === 403) {
+              errMsg = err.error || "Giriş yetkiniz yok veya hesabınız askıya alınmış.";
             }
           } catch (_) {}
           throw new Error(errMsg);
@@ -84,6 +89,9 @@
         statusBox.className = "alert alert-success";
         statusBox.innerText = "✅ Giriş başarılı. Yönlendiriliyorsunuz...";
         statusBox.classList.remove("d-none");
+
+        // SignalR bağlantısını başlat
+        initializeSignalR();
 
         setTimeout(() => {
           if (data.user && data.user.role === 3) {

@@ -890,6 +890,67 @@ namespace WebApplication1.Services
             await _context.SaveChangesAsync();
             return room;
         }
+
+        public async Task<ChatRoom> CreateGroupChatAsync(string name, string creatorId, List<string> participantIds)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                throw new ArgumentException("Group name cannot be null or empty.", nameof(name));
+            }
+            if (string.IsNullOrEmpty(creatorId))
+            {
+                throw new ArgumentException("Creator ID cannot be null or empty.", nameof(creatorId));
+            }
+            if (participantIds == null || participantIds.Distinct().Count() <= 2)
+            {
+                throw new ArgumentException("A group must have at least 3 participants.", nameof(participantIds));
+            }
+
+            var creator = await _userRepository.GetByIdAsync(creatorId);
+            if (creator == null)
+            {
+                throw new ArgumentException($"Creator with ID {creatorId} not found.");
+            }
+
+            var participants = new List<User>();
+            foreach (var pid in participantIds.Distinct())
+            {
+                var participant = await _context.Users.FindAsync(pid);
+                if (participant != null)
+                {
+                    participants.Add(participant);
+                }
+                else
+                {
+                    _logger.LogWarning("User with ID {ParticipantId} not found when creating group chat.", pid);
+                }
+            }
+            
+            // Ensure creator is in the list
+            if (!participants.Any(p => p.Id == creatorId))
+            {
+                participants.Add(creator);
+            }
+
+            var chatRoom = new ChatRoom
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = name,
+                Description = $"Group chat created by {creator.UserName}",
+                AdminId = creatorId,
+                Admin = creator,
+                CreatedAt = DateTime.UtcNow,
+                IsGroupChat = true,
+                Participants = participants
+            };
+
+            _context.ChatRooms.Add(chatRoom);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Group chat room '{RoomName}' created with ID {RoomId} by user {CreatorId}", name, chatRoom.Id, creatorId);
+
+            return chatRoom;
+        }
     }
 
     public class WebSocketMessage

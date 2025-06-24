@@ -25,5 +25,6 @@ namespace WebApplication1.Services
         Task<bool> MarkMessageAsReadAsync(string messageId);
         Task<bool> UpdateMessageAsync(string messageId, string content, string userId);
         Task<ChatRoom> GetOrCreateDirectChatRoomAsync(string userId1, string userId2);
+        Task<ChatRoom> CreateGroupChatAsync(string name, string creatorId, List<string> participantIds);
     }
 } 

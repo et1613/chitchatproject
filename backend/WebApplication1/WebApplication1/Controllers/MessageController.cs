@@ -132,7 +132,23 @@ namespace WebApplication1.Controllers
             try
             {
                 var messages = await _messageService.GetChatHistoryAsync(chatRoomId, skip, take);
-                return Ok(messages);
+                
+                var messageDtos = messages.Select(m => new MessageDTO
+                {
+                    Id = m.Id,
+                    Content = m.Content,
+                    Timestamp = m.Timestamp,
+                    SenderId = m.SenderId,
+                    Sender = m.Sender == null ? null : new UserDTO
+                    {
+                        Id = m.Sender.Id,
+                        DisplayName = m.Sender.DisplayName,
+                        UserName = m.Sender.UserName,
+                        Email = m.Sender.Email
+                    }
+                }).ToList();
+
+                return Ok(messageDtos);
             }
             catch (Exception ex)
             {

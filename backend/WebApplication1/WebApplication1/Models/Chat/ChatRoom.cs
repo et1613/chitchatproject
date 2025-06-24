@@ -37,6 +37,7 @@ namespace WebApplication1.Models.Chat
         public int MaxPinnedMessages { get; set; } = 5;
         public bool AllowInvites { get; set; } = true;
         public bool RequireApproval { get; set; } = false;
+        public bool IsGroupChat { get; set; } = false;
         public string? AvatarUrl { get; set; }
         public string? CustomData { get; set; }
 

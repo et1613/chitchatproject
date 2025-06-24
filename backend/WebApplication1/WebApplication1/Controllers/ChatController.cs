@@ -47,6 +47,10 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var message = await _chatService.SendMessageAsync(userId, request.ChatRoomId, request.Content);
+
+                // Mesajı kaydettikten hemen sonra yayını tetikle
+                await _chatService.BroadcastMessageToRoom(request.ChatRoomId, request.Content, userId);
+
                 return Ok(new MessageDTO {
                     Id = message.Id,
                     SenderId = message.SenderId,
@@ -178,6 +182,54 @@ namespace WebApplication1.Controllers
             }
         }
 
+        [HttpPost("group-room")]
+        public async Task<IActionResult> CreateGroupRoom([FromBody] CreateGroupChatRequest request)
+        {
+            try
+            {
+                var creatorId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(creatorId))
+                {
+                    return Unauthorized();
+                }
+
+                // Add creator to participants if not already included
+                if (!request.ParticipantIds.Contains(creatorId))
+                {
+                    request.ParticipantIds.Add(creatorId);
+                }
+
+                var chatRoom = await _chatService.CreateGroupChatAsync(request.Name, creatorId, request.ParticipantIds);
+                if (chatRoom == null)
+                {
+                    return BadRequest("Could not create group chat.");
+                }
+
+                var chatRoomDto = new ChatRoomDTO
+                {
+                    Id = chatRoom.Id,
+                    Name = chatRoom.Name,
+                    Description = chatRoom.Description,
+                    AdminId = chatRoom.AdminId,
+                    IsGroupChat = chatRoom.IsGroupChat,
+                    Participants = chatRoom.Participants.Select(p => new UserDTO
+                    {
+                        Id = p.Id,
+                        DisplayName = p.DisplayName,
+                        UserName = p.UserName,
+                        Email = p.Email
+                    }).ToList()
+                };
+
+                return Ok(chatRoomDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating group chat room");
+                return StatusCode(500, "Error creating group chat room");
+            }
+        }
+
         [HttpGet("rooms")]
         public async Task<IActionResult> GetUserChatRooms()
         {
@@ -188,7 +240,24 @@ namespace WebApplication1.Controllers
                     return Unauthorized();
 
                 var chatRooms = await _chatService.GetUserChatRoomsAsync(userId);
-                return Ok(chatRooms);
+
+                var chatRoomDtos = chatRooms.Select(chatRoom => new ChatRoomDTO
+                {
+                    Id = chatRoom.Id,
+                    Name = chatRoom.Name,
+                    Description = chatRoom.Description,
+                    AdminId = chatRoom.AdminId,
+                    IsGroupChat = chatRoom.IsGroupChat,
+                    Participants = chatRoom.Participants.Select(p => new UserDTO
+                    {
+                        Id = p.Id,
+                        DisplayName = p.DisplayName,
+                        UserName = p.UserName,
+                        Email = p.Email
+                    }).ToList()
+                }).ToList();
+
+                return Ok(chatRoomDtos);
             }
             catch (Exception ex)
             {
@@ -413,9 +482,25 @@ namespace WebApplication1.Controllers
         public string? Description { get; set; }
     }
 
+    public class CreateGroupChatRequest
+    {
+        public required string Name { get; set; }
+        public required List<string> ParticipantIds { get; set; }
+    }
+
     public class DirectRoomRequest
     {
         public required string OtherUserId { get; set; }
+    }
+
+    public class ChatRoomDTO
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string? Description { get; set; }
+        public string AdminId { get; set; }
+        public bool IsGroupChat { get; set; }
+        public List<UserDTO> Participants { get; set; }
     }
 
     public class MessageDTO

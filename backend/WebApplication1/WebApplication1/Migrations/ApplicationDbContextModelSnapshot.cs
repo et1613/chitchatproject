@@ -325,7 +325,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 11, 8, 19, 46, 571, DateTimeKind.Utc).AddTicks(7534));
+                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 983, DateTimeKind.Utc).AddTicks(5129));
 
                     b.Property<string>("CustomData")
                         .HasColumnType("longtext");
@@ -338,6 +338,9 @@ namespace WebApplication1.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsGroupChat")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("tinyint(1)");
@@ -526,7 +529,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("Timestamp")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 11, 8, 19, 46, 575, DateTimeKind.Utc).AddTicks(7926));
+                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 987, DateTimeKind.Utc).AddTicks(4376));
 
                     b.Property<int>("Type")
                         .HasColumnType("int");
@@ -717,7 +720,7 @@ namespace WebApplication1.Migrations
 
                     b.Property<string>("BlockedSenders")
                         .IsRequired()
-                        .HasColumnType("json");
+                        .HasColumnType("longtext");
 
                     b.Property<bool>("BrowserNotifications")
                         .HasColumnType("tinyint(1)");
@@ -746,11 +749,11 @@ namespace WebApplication1.Migrations
                     b.Property<bool>("EnableVibration")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<string>("EnabledChannels")
+                    b.Property<string>("EnabledChannelsJson")
                         .IsRequired()
                         .HasColumnType("json");
 
-                    b.Property<string>("EnabledTypes")
+                    b.Property<string>("EnabledTypesJson")
                         .IsRequired()
                         .HasColumnType("json");
 
@@ -1141,7 +1144,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 11, 8, 19, 46, 564, DateTimeKind.Utc).AddTicks(1810));
+                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 976, DateTimeKind.Utc).AddTicks(1141));
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(100)
@@ -1154,6 +1157,12 @@ namespace WebApplication1.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("EmailVerificationTokenExpiresAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<int>("FailedLoginAttempts")
                         .HasColumnType("int");
@@ -1190,9 +1199,6 @@ namespace WebApplication1.Migrations
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)");
-
-                    b.Property<string>("NotificationSettingsUserId")
-                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -1232,12 +1238,6 @@ namespace WebApplication1.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<string>("UserPreferencesUserId")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("UserSettingsUserId")
-                        .HasColumnType("varchar(255)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedEmail")
@@ -1246,12 +1246,6 @@ namespace WebApplication1.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
-
-                    b.HasIndex("NotificationSettingsUserId");
-
-                    b.HasIndex("UserPreferencesUserId");
-
-                    b.HasIndex("UserSettingsUserId");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -1266,7 +1260,6 @@ namespace WebApplication1.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasColumnType("longtext");
 
                     b.Property<string>("ErrorMessage")
@@ -1276,9 +1269,7 @@ namespace WebApplication1.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<bool>("IsSuccessful")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Location")
                         .HasColumnType("longtext");
@@ -1349,9 +1340,7 @@ namespace WebApplication1.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsEmailPublic")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsEventsPublic")
                         .HasColumnType("tinyint(1)");
@@ -1387,9 +1376,7 @@ namespace WebApplication1.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsOnlineStatusPublic")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsPhoneNumberPublic")
                         .HasColumnType("tinyint(1)");
@@ -1404,9 +1391,7 @@ namespace WebApplication1.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsReadReceiptsPublic")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsRecentCalendarItemsListPublic")
                         .HasColumnType("tinyint(1)");
@@ -1477,10 +1462,16 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("UserId1")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
                     b.Property<string>("Website")
                         .HasColumnType("longtext");
 
                     b.HasKey("UserId");
+
+                    b.HasIndex("UserId1");
 
                     b.ToTable("UserPreferences");
                 });
@@ -1544,9 +1535,7 @@ namespace WebApplication1.Migrations
 
                     b.Property<string>("Language")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("longtext")
-                        .HasDefaultValue("en");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("LastBackup")
                         .HasColumnType("datetime(6)");
@@ -1583,45 +1572,24 @@ namespace WebApplication1.Migrations
 
                     b.Property<string>("Theme")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("longtext")
-                        .HasDefaultValue("light");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("TimeZone")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("longtext")
-                        .HasDefaultValue("UTC");
+                        .HasColumnType("longtext");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("UserId1")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
                     b.HasKey("UserId");
 
+                    b.HasIndex("UserId1");
+
                     b.ToTable("UserSettings");
-                });
-
-            modelBuilder.Entity("WebApplication1.Services.BlockedIpAddress", b =>
-                {
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(45)
-                        .HasColumnType("varchar(45)");
-
-                    b.Property<DateTime>("BlockedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("IpAddress");
-
-                    b.HasIndex("ExpiresAt");
-
-                    b.ToTable("BlockedIpAddresses");
                 });
 
             modelBuilder.Entity("WebApplication1.Services.NotificationGroup", b =>
@@ -2075,7 +2043,7 @@ namespace WebApplication1.Migrations
             modelBuilder.Entity("WebApplication1.Models.Notifications.NotificationSettings", b =>
                 {
                     b.HasOne("WebApplication1.Models.Users.User", "User")
-                        .WithOne()
+                        .WithOne("NotificationSettings")
                         .HasForeignKey("WebApplication1.Models.Notifications.NotificationSettings", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2121,27 +2089,6 @@ namespace WebApplication1.Migrations
                     b.Navigation("Sender");
                 });
 
-            modelBuilder.Entity("WebApplication1.Models.Users.User", b =>
-                {
-                    b.HasOne("WebApplication1.Models.Notifications.NotificationSettings", "NotificationSettings")
-                        .WithMany()
-                        .HasForeignKey("NotificationSettingsUserId");
-
-                    b.HasOne("WebApplication1.Models.Users.UserPreferences", "UserPreferences")
-                        .WithMany()
-                        .HasForeignKey("UserPreferencesUserId");
-
-                    b.HasOne("WebApplication1.Models.Users.UserSettings", "UserSettings")
-                        .WithMany()
-                        .HasForeignKey("UserSettingsUserId");
-
-                    b.Navigation("NotificationSettings");
-
-                    b.Navigation("UserPreferences");
-
-                    b.Navigation("UserSettings");
-                });
-
             modelBuilder.Entity("WebApplication1.Models.Users.UserActivity", b =>
                 {
                     b.HasOne("WebApplication1.Models.Users.User", "User")
@@ -2155,9 +2102,15 @@ namespace WebApplication1.Migrations
 
             modelBuilder.Entity("WebApplication1.Models.Users.UserPreferences", b =>
                 {
-                    b.HasOne("WebApplication1.Models.Users.User", "User")
-                        .WithOne()
+                    b.HasOne("WebApplication1.Models.Users.User", null)
+                        .WithOne("UserPreferences")
                         .HasForeignKey("WebApplication1.Models.Users.UserPreferences", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.Models.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId1")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -2166,9 +2119,15 @@ namespace WebApplication1.Migrations
 
             modelBuilder.Entity("WebApplication1.Models.Users.UserSettings", b =>
                 {
-                    b.HasOne("WebApplication1.Models.Users.User", "User")
-                        .WithOne()
+                    b.HasOne("WebApplication1.Models.Users.User", null)
+                        .WithOne("UserSettings")
                         .HasForeignKey("WebApplication1.Models.Users.UserSettings", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.Models.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId1")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -2218,6 +2177,8 @@ namespace WebApplication1.Migrations
 
                     b.Navigation("NotificationPreferences");
 
+                    b.Navigation("NotificationSettings");
+
                     b.Navigation("Notifications");
 
                     b.Navigation("ReceivedFriendRequests");
@@ -2225,6 +2186,10 @@ namespace WebApplication1.Migrations
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("SentFriendRequests");
+
+                    b.Navigation("UserPreferences");
+
+                    b.Navigation("UserSettings");
                 });
 #pragma warning restore 612, 618
         }

@@ -76,6 +76,11 @@ namespace WebApplication1.Controllers
                 if (user == null)
                     return Unauthorized(new { error = "User not found" });
 
+                if (!user.IsActive)
+                {
+                    return StatusCode(403, new { error = "Hesabınız askıya alınmıştır. Lütfen yönetici ile iletişime geçin." });
+                }
+
                 await _userService.UpdateOnlineStatusAsync(user.Id, true);
 
                 return Ok(new
@@ -511,7 +516,8 @@ namespace WebApplication1.Controllers
                 f.Id,
                 f.UserName,
                 f.Email,
-                f.DisplayName
+                f.DisplayName,
+                f.ProfilePictureUrl
             });
 
             return Ok(friendList);
@@ -543,11 +549,26 @@ namespace WebApplication1.Controllers
                 return Unauthorized();
 
             var requests = await _userService.GetReceivedFriendRequestsAsync(userId);
-            var result = requests.Select(r => new {
+
+            // --- DEBUG LOG BAŞLANGIÇ ---
+            _logger.LogInformation("----- DEBUG: Gelen Arkadaşlık İstekleri -----");
+            _logger.LogInformation("Toplam {Count} istek bulundu.", requests.Count);
+            foreach (var r in requests)
+            {
+                var senderInfo = r.Sender == null
+                    ? "Sender objesi BOŞ (NULL)!"
+                    : $"Sender: {r.Sender.DisplayName ?? "İsim Yok"}, {r.Sender.Email ?? "Email Yok"}";
+                _logger.LogInformation("Istek ID: {RequestId}, SenderID: {SenderId}, Detay: {SenderInfo}", r.Id, r.SenderId, senderInfo);
+            }
+            _logger.LogInformation("----- DEBUG: Bitti -----");
+            // --- DEBUG LOG BİTİŞ ---
+
+            var result = requests.Select(r => new
+            {
                 r.Id,
                 SenderId = r.SenderId,
-                SenderName = r.Sender.UserName,
-                SenderEmail = r.Sender.Email,
+                SenderName = r.Sender?.DisplayName ?? r.Sender?.UserName ?? r.Sender?.Email ?? r.SenderId.ToString(),
+                SenderEmail = r.Sender?.Email,
                 r.Message,
                 r.CreatedAt
             });
@@ -584,6 +605,90 @@ namespace WebApplication1.Controllers
         public class RejectFriendRequestModel
         {
             public string? Reason { get; set; }
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetUserById(string id)
+        {
+            try
+            {
+                var user = await _userService.GetUserByIdAsync(id);
+                if (user == null)
+                    return NotFound(new { error = "User not found" });
+
+                return Ok(new
+                {
+                    user.Id,
+                    user.UserName,
+                    user.Email,
+                    user.DisplayName,
+                    user.Role,
+                    user.IsVerified,
+                    user.IsActive,
+                    user.CreatedAt
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting user by id");
+                return StatusCode(500, "Error getting user by id");
+            }
+        }
+
+        [HttpPost("block-by-email")]
+        public async Task<IActionResult> BlockUserByEmail([FromBody] BlockUserByEmailRequest request)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var userToBlock = await _userService.GetUserByEmailAsync(request.EmailToBlock);
+            if (userToBlock == null)
+                return NotFound(new { error = "Kullanıcı bulunamadı" });
+
+            var result = await _userService.BlockUserAsync(userId, userToBlock.Id);
+            if (!result)
+                return BadRequest(new { error = "Kullanıcı engellenemedi veya zaten engelli" });
+
+            return Ok(new { success = true });
+        }
+
+        [HttpGet("blocked")]
+        public async Task<IActionResult> GetBlockedUsers()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var blockedUsers = await _userService.GetBlockedUsersAsync(userId);
+            var result = blockedUsers.Select(u => new 
+            {
+                u.Id,
+                u.UserName,
+                u.Email,
+                u.DisplayName
+            });
+
+            return Ok(result);
+        }
+
+        [HttpPost("unblock-by-id/{blockedUserId}")]
+        public async Task<IActionResult> UnblockUserById(string blockedUserId)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var result = await _userService.UnblockUserAsync(userId, blockedUserId);
+            if (!result)
+                return BadRequest(new { error = "Engelleme kaldırılamadı veya kullanıcı engelli değil" });
+            
+            return Ok(new { success = true });
+        }
+
+        public class BlockUserByEmailRequest
+        {
+            public string EmailToBlock { get; set; }
         }
     }
 
