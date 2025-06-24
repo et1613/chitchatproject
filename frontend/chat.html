@@ -178,14 +178,22 @@
     // SignalR event listeners
     function setupSignalREventListeners() {
       // Yeni mesaj geldiğinde
-      signalRConnection.on("ReceiveMessage", function (message) {
-        console.log("Real-time message received:", message);
-        // message.sender, message.senderId, message.content, message.timestamp
-        const sender = message.sender?.email || message.senderId || "Bilinmeyen";
-        const content = message.content;
-        const timestamp = message.timestamp;
-        addRealTimeMessage(sender, content, timestamp);
-      });
+      signalRConnection.on("ReceiveMessage", function (user, message, timestamp) {
+  console.log("Real-time message received:", { user, message, timestamp });
+  
+  // Sadece başkalarından gelen mesajları ekle
+  const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+  const isOwnMessage = (user === currentUser.email || 
+                       user === currentUser.name ||
+                       user === currentUser.userName);
+  
+  if (!isOwnMessage) {
+    addRealTimeMessage(user, message, timestamp);
+    showNotification(`${user}: ${message}`);
+  } else {
+    console.log("Own message received via SignalR, skipping duplicate");
+  }
+});
 
       // Kullanıcı chat'e katıldı
       signalRConnection.on("UserJoined", function (user, roomId) {
