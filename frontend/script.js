@@ -442,18 +442,28 @@ async function sendMessage() {
   }
 
   // 3. SignalR ile real-time gönderim (YENİ EKLENEN)
-  if (isSignalRConnected && signalRConnection) {
-    try {
-      await signalRConnection.invoke("SendMessage", chatRoomId, content);
-      console.log("SignalR message sent successfully");
-    } catch (signalRError) {
-      console.error("SignalR send error:", signalRError);
-    }
-  }
+ const currentUser = JSON.parse(localStorage.getItem("chitchat_user") || "{}");
+if (content) {
+  await addMessageToChat(
+    currentUser.name || currentUser.displayName || currentUser.email, 
+    content, 
+    new Date()
+  );
+}
 
-  // 4. Input'ları temizle
-  messageInput.value = "";
-  fileInput.value = "";
+// 4. SignalR ile real-time gönderim (başkaları görsün diye)
+if (isSignalRConnected && signalRConnection) {
+  try {
+    await signalRConnection.invoke("SendMessage", chatRoomId, content);
+    console.log("SignalR message sent successfully");
+  } catch (signalRError) {
+    console.error("SignalR send error:", signalRError);
+  }
+}
+
+// 5. Input'ları temizle
+messageInput.value = "";
+fileInput.value = "";
 }
 
 // ✅ SignalR Entegreli loadMessages() fonksiyonu
