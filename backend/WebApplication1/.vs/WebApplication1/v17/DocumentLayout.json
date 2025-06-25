@@ -42,8 +42,7 @@
               "RelativeToolTip": "WebApplication1\\Controllers\\ChatController.cs",
               "ViewState": "AgIAAPgBAAAAAAAAAAAawAcCAAAWAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-25T09:59:29.811Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-06-25T09:59:29.811Z"
             },
             {
               "$type": "Document",
@@ -55,8 +54,7 @@
               "RelativeToolTip": "WebApplication1\\Data\\ApplicationDbContext.cs",
               "ViewState": "AgIAAEABAAAAAAAAAAAawDEBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-25T09:55:23.736Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-06-25T09:55:23.736Z"
             },
             {
               "$type": "Document",
@@ -68,8 +66,7 @@
               "RelativeToolTip": "WebApplication1\\Controllers\\FileController.cs",
               "ViewState": "AgIAADQBAAAAAAAAAAAawEUBAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-06-24T12:35:51.731Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-06-24T12:35:51.731Z"
             },
             {
               "$type": "Document",
@@ -91,7 +88,7 @@
               "RelativeDocumentMoniker": "WebApplication1\\Program.cs",
               "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Program.cs",
               "RelativeToolTip": "WebApplication1\\Program.cs",
-              "ViewState": "AgIAAL4AAAAAAAAAAAAAAM0AAAAEAAAAAAAAAA==",
+              "ViewState": "AgIAAPoAAAAAAAAAAAAAAAQBAAAEAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-06-20T12:56:19.976Z",
               "EditorCaption": ""

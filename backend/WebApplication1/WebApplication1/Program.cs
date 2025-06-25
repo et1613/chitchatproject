@@ -174,6 +174,8 @@ builder.Services.AddSingleton<SignalRConnectionManager>();
 // Add Redis connection string
 builder.Configuration["Redis"] = "localhost:6379";
 
+var seedAdmin = builder.Configuration.GetValue<bool>("Database:SeedAdmin", false);
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -252,49 +254,21 @@ app.Map("/ws", async context =>
     }
 });
 
-// Seed initial data
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<ApplicationDbContext>();
-    context.Database.EnsureCreated();
-
-    // Seed admin user if not exists
-    if (!context.Users.Any(u => u.UserName == "admin"))
-    {
-        var hashingService = services.GetRequiredService<HashingService>();
-        var adminUser = new User
-        {
-            UserName = "admin",
-            Email = "admin@chitchat.com",
-            PasswordHash = hashingService.HashPassword("Admin123!"),
-            DisplayName = "System Admin",
-            Role = UserRole.Admin,
-            Status = UserStatus.Online,
-            IsActive = true,
-            IsVerified = true,
-            CreatedAt = DateTime.UtcNow
-        };
-        context.Users.Add(adminUser);
-        await context.SaveChangesAsync();
-    }
-}
-
 // Uygulama başlatıldığında eksik migration'ları uygula (veritabanını silmez)
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     dbContext.Database.Migrate();
 
-    // Admin seed
-    if (!dbContext.Users.Any(u => u.Role == UserRole.Admin || u.Role == UserRole.SuperAdmin))
+    if (seedAdmin && !dbContext.Users.Any(u => u.Role == UserRole.Admin || u.Role == UserRole.SuperAdmin))
     {
+        var hashingService = scope.ServiceProvider.GetRequiredService<HashingService>();
         var admin = new User
         {
             Id = Guid.NewGuid().ToString(),
             UserName = "admin",
             Email = "adminc@chitchat.com",
-            PasswordHash = new HashingService().HashPassword("Admin123!"),
+            PasswordHash = hashingService.HashPassword("Admin123!"),
             DisplayName = "Admin",
             Role = UserRole.Admin,
             IsActive = true,
