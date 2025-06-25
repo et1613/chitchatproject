@@ -116,7 +116,7 @@ namespace WebApplication1.Data
                 entity.HasOne(c => c.Admin)
                     .WithMany()
                     .HasForeignKey(c => c.AdminId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Message configurations
@@ -138,7 +138,7 @@ namespace WebApplication1.Data
                 entity.HasOne(m => m.Sender)
                     .WithMany()
                     .HasForeignKey(m => m.SenderId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(m => m.ChatRoom)
                     .WithMany(c => c.Messages)
@@ -148,7 +148,7 @@ namespace WebApplication1.Data
                 entity.HasOne(m => m.ReplyToMessage)
                     .WithMany(m => m.Replies)
                     .HasForeignKey(m => m.ReplyToMessageId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.ClientSetNull);
             });
 
             // Notification configurations
@@ -182,12 +182,12 @@ namespace WebApplication1.Data
                 entity.HasOne(f => f.Sender)
                     .WithMany(u => u.SentFriendRequests)
                     .HasForeignKey(f => f.SenderId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(f => f.Receiver)
                     .WithMany(u => u.ReceivedFriendRequests)
                     .HasForeignKey(f => f.ReceiverId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // BlockedUser configurations
@@ -202,27 +202,27 @@ namespace WebApplication1.Data
                 entity.HasOne(b => b.BlockerUser)
                     .WithMany(u => u.BlockedUsers)
                     .HasForeignKey(b => b.BlockerUserId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(b => b.BlockedUserEntity)
                     .WithMany(u => u.BlockedByUsers)
                     .HasForeignKey(b => b.BlockedUserId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // UserActivity configurations
-            // modelBuilder.Entity<UserActivity>(entity =>
-            // {
-            //     entity.HasKey(e => e.Id);
-            //     entity.Property(e => e.ActivityType).IsRequired();
-            //     entity.Property(e => e.Description).IsRequired();
-            //     entity.Property(e => e.Timestamp);
-            //     entity.Property(e => e.IsSuccessful).HasDefaultValue(true);
-            //     entity.HasOne(a => a.User)
-            //         .WithMany(u => u.Activities)
-            //         .HasForeignKey(a => a.UserId)
-            //         .OnDelete(DeleteBehavior.Cascade);
-            // });
+            modelBuilder.Entity<UserActivity>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ActivityType).IsRequired();
+                entity.Property(e => e.Description).IsRequired();
+                entity.Property(e => e.Timestamp);
+                entity.Property(e => e.IsSuccessful).HasDefaultValue(true);
+                entity.HasOne(a => a.User)
+                    .WithMany(u => u.Activities)
+                    .HasForeignKey(a => a.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             // NotificationSettings configurations
             modelBuilder.Entity<NotificationSettings>(entity =>
@@ -250,9 +250,7 @@ namespace WebApplication1.Data
                 entity.Property(e => e.UploadedBy).IsRequired();
                 entity.Property(e => e.MimeType).IsRequired();
                 entity.Property(e => e.UploadedAt);
-                entity.Property(e => e.Metadata)
-                    .HasConversion(dictionaryConverter)
-                    .HasColumnType("json");
+                entity.Property(e => e.Metadata).HasConversion(dictionaryConverter);
 
                 // Relationship
                 entity.HasOne(a => a.Message)

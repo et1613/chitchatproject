@@ -79,6 +79,7 @@ namespace WebApplication1.Services
 
         public string? DeviceInfo { get; set; }
         public string? IpAddress { get; set; }
+        public bool IsAdminCreated { get; set; } = false;
     }
 
     public class AuthResponse
@@ -105,7 +106,7 @@ namespace WebApplication1.Services
     public interface IAuthService
     {
         Task<AuthResponse> LoginAsync(string email, string password);
-        Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null);
+        Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null, bool isAdminCreated = false);
         Task<(string accessToken, string refreshToken)> RefreshTokenAsync(string refreshToken);
         Task LogoutAsync(string refreshToken);
         Task<bool> ValidateTokenAsync(string token);
@@ -251,7 +252,7 @@ namespace WebApplication1.Services
             }
         }
 
-        public async Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null)
+        public async Task<(string accessToken, string refreshToken)> RegisterAsync(string username, string email, string password, string? displayName = null, bool isAdminCreated = false)
         {
             try
             {
@@ -272,21 +273,24 @@ namespace WebApplication1.Services
                     DisplayName = displayName ?? username,
                     Role = UserRole.Member,
                     IsActive = true, 
-                    IsVerified = false,
+                    IsVerified = isAdminCreated ? true : false,
                     CreatedAt = DateTime.UtcNow,
                     Status = UserStatus.Offline,
-                    EmailVerificationToken = Guid.NewGuid().ToString("N"),
-                    EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24)
+                    EmailVerificationToken = isAdminCreated ? null : Guid.NewGuid().ToString("N"),
+                    EmailVerificationTokenExpiresAt = isAdminCreated ? null : DateTime.UtcNow.AddHours(24)
                 };
 
                 await _userRepository.AddAsync(user);
 
-                await SendVerificationEmailAsync(user);
+                if (!isAdminCreated)
+                {
+                    await SendVerificationEmailAsync(user);
+                }
 
                 var accessToken = GenerateJwtToken(user);
                 var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user.Id);
 
-                _logger.LogInformation($"User {user.Id} registered successfully. Verification email sent.");
+                _logger.LogInformation($"User {user.Id} registered successfully. Verification email sent: {!isAdminCreated}");
 
                 return (accessToken, refreshToken);
             }

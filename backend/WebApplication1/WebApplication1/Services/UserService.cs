@@ -331,10 +331,93 @@ namespace WebApplication1.Services
         {
             try
             {
-                var user = await GetUserByIdAsync(id);
+                var user = await _context.Users
+                    .Include(u => u.Friends)
+                    .Include(u => u.ChatRooms)
+                    .FirstOrDefaultAsync(u => u.Id == id);
+
                 if (user == null)
                     return false;
 
+                // Remove from friends lists
+                var friends = await _context.Users
+                    .Where(u => u.Friends.Any(f => f.Id == id))
+                    .ToListAsync();
+                foreach (var friend in friends)
+                {
+                    friend.Friends.Remove(user);
+                }
+
+                // Remove friend requests
+                var friendRequests = await _context.FriendRequests
+                    .Where(fr => fr.SenderId == id || fr.ReceiverId == id)
+                    .ToListAsync();
+                _context.FriendRequests.RemoveRange(friendRequests);
+
+                // Remove blocked users
+                var blockedUsers = await _context.BlockedUsers
+                    .Where(bu => bu.BlockerUserId == id || bu.BlockedUserId == id)
+                    .ToListAsync();
+                _context.BlockedUsers.RemoveRange(blockedUsers);
+
+                // Remove notifications
+                var notifications = await _context.Notifications
+                    .Where(n => n.UserId == id)
+                    .ToListAsync();
+                _context.Notifications.RemoveRange(notifications);
+
+                // Remove user activities
+                var userActivities = await _context.UserActivities
+                    .Where(ua => ua.UserId == id)
+                    .ToListAsync();
+                _context.UserActivities.RemoveRange(userActivities);
+
+                // Remove refresh tokens
+                var refreshTokens = await _context.StoredTokens
+                    .Where(rt => rt.UserId == id)
+                    .ToListAsync();
+                _context.StoredTokens.RemoveRange(refreshTokens);
+                
+                // Remove from chat rooms and handle admin role
+                var chatRooms = await _context.ChatRooms
+                    .Include(cr => cr.Participants)
+                    .Where(cr => cr.Participants.Any(p => p.Id == id) || cr.AdminId == id)
+                    .ToListAsync();
+
+                foreach (var chatRoom in chatRooms)
+                {
+                    if (chatRoom.AdminId == id)
+                    {
+                        // If user is the admin, either delete the room or re-assign admin
+                        // For simplicity, we delete the chat room if the admin is deleted
+                        // A more robust solution might re-assign the admin
+                         _context.ChatRooms.Remove(chatRoom);
+                    }
+                    else
+                    {
+                        // If user is a participant, just remove them
+                        var participant = chatRoom.Participants.FirstOrDefault(p => p.Id == id);
+                        if (participant != null)
+                        {
+                            chatRoom.Participants.Remove(participant);
+                        }
+                    }
+                }
+                
+                // Anonymize or delete messages
+                var messages = await _context.Messages
+                    .Where(m => m.SenderId == id)
+                    .ToListAsync();
+                //Option 1: Delete messages
+                _context.Messages.RemoveRange(messages);
+                // Option 2: Anonymize messages (requires a nullable SenderId or a placeholder "deleted" user)
+                // foreach (var message in messages)
+                // {
+                //     message.SenderId = null; // This requires SenderId to be nullable
+                // }
+
+
+                // Finally, remove the user
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
                 return true;

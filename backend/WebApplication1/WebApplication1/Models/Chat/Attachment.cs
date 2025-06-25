@@ -46,8 +46,8 @@ namespace WebApplication1.Models.Chat
 
         public bool IsDeleted => DeletedAt.HasValue;
 
-        [Column(TypeName = "jsonb")]
         public Dictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+        public string? FileHash { get; set; }
 
         // Navigation property
         [ForeignKey("MessageId")]

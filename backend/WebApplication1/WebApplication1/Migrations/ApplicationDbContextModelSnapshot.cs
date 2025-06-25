@@ -252,6 +252,9 @@ namespace WebApplication1.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("longtext");
 
+                    b.Property<string>("FileHash")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -274,7 +277,7 @@ namespace WebApplication1.Migrations
 
                     b.Property<string>("Metadata")
                         .IsRequired()
-                        .HasColumnType("json");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("MimeType")
                         .IsRequired()
@@ -325,7 +328,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 983, DateTimeKind.Utc).AddTicks(5129));
+                        .HasDefaultValue(new DateTime(2025, 6, 25, 10, 3, 21, 948, DateTimeKind.Utc).AddTicks(6169));
 
                     b.Property<string>("CustomData")
                         .HasColumnType("longtext");
@@ -529,7 +532,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("Timestamp")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 987, DateTimeKind.Utc).AddTicks(4376));
+                        .HasDefaultValue(new DateTime(2025, 6, 25, 10, 3, 21, 952, DateTimeKind.Utc).AddTicks(7104));
 
                     b.Property<int>("Type")
                         .HasColumnType("int");
@@ -1144,7 +1147,7 @@ namespace WebApplication1.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
-                        .HasDefaultValue(new DateTime(2025, 6, 24, 13, 10, 51, 976, DateTimeKind.Utc).AddTicks(1141));
+                        .HasDefaultValue(new DateTime(2025, 6, 25, 10, 3, 21, 939, DateTimeKind.Utc).AddTicks(2888));
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(100)
@@ -1260,6 +1263,7 @@ namespace WebApplication1.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Description")
+                        .IsRequired()
                         .HasColumnType("longtext");
 
                     b.Property<string>("ErrorMessage")
@@ -1269,7 +1273,9 @@ namespace WebApplication1.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<bool>("IsSuccessful")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Location")
                         .HasColumnType("longtext");
@@ -1896,11 +1902,13 @@ namespace WebApplication1.Migrations
 
             modelBuilder.Entity("WebApplication1.Models.Auth.StoredToken", b =>
                 {
-                    b.HasOne("WebApplication1.Models.Users.User", null)
+                    b.HasOne("WebApplication1.Models.Users.User", "User")
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("WebApplication1.Models.Chat.Attachment", b =>
@@ -1919,7 +1927,7 @@ namespace WebApplication1.Migrations
                     b.HasOne("WebApplication1.Models.Users.User", "Admin")
                         .WithMany()
                         .HasForeignKey("AdminId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Admin");
@@ -1968,13 +1976,12 @@ namespace WebApplication1.Migrations
 
                     b.HasOne("WebApplication1.Models.Messages.Message", "ReplyToMessage")
                         .WithMany("Replies")
-                        .HasForeignKey("ReplyToMessageId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .HasForeignKey("ReplyToMessageId");
 
                     b.HasOne("WebApplication1.Models.Users.User", "Sender")
                         .WithMany()
                         .HasForeignKey("SenderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("ChatRoom");
@@ -2056,13 +2063,13 @@ namespace WebApplication1.Migrations
                     b.HasOne("WebApplication1.Models.Users.User", "BlockedUserEntity")
                         .WithMany("BlockedByUsers")
                         .HasForeignKey("BlockedUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("WebApplication1.Models.Users.User", "BlockerUser")
                         .WithMany("BlockedUsers")
                         .HasForeignKey("BlockerUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("BlockedUserEntity");
@@ -2075,13 +2082,13 @@ namespace WebApplication1.Migrations
                     b.HasOne("WebApplication1.Models.Users.User", "Receiver")
                         .WithMany("ReceivedFriendRequests")
                         .HasForeignKey("ReceiverId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("WebApplication1.Models.Users.User", "Sender")
                         .WithMany("SentFriendRequests")
                         .HasForeignKey("SenderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Receiver");

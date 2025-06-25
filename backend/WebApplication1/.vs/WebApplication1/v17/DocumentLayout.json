@@ -3,12 +3,20 @@
   "WorkspaceRootPath": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\filecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\filecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\chatcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\chatcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\controllers\\filecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|solutionrelative:webapplication1\\controllers\\filecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{45C9ED57-28A7-4CBF-8F7D-65FCF63DCF33}|WebApplication1\\WebApplication1.csproj|c:\\users\\emir_\\chitchatproject\\backend\\webapplication1\\webapplication1\\hubs\\chathub.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -22,11 +30,37 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 4,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
+              "Title": "ChatController.cs",
+              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\ChatController.cs",
+              "RelativeDocumentMoniker": "WebApplication1\\Controllers\\ChatController.cs",
+              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\ChatController.cs",
+              "RelativeToolTip": "WebApplication1\\Controllers\\ChatController.cs",
+              "ViewState": "AgIAAPgBAAAAAAAAAAAawAcCAAAWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-06-25T09:59:29.811Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "ApplicationDbContext.cs",
+              "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Data\\ApplicationDbContext.cs",
+              "RelativeDocumentMoniker": "WebApplication1\\Data\\ApplicationDbContext.cs",
+              "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Data\\ApplicationDbContext.cs",
+              "RelativeToolTip": "WebApplication1\\Data\\ApplicationDbContext.cs",
+              "ViewState": "AgIAAEABAAAAAAAAAAAawDEBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-06-25T09:55:23.736Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
               "Title": "FileController.cs",
               "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Controllers\\FileController.cs",
               "RelativeDocumentMoniker": "WebApplication1\\Controllers\\FileController.cs",
@@ -39,7 +73,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "ChatHub.cs",
               "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Hubs\\ChatHub.cs",
               "RelativeDocumentMoniker": "WebApplication1\\Hubs\\ChatHub.cs",
@@ -51,13 +85,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Program.cs",
               "RelativeDocumentMoniker": "WebApplication1\\Program.cs",
               "ToolTip": "C:\\Users\\emir_\\chitchatproject\\backend\\WebApplication1\\WebApplication1\\Program.cs",
               "RelativeToolTip": "WebApplication1\\Program.cs",
-              "ViewState": "AgIAAPUAAAAAAAAAAAArwIoAAAA0AAAAAAAAAA==",
+              "ViewState": "AgIAAL4AAAAAAAAAAAAAAM0AAAAEAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-06-20T12:56:19.976Z",
               "EditorCaption": ""

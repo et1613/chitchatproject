@@ -198,14 +198,6 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ensure database is created
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    dbContext.Database.EnsureDeleted();
-    dbContext.Database.EnsureCreated();
-}
-
 app.MapControllers();
 app.MapHub<ChatHub>("/chatHub");
 
@@ -285,6 +277,33 @@ using (var scope = app.Services.CreateScope())
         };
         context.Users.Add(adminUser);
         await context.SaveChangesAsync();
+    }
+}
+
+// Uygulama başlatıldığında eksik migration'ları uygula (veritabanını silmez)
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.Database.Migrate();
+
+    // Admin seed
+    if (!dbContext.Users.Any(u => u.Role == UserRole.Admin || u.Role == UserRole.SuperAdmin))
+    {
+        var admin = new User
+        {
+            Id = Guid.NewGuid().ToString(),
+            UserName = "admin",
+            Email = "adminc@chitchat.com",
+            PasswordHash = new HashingService().HashPassword("Admin123!"),
+            DisplayName = "Admin",
+            Role = UserRole.Admin,
+            IsActive = true,
+            IsVerified = true,
+            CreatedAt = DateTime.UtcNow,
+            Status = UserStatus.Online
+        };
+        dbContext.Users.Add(admin);
+        dbContext.SaveChanges();
     }
 }
 

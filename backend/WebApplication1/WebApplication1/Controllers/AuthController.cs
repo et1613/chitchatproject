@@ -59,12 +59,15 @@ namespace WebApplication1.Controllers
                     return BadRequest("Email and password are required");
                 }
 
+                bool isAdminCreated = request.IsAdminCreated;
+
                 // Register user and get tokens
                 (string accessToken, string refreshToken) = await _authService.RegisterAsync(
                     request.Username,
                     request.Email,
                     request.Password,
-                    request.DisplayName
+                    request.DisplayName,
+                    isAdminCreated
                 );
 
                 // Create response
@@ -78,7 +81,7 @@ namespace WebApplication1.Controllers
                         Email = request.Email,
                         DisplayName = request.DisplayName ?? request.Username,
                         Role = UserRole.Member,
-                        IsVerified = false,
+                        IsVerified = isAdminCreated,
                         Status = UserStatus.Offline,
                         CreatedAt = DateTime.UtcNow
                     }

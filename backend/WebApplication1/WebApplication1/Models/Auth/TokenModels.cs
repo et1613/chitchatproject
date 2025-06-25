@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
+using WebApplication1.Models.Users;
 
 namespace WebApplication1.Models.Auth
 {
@@ -11,6 +12,7 @@ namespace WebApplication1.Models.Auth
 
         [Required]
         public required string UserId { get; set; }
+        public virtual User? User { get; set; }
 
         [Required]
         public required string TokenType { get; set; }
