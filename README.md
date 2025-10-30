@@ -1,74 +1,81 @@
-﻿# Mesajlaşma Projesi
+# ChitChatProject
 
-Overview
+This project is a full-stack, enterprise-ready, real-time messaging platform. It allows users to communicate instantly through a secure, scalable, and responsive interface.
 
-This project is a real-time messaging platform that allows users to communicate with each other instantly. The system supports user registration, login, real-time chat using WebSockets, and message history management. It utilizes modern technologies like React.js, .NET, Firebase, and Docker to ensure security, scalability, and a great user experience.
+The architecture is built on a modern stack, including React.js for the frontend, .NET (ASP.NET Core) for the backend API, SignalR for real-time communication, and MySQL for persistent data storage.
 
-Key Features
+## Key Features
 
-Real-Time Messaging: Instant communication between users via WebSocket (SignalR).
+* **Real-Time Messaging:** Instant, low-latency communication between users powered by **ASP.NET SignalR (WebSockets)**.
+* **Secure User Management:** Secure, token-based registration and login using **JSON Web Tokens (JWT)**. All user routes are protected and require valid authorization.
+* **Persistent Message History:** All message history, user data, and group information are stored persistently in a **MySQL** relational database.
+* **Group and Direct Messaging:** Supports both one-to-one direct messages and multi-participant group chats.
+* **Mobile-Friendly:** A fully responsive user interface built with **Tailwind CSS** that works seamlessly on both desktop and mobile devices.
+* **Advanced Modules:** Includes architecture for file sharing, digital signatures, calendar/note synchronization, and advanced user settings.
 
-User Management: Secure registration and login with email and password, managed via Firebase Authentication.
+## Technology Stack
 
-Message History: Messages are stored in Firebase Firestore, allowing users to view past conversations in real time.
+### Frontend
+* **React.js**: A JavaScript library for building the dynamic user interface.
+* **Tailwind CSS**: A utility-first CSS framework for modern, responsive design.
+* **SignalR Client (JavaScript)**: The client-side library to establish and manage the persistent WebSocket connection with the backend.
 
-Group and Direct Messaging: Users can send direct messages or create groups for multiple participants.
+### Backend
+* **.NET (ASP.NET Core)**: The backend API framework used for handling all business logic, data processing, and serving API endpoints.
+* **SignalR**: An ASP.NET Core library for WebSocket-based, real-time, bi-directional communication.
+* **JWT (JSON Web Tokens)**: Used for creating and validating secure, stateless access tokens for user authentication and authorization.
 
-Mobile-Friendly: The platform is designed to be responsive and optimized for mobile devices.
+### Database
+* **MySQL**: A robust, open-source relational database (SQL) used to store all application data, including users, messages, groups, and relationships.
 
-Technology Stack
+### DevOps & Deployment
+* **Docker**: The entire application (frontend and backend) is containerized for consistent environments and scalable deployment.
+* **CI/CD**: Configured for a Continuous Integration/Continuous Deployment pipeline using **GitHub Actions** (or Jenkins) to automate testing and builds.
+* **Hosting**: The containerized application is designed to be deployed on any modern cloud platform such as **Heroku**, **AWS**, **Azure**, or any server supporting Docker.
 
-Frontend:
-React.js: JavaScript library for building the user interface.
-Tailwind CSS: Utility-first CSS framework for building responsive layouts.
-WebSockets (Socket.io): For real-time communication between users.
+## Project Setup
 
-Backend:
+### Prerequisites
 
-.NET (ASP.NET Core): The backend API developed using .NET for handling requests, messaging logic, and user authentication.
+* [Node.js](https://nodejs.org/en/) (for frontend development)
+* [.NET SDK](https://dotnet.microsoft.com/download) (for backend development)
+* [Docker](https://www.docker.com/products/docker-desktop) (for running the application in containers)
+* A running **MySQL Server** instance.
 
-Firebase: Firebase Authentication for secure login and user management.
+### Installation
 
-SignalR: For WebSocket-based real-time messaging.
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/et1613/chitchatproject.git](https://github.com/et1613/chitchatproject.git)
+    cd chitchatproject
+    ```
 
-Firebase Firestore: A NoSQL cloud database to store user data, messages, and conversation history in a scalable and real-time manner.
+2.  **Configure Backend (.NET):**
+    * Navigate to the backend project directory.
+    * Update `appsettings.json` with your **MySQL database connection string** and your **JWT Secret Key**.
+    * Run the database migrations:
+        ```bash
+        dotnet ef database update
+        ```
+    * Run the backend server:
+        ```bash
+        dotnet run
+        ```
 
-Containerization & Deployment:
+3.  **Configure Frontend (React):**
+    * Navigate to the frontend project directory.
+    * Install dependencies:
+        ```bash
+        npm install
+        ```
+    * Start the development server:
+        ```bash
+        npm start
+        ```
 
-Docker: To containerize the application for seamless deployment across different environments.
-
-Firebase Hosting: For hosting the frontend.
-
-CI/CD: GitHub Actions (or Jenkins) for continuous integration and deployment automation.
-
-Project Setup
-
-Prerequisites
-
-Node.js (for frontend): Install Node.js
-
-.NET SDK (for backend): Download .NET SDK
-
-Docker: Install Docker
-
-Firebase Firestore: Set up Firebase Firestore for real-time data storage and retrieval.
-
-Firebase account: For user authentication and real-time messaging.
-
-CI/CD Pipeline
-
-The project uses a CI/CD pipeline to automate builds and deployments:
-
-Continuous Integration (CI):
-
-Every commit triggers a build and runs unit tests to ensure code quality and integrity.
-
-GitHub Actions (or Jenkins) are used for CI.
-
-Continuous Deployment (CD):
-
-Once the code passes all tests, it is automatically deployed to the production environment using Docker.
-
-The production environment is hosted on Heroku, AWS, or similar platforms.
-
-Firebase Hosting and Cloud Functions handle the deployment of the frontend and backend for real-time messaging.
+4.  **Running with Docker (Recommended):**
+    * Ensure your `docker-compose.yml` file has the correct environment variables (especially for the MySQL connection).
+    * Build and run the containers:
+        ```bash
+        docker-compose up --build
+        ```
